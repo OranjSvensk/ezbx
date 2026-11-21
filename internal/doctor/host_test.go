@@ -348,3 +348,49 @@ func TestCmdFlags(t *testing.T) {
 		t.Errorf("flags: %v", got)
 	}
 }
+
+func TestEngineKeyCheck(t *testing.T) {
+	gwCfg := func(f *fakeDocker) map[string]any { return f.ctrs["ezbx-t-gateway"]["Config"].(map[string]any) }
+	cmd := func(f *fakeDocker, extra ...string) {
+		gwCfg(f)["Cmd"] = append(append([]string{}, gwCfg(f)["Cmd"].([]string)...), extra...)
+	}
+
+	// No key: no check is shown.
+	for _, c := range runWith(goodDocker()).Checks {
+		if c.Name == "engine key" {
+			t.Errorf("an engine without a key has a key check: %+v", c)
+		}
+	}
+
+	f := goodDocker()
+	cmd(f, "--key-file", "/run/ezbx/engine-key")
+	if c := find(t, runWith(f), "engine key"); c.Status != Pass {
+		t.Errorf("key file: %+v", c)
+	}
+
+	// The way older versions passed it.
+	f = goodDocker()
+	cmd(f, "--key-env", "STRATA_API_KEY")
+	gwCfg(f)["Env"] = []string{"PATH=/usr/bin", "STRATA_API_KEY=kv-docs-example-1"}
+	c := find(t, runWith(f), "engine key")
+	if c.Status != Warn || !strings.Contains(c.Detail, "STRATA_API_KEY") || strings.Contains(c.Detail, "kv-docs-example-1") {
+		t.Errorf("key in the environment: %+v", c)
+	}
+
+	// --key-env alone is enough, whatever the variable is called.
+	f = goodDocker()
+	cmd(f, "--key-env", "ENGINE_CRED")
+	gwCfg(f)["Env"] = []string{"PATH=/usr/bin", "ENGINE_CRED=x"}
+	if c := find(t, runWith(f), "engine key"); c.Status != Warn {
+		t.Errorf("--key-env with a plain name: %+v", c)
+	}
+
+	// A key-like variable without --key-env is caught too.
+	for _, name := range []string{"MY_API_KEY", "access_token", "DB_PASSWORD", "CLIENT_SECRET"} {
+		f = goodDocker()
+		gwCfg(f)["Env"] = []string{"PATH=/usr/bin", name + "=x"}
+		if c := find(t, runWith(f), "engine key"); c.Status != Warn {
+			t.Errorf("%s: %+v", name, c)
+		}
+	}
+}

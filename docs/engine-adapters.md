@@ -62,7 +62,7 @@ These facts feed the harness config generator (see `harness-manifest.md`).
 
 ## Keys
 
-If an engine requires a key, you name an environment variable in your local config (`key_env`). The gateway reads it when it starts and adds the key to requests. The key never appears in a repo file, an image or a log.
+If an engine requires a key, you name an environment variable in your local config (`key_env`). `ezbx up` copies the key into a file that only the gateway mounts, read-only, and the gateway adds it to requests. The key never appears in a repo file, an image, a log or `docker inspect` (see [gateway.md](gateway.md), section 3). Detection doesn't send it yet, so an engine that needs the key for its model list isn't found.
 
 ## Reaching the engine
 

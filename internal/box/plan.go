@@ -67,7 +67,7 @@ type Plan struct {
 	EngineID     string
 	EngineName   string
 	UpstreamHost string
-	KeyEnv       string
+	KeyEnv       string // NAME of the variable holding the engine's key; up writes it to KeyFile
 
 	Network string
 	Allow   []string
@@ -131,9 +131,9 @@ func (p Plan) GatewayArgs() []string {
 		a = append(a, "-v", p.LogDir()+":"+logDirInside)
 	}
 	if p.KeyEnv != "" {
-		// "-e NAME" without a value copies it from ezbx's own environment, so
-		// the key never appears in a command line.
-		a = append(a, "-e", p.KeyEnv)
+		// A file, not "-e NAME": docker inspect shows a container's
+		// environment in plain text, but not what is in its mounted files.
+		a = append(a, "-v", p.KeyFile()+":"+keyInside+":ro")
 	}
 	a = append(a, p.GatewayImage.Tag, "gateway", "serve", "--listen", modelAddr,
 		"--upstream", p.Upstream, "--engine", p.EngineID)
@@ -141,7 +141,7 @@ func (p Plan) GatewayArgs() []string {
 		a = append(a, "--upstream-host", p.UpstreamHost)
 	}
 	if p.KeyEnv != "" {
-		a = append(a, "--key-env", p.KeyEnv)
+		a = append(a, "--key-file", keyInside)
 	}
 	a = append(a, "--proxy", proxyAddr, "--network", p.Network)
 	for _, h := range p.Allow {

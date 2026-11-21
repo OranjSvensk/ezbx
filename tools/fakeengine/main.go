@@ -19,14 +19,43 @@ const reply = "Hello from the fake engine."
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:18080", "address to listen on")
+	keyEnv := flag.String("key-env", "", "NAME of an environment variable holding a key that chat requests must carry")
+	keyOnModels := flag.Bool("key-on-models", false, "require the key for the model list too")
 	flag.Parse()
 
+	// With a key, requests without "Authorization: Bearer KEY" get 401, as
+	// from an engine started with an API key.
+	key := ""
+	if *keyEnv != "" {
+		if key = os.Getenv(*keyEnv); key == "" {
+			fmt.Fprintf(os.Stderr, "The environment variable %s is empty or not set.\n", *keyEnv)
+			os.Exit(2)
+		}
+	}
+	guard := func(h http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if key != "" && r.Header.Get("Authorization") != "Bearer "+key {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				io.WriteString(w, `{"error":{"message":"missing or wrong key","type":"invalid_request_error"}}`)
+				return
+			}
+			h(w, r)
+		}
+	}
+	models := func(h http.HandlerFunc) http.HandlerFunc {
+		if *keyOnModels {
+			return guard(h)
+		}
+		return h
+	}
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/models", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /v1/models", models(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, `{"object":"list","data":[{"id":"fake-model","object":"model","owned_by":"ezbx"}]}`)
-	})
-	mux.HandleFunc("POST /v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+	}))
+	mux.HandleFunc("POST /v1/chat/completions", guard(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Stream bool `json:"stream"`
 		}
@@ -58,7 +87,7 @@ func main() {
 		}
 		chunk(`{}`, `"stop"`)
 		io.WriteString(w, "data: [DONE]\n\n")
-	})
+	}))
 
 	fmt.Fprintln(os.Stderr, "fake engine listening on", *listen)
 	if err := http.ListenAndServe(*listen, mux); err != nil {

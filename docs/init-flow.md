@@ -17,7 +17,7 @@
 ## Principles
 
 1. **Show the plan before changing anything.** Every run ends with a review screen listing exactly what will be created, downloaded and changed. Nothing happens until you confirm.
-2. **Safe defaults.** Network off, one writable folder, no extra folders exposed, no keys on disk.
+2. **Safe defaults.** Network off, one writable folder, no extra folders exposed, no keys kept on disk (an engine's key is copied into the state folder for the gateway only while the box exists).
 3. **Never touch what it didn't create.** Every Docker resource EZBox makes carries a label, and EZBox only ever changes labelled resources.
 4. **Re-runnable.** Running `init` again reads the existing setup, shows what would change, and offers to add a harness or switch engines. It never silently replaces your config or regenerates secrets.
 5. **Same questions without prompts.** Every prompt has a flag, so the whole flow can run unattended.

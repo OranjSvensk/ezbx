@@ -44,7 +44,7 @@ Usage:
   ezbx engine detect [--json] [--timeout 500ms] [--url ADDRESS]...
   ezbx engine use [ID] [--url ADDRESS] [--box NAME]
   ezbx gateway serve [--upstream ADDRESS] [--engine ID] [--listen ADDRESS]
-                     [--key-env NAME] [--log FILE]
+                     [--key-env NAME | --key-file FILE] [--log FILE]
                      [--proxy ADDRESS] [--network off|allow|on] [--allow HOST]...
                      [--allow-file FILE]
                      [--admin 127.0.0.1:PORT --admin-token-file FILE]

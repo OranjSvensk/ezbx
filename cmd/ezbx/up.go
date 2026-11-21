@@ -99,7 +99,7 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	r := &box.Runner{Docker: dockerIn, Out: stdout}
-	if err := r.Down(ctx, t.name); err != nil {
+	if err := r.Down(ctx, t.name, t.dirs.Box(t.name)); err != nil {
 		return report(stderr, err)
 	}
 	fmt.Fprintf(stdout, "Kept: the workspace, the state folder (token, log, approved hosts) and the volume %s.\n", box.NamesFor(t.name).Home)

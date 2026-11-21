@@ -49,7 +49,8 @@ Responses that stream (server-sent events) are forwarded as they arrive, with no
 ### Authentication
 
 - **Box to gateway:** a placeholder key. It is not a real credential and exists because some harnesses insist on one.
-- **Gateway to engine:** if the engine needs a key, the gateway adds it. Today the key is read at start from an environment variable whose name is given with `--key-env` (environment variables only in 0.1, decided in `init-flow.md`). It is never written into an image, a config the box can read, or a log. **Known weak spot:** `ezbx up` passes it to the gateway container as an environment variable, so it shows in plain text in `docker inspect` of the gateway, which people tend to paste into bug reports. A key file in the state folder, mounted read-only into the gateway only, would avoid that; to do before engines with keys are tested.
+- **Gateway to engine:** if the engine needs a key, the gateway adds it. You name an environment variable holding it with `key_env` in `ezbx.toml` (environment variables only in 0.1, decided in `init-flow.md`). The key is never written into an image, a config the box can read, or a log.
+- **How the key reaches the gateway** (design decision 18). `ezbx up` reads the variable and writes the key to `engine-key` in the box's state folder, readable only by you, and mounts that one file read-only into the gateway at `/run/ezbx/engine-key` (never into the box). The gateway reads it once at start with `--key-file`. The gateway's environment and command line hold no key, so `docker inspect`, which people tend to paste into bug reports, doesn't show it; an earlier version passed it as an environment variable, which did. `ezbx down` removes the file with the containers, so the key is on disk only while the box exists, and a restart of Docker Desktop still finds it. A key that is empty, over 4 KB, or holds a line break (one trailing line break is dropped) stops `up` before anything is made, and the gateway refuses such a file too. `ezbx gateway serve --key-env NAME` still works for running the gateway by hand. `ezbx engine use` still refuses an engine with a key: switch with `engine.use` in `ezbx.toml`, then `ezbx down` and `ezbx up`. `ezbx doctor` warns if the gateway has a key in its environment (a box started by an older version).
 
 ### Model list
 
@@ -229,7 +230,7 @@ Each proxy protection was mutation-checked: turning it off makes a test fail.
 
 Checked against a real engine (Strata), with the hardened gateway in its container: readiness, the model list, a chat reply, a streamed reply that arrived chunk by chunk, a stream cancelled by the box, the path checks, and Pi using tools through it (see [isolation-test.md](isolation-test.md)).
 
-Not built yet: the engine unload call, a setting to allow a chosen local address, the cloud provider routes (design decision 8), and token usage in the log.
+Not built yet: the engine unload call, a setting to allow a chosen local address, the cloud provider routes (design decision 8), and token usage in the log. Engine detection sends no key, so an engine that also needs its key for the model list is reported as not found by `ezbx up`; only engines that leave the model list open work with a key today.
 
 Docker: the gateway image ([docker/gateway.Dockerfile](../docker/gateway.Dockerfile)) was run locked down with the proxy and admin API in the isolation test ([isolation-test.md](isolation-test.md)). `ezbx` doesn't create or start containers yet; that was done by hand.
 

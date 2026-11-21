@@ -25,6 +25,7 @@ type Runner struct {
 	Out    io.Writer     // progress, one line per step
 	Wait   time.Duration // how long to wait for the gateway; 0 means 45s
 	Sleep  func(time.Duration)
+	Getenv func(string) string // reads the engine key's variable; nil means os.Getenv
 }
 
 func (r *Runner) say(format string, a ...any) {
@@ -89,6 +90,18 @@ func (r *Runner) CheckDocker(ctx context.Context) error {
 func (r *Runner) Up(ctx context.Context, p Plan) error {
 	if err := r.CheckDocker(ctx); err != nil {
 		return err
+	}
+	// A key that can't work stops up before anything is made.
+	key := ""
+	if p.KeyEnv != "" {
+		getenv := r.Getenv
+		if getenv == nil {
+			getenv = os.Getenv
+		}
+		var err error
+		if key, err = CleanKey(getenv(p.KeyEnv)); err != nil {
+			return fmt.Errorf("the engine key in the environment variable %s: %w", p.KeyEnv, err)
+		}
 	}
 	// Each image must be the one ezbx build made from these inputs.
 	for _, img := range []Image{p.GatewayImage, p.BoxImage} {
@@ -155,6 +168,15 @@ func (r *Runner) Up(ctx context.Context, p Plan) error {
 	}
 	if made {
 		r.say("created the admin token in %s", p.StateDir)
+	}
+	// The engine's key goes to a file only the gateway mounts. Without a key,
+	// any file an earlier engine left is removed.
+	if p.KeyEnv != "" {
+		if err := WriteKeyFile(p.KeyFile(), key); err != nil {
+			return err
+		}
+	} else if _, err := RemoveKeyFile(p.StateDir); err != nil {
+		return err
 	}
 	if err := EnsureHosts(p.ApprovedFile()); err != nil {
 		return fmt.Errorf("creating the approved-hosts file: %w", err)
@@ -281,9 +303,10 @@ func (r *Runner) logTail(ctx context.Context, name string) string {
 	return " Its last lines:\n" + strings.TrimRight(string(out), "\n") + "\n"
 }
 
-// Down removes the box's containers and networks, only those EZBox made.
-// The home volume, the state folder and the workspace are kept.
-func (r *Runner) Down(ctx context.Context, box string) error {
+// Down removes the box's containers and networks, only those EZBox made,
+// then the engine key file in stateDir, which only the gateway used. The
+// home volume, the rest of the state folder and the workspace are kept.
+func (r *Runner) Down(ctx context.Context, box, stateDir string) error {
 	if err := r.CheckDocker(ctx); err != nil {
 		return err
 	}
@@ -313,6 +336,13 @@ func (r *Runner) Down(ctx context.Context, box string) error {
 		}
 		removed++
 		r.say("removed %s %s", item.kind, item.name)
+	}
+	// The gateway is gone (or was never EZBox's), so its key goes too.
+	if had, err := RemoveKeyFile(stateDir); err != nil {
+		return err
+	} else if had {
+		removed++
+		r.say("removed the engine key file")
 	}
 	if removed == 0 && len(refused) == 0 {
 		r.say("box %q was not up; nothing to remove", box)

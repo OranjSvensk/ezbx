@@ -61,6 +61,7 @@ type containerInfo struct {
 		Image  string            `json:"Image"`
 		User   string            `json:"User"`
 		Cmd    []string          `json:"Cmd"`
+		Env    []string          `json:"Env"`
 		Labels map[string]string `json:"Labels"`
 	} `json:"Config"`
 	HostConfig struct {
@@ -198,6 +199,9 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 		r.add(gg, "running", Pass, "healthy", "")
 	}
 	r.add(gg, "locked down", lockStatus(gw, true), lockDetail(gw, true), "Recreate it with --read-only --cap-drop ALL --security-opt no-new-privileges --user 65532:65532.")
+	if st, detail := keyStatus(gw, args); st != "" {
+		r.add(gg, "engine key", st, detail, "Run ezbx down, then ezbx up: this version gives the gateway its key in a read-only file, which docker inspect doesn't show.")
+	}
 
 	nets := sortedKeys(gw.NetworkSettings.Networks)
 	if len(nets) == 2 && nets[0] == insideNet && nets[1] == outsideNet {
@@ -352,6 +356,32 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 	}
 	r.Checks = append(r.Checks, inner.Checks...)
 	return r
+}
+
+// keyStatus checks how the gateway gets the engine's key. A key in its
+// environment shows in plain text in docker inspect, so that is a warning;
+// a key file passes. With neither (the engine needs no key) there is no
+// check to show, and Status is "".
+func keyStatus(gw containerInfo, args map[string]string) (Status, string) {
+	var inEnv []string
+	if name := args["--key-env"]; name != "" {
+		inEnv = append(inEnv, name)
+	}
+	for _, kv := range gw.Config.Env {
+		name, _, _ := strings.Cut(kv, "=")
+		up := strings.ToUpper(name)
+		if !contains(inEnv, name) && (strings.Contains(up, "KEY") || strings.Contains(up, "TOKEN") || strings.Contains(up, "SECRET") || strings.Contains(up, "PASSWORD")) {
+			inEnv = append(inEnv, name)
+		}
+	}
+	switch {
+	case len(inEnv) > 0:
+		sort.Strings(inEnv)
+		return Warn, "in the environment (" + strings.Join(inEnv, ", ") + "), so docker inspect shows it in plain text"
+	case args["--key-file"] != "":
+		return Pass, "from a read-only file, not the environment"
+	}
+	return "", ""
 }
 
 // lockStatus checks a container's privileges. The gateway also needs a

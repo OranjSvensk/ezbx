@@ -90,7 +90,7 @@ The setup above, made by `ezbx up` from an `ezbx.toml` instead of by hand, with 
 - `ezbx doctor` on that box: 20 checks passed, including every check from inside the box, with 1 warning: the doctor looked for engines only on their usual ports, so it didn't see the fake engine on its test port, although the gateway reached it. **Fixed:** the doctor now also checks the address the gateway was started to forward to (Docker Desktop's host alias read as this computer's loopback). The same box then passed all 21 checks.
 - **With Strata:** `engine.use = "auto"` with both engines running refused, naming both. With `engine.use = "strata"`, detection found it through Strata's status command, and `ezbx up` with the doctor passed **21 of 21**. Pi, with `reasoning` and `max_tokens` set for the model in `ezbx.toml`, answered a plain prompt in about 3 seconds and wrote a file into the workspace with its write tool in about 6.
 
-Not covered: Linux (a gateway that isn't root may not be able to write its log into a folder owned by the host user), a restart of Docker Desktop with the box up (both containers have the restart policy `unless-stopped`), and engines that need a key.
+Not covered: Linux (a gateway that isn't root may not be able to write its log into a folder owned by the host user), a restart of Docker Desktop with the box up (both containers have the restart policy `unless-stopped`), and engines that need a key (since covered with the fake engine; see "The engine key file" below).
 
 ### `ezbx shell`, `ezbx net` and `ezbx engine use` (same day)
 
@@ -155,6 +155,18 @@ From a scratch `EZBX_HOME`, with the fake engine and a box named `vt`, while my 
 - **Reset:** answering "n" changed nothing. With `--yes` it backed up `ezbx.toml`, `approved-hosts` and `home.tar`, gave the agent a fresh home (a file the agent had left was gone, Pi's settings were back), kept the approved host, and the doctor passed 21 of 21. `--restore` put the file back, owned by the agent with its modes. It refused while a process ran in the box, and when the backup couldn't be written it changed nothing and the box stayed up.
 - **Destroy:** with `--yes` it refused while a process ran in the box. It listed everything with sizes and the snapshot and backup counts, kept the images my own box was using and said so, and removed nothing when the wrong name was typed. Typing the box name removed the containers, networks, home volume, state folder, its two gateway images and `images.json`, and left the workspace and the config. `--remove-config` then removed the config.
 - **Found and fixed:** `docker container ls` has no `ImageID` field, so the first version of destroy's in-use check would have failed (found by trying the command before the live run). Destroy would have removed images another box uses; it now keeps them. A backup cut off between two files passed the first check; the check now reads every file in full and needs tar's end marker. Destroy said it removed a state folder that wasn't there. `reset` gained `--no-doctor`, because the doctor checks every engine on the computer.
+
+### The engine key file (same day)
+
+From a scratch `EZBX_HOME`, with a box named `vt` and the fake engine started with `--key-env`, so it answered chat requests without the right key with 401.
+
+- `ezbx up --no-doctor` wrote the key to `engine-key` in the state folder and mounted it read-only into the gateway at `/run/ezbx/engine-key`. The gateway ran with `--key-file`, and its environment held only `PATH`.
+- The key was found 0 times in `docker inspect` of the gateway and the box, and 0 times in the gateway log. The box had no `/run/ezbx` and no key in its environment.
+- A chat request from the box through the gateway got 200 from the engine: the gateway added the key. After `docker restart` of the gateway (as after a Docker Desktop restart), it was healthy and the request again got 200.
+- `ezbx down` removed the key file with the containers and kept the token, log and approved hosts.
+- **Found, not fixed yet:** with the model list behind the key too (`--key-on-models`), `ezbx up` said the engine was not found and changed nothing, because detection sends no key. Every protection was mutation-checked (20 of 20 caught).
+
+Not covered: a real engine started with a key, and Linux, where the gateway's user may not be able to read a key file only you can read (the admin token has the same open question).
 
 ## Limits of this result
 

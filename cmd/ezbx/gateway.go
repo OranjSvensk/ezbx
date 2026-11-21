@@ -56,6 +56,7 @@ func runGateway(args []string, stdout, stderr io.Writer) int {
 	engine := fs.String("engine", "", "engine id shown in replies (set automatically when detected)")
 	upstreamHost := fs.String("upstream-host", "", "Host header sent to the engine; empty means localhost:PORT for Docker Desktop's host alias, else the upstream address")
 	keyEnv := fs.String("key-env", "", "NAME of an environment variable holding the engine's key")
+	keyFile := fs.String("key-file", "", "file holding the engine's key (what ezbx up uses); read at start")
 	logFile := fs.String("log", "-", "where to write the JSON log; - means standard output")
 	proxyAddr := fs.String("proxy", "", "address for the egress proxy; empty means no proxy")
 	network := fs.String("network", gateway.ModeOff, "network mode for the proxy: off, allow or on")
@@ -73,12 +74,27 @@ func runGateway(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	// The key comes from the environment, so it never appears in a command line.
+	// The key comes from a file or the environment, so it never appears in a
+	// command line. ezbx up uses the file, which docker inspect doesn't show.
 	key := ""
-	if *keyEnv != "" {
-		key = os.Getenv(*keyEnv)
-		if key == "" {
+	switch {
+	case *keyEnv != "" && *keyFile != "":
+		fmt.Fprintln(stderr, "Use --key-env or --key-file, not both.")
+		return 2
+	case *keyFile != "":
+		key, err = box.ReadKeyFile(*keyFile)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+	case *keyEnv != "":
+		v := os.Getenv(*keyEnv)
+		if v == "" {
 			fmt.Fprintf(stderr, "The environment variable %s is empty or not set.\n", *keyEnv)
+			return 2
+		}
+		if key, err = box.CleanKey(v); err != nil {
+			fmt.Fprintf(stderr, "The environment variable %s: %v.\n", *keyEnv, err)
 			return 2
 		}
 	}

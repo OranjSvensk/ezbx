@@ -332,7 +332,7 @@ func runDestroy(args []string, stdout, stderr io.Writer) int {
 			fail(err)
 		}
 	}
-	if err := r.Down(ctx, t.name); err != nil {
+	if err := r.Down(ctx, t.name, t.dirs.Box(t.name)); err != nil {
 		fail(err)
 	}
 	if _, err := r.RemoveVolume(ctx, n.Home); err != nil {
@@ -644,7 +644,7 @@ func runReset(args []string, stdout, stderr io.Writer) int {
 		return report(stderr, fmt.Errorf("the backup failed, so nothing was changed: %w", err))
 	}
 	fmt.Fprintf(stdout, "backed up to %s\n", filepath.Join(backupsDir(t), id))
-	if err := r.Down(ctx, t.name); err != nil {
+	if err := r.Down(ctx, t.name, t.dirs.Box(t.name)); err != nil {
 		return report(stderr, err)
 	}
 	if _, err := r.RemoveVolume(ctx, box.NamesFor(t.name).Home); err != nil {

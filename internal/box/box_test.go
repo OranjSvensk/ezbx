@@ -91,10 +91,10 @@ func TestGatewayArgs(t *testing.T) {
 		{"--label", "ezbx.managed=true"},
 		{"-v", p.TokenFile() + ":/run/ezbx/admin-token:ro"},
 		{"-v", p.LogDir() + ":/var/log/ezbx"},
-		{"-e", "ENGINE_KEY"},
+		{"-v", p.KeyFile() + ":/run/ezbx/engine-key:ro"},
 		{"ezbx-gateway:aaa", "gateway", "serve", "--listen", "0.0.0.0:8000"},
 		{"--upstream", "http://host.docker.internal:18080"}, {"--engine", "strata"},
-		{"--upstream-host", "localhost:18080"}, {"--key-env", "ENGINE_KEY"},
+		{"--upstream-host", "localhost:18080"}, {"--key-file", "/run/ezbx/engine-key"},
 		{"--proxy", "0.0.0.0:3128"}, {"--network", "allow"}, {"--allow", "registry.npmjs.org"},
 		{"--admin", "127.0.0.1:8099"}, {"--admin-token-file", "/run/ezbx/admin-token"},
 		{"--log", "/var/log/ezbx/gateway.log"},
@@ -104,17 +104,18 @@ func TestGatewayArgs(t *testing.T) {
 		}
 	}
 	noPublish(t, a)
-	// The key's value is never in the command line: "-e NAME" only.
+	// The key reaches the gateway as a file, never through its environment,
+	// which docker inspect shows.
 	for _, x := range a {
-		if strings.HasPrefix(x, "ENGINE_KEY=") {
-			t.Error("key value in command line")
+		if x == "-e" || x == "--env" || x == "--env-file" || x == "--key-env" || strings.Contains(x, "ENGINE_KEY") {
+			t.Errorf("the key's variable reaches the gateway's environment: %q in %v", x, a)
 		}
 	}
 
 	p.LogOn, p.KeyEnv, p.UpstreamHost, p.Allow = false, "", "", nil
 	a = p.GatewayArgs()
 	for _, x := range a {
-		if x == "--log" || x == "--key-env" || x == "--upstream-host" || x == "--allow" || strings.Contains(x, "/var/log/ezbx") || x == "-e" {
+		if x == "--log" || x == "--key-file" || x == "--upstream-host" || x == "--allow" || strings.Contains(x, "/var/log/ezbx") || strings.Contains(x, "engine-key") || x == "-e" {
 			t.Errorf("unexpected %q when off: %v", x, a)
 		}
 	}
@@ -564,7 +565,7 @@ func TestDown(t *testing.T) {
 	f.networks["ezbx-t-inside"], f.networks["ezbx-t-outside"] = true, true
 	f.volumes["ezbx-t-home"] = true
 	f.containers["ezbx-t-gateway-old"] = true // a name that only starts the same
-	if err := runner(f).Down(context.Background(), "t"); err != nil {
+	if err := runner(f).Down(context.Background(), "t", t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.networks) != 0 || len(f.containers) != 1 || !f.containers["ezbx-t-gateway-old"] {
@@ -591,7 +592,7 @@ func TestDownLeavesForeignAlone(t *testing.T) {
 	f.containers["ezbx-t-box"] = false
 	f.containers["ezbx-t-gateway"] = true
 	f.networks["ezbx-t-inside"] = false
-	err := runner(f).Down(context.Background(), "t")
+	err := runner(f).Down(context.Background(), "t", t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "container ezbx-t-box") || !strings.Contains(err.Error(), "network ezbx-t-inside") {
 		t.Fatal(err)
 	}
@@ -607,7 +608,7 @@ func TestDownLeavesForeignAlone(t *testing.T) {
 }
 
 func TestDownNothing(t *testing.T) {
-	if err := runner(newFake()).Down(context.Background(), "t"); err != nil {
+	if err := runner(newFake()).Down(context.Background(), "t", t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -622,7 +623,7 @@ func TestLookAlikeNames(t *testing.T) {
 	}
 	f := newFake()
 	look(f)
-	if err := runner(f).Down(context.Background(), "t"); err != nil {
+	if err := runner(f).Down(context.Background(), "t", t.TempDir()); err != nil {
 		t.Fatal("down:", err)
 	}
 	if f.did("container", "rm") || f.did("network", "rm") {
