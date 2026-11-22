@@ -12,12 +12,14 @@ ezbx is a planned one-click setup for running AI coding and agent tools inside a
 > **Status: early development.** Pi works end to end on Windows with Docker Desktop: `ezbx init` sets it up from nothing, builds the images and starts the box, and `ezbx shell pi` opens it, after taking a snapshot of the workspace that `ezbx rewind` can go back to. Six more harnesses — OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw — are built, pinned in `ezbx.lock` and tested against a real model on Strata, including file tool calls in `/workspace` with the network `off`. Every command on the road to the first usable version below is built; other engines and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), and designs are in [docs/](docs/).
 
 ```text
-go install ./cmd/ezbx     from a clone; needs Go and Docker Desktop
-ezbx init                 asks the questions, shows the plan, builds and starts the box
-ezbx shell pi             opens Pi in the box
+git clone https://github.com/ryan-ven/ezbx.git
+cd ezbx
+go install ./cmd/ezbx     # needs Go 1.27+ and Docker Desktop
+ezbx init                 # asks the questions, shows the plan, builds and starts the box
+ezbx shell pi             # opens Pi in the box (or opencode, omp, codex, claude, hermes, openclaw)
 ```
 
-Other commands: `ezbx up` and `ezbx down` start and remove the box described in `ezbx.toml` (see [ezbx.toml.example](ezbx.toml.example)), `ezbx build` builds the images, `ezbx review` and `ezbx rewind` show and undo what changed in the workspace since a snapshot, `ezbx net` shows and switches the network and approves hosts, `ezbx engine detect` and `ezbx engine use` find an engine and point the box at it, and `ezbx doctor` checks the whole setup and explains any fix.
+New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-started.md). Other commands: `ezbx up` and `ezbx down` start and remove the box described in `ezbx.toml` (see [ezbx.toml.example](ezbx.toml.example)), `ezbx build` builds the images, `ezbx review` and `ezbx rewind` show and undo what changed in the workspace since a snapshot, `ezbx net` shows and switches the network and approves hosts, `ezbx engine detect` and `ezbx engine use` find an engine and point the box at it, and `ezbx doctor` checks the whole setup and explains any fix.
 
 ## The idea
 
