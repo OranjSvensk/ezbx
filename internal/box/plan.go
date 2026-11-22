@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/harness"
-	"github.com/ryan-ven/ezbx/internal/paths"
+	"github.com/OranjSvensk/ezbx/internal/harness"
+	"github.com/OranjSvensk/ezbx/internal/paths"
 )
 
 // Fixed values inside the containers.

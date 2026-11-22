@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ryan-ven/ezbx/internal/config"
-	"github.com/ryan-ven/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/config"
+	"github.com/OranjSvensk/ezbx/internal/detect"
 )
 
 const testKey = "kv-docs-example-1"

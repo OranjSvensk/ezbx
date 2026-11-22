@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/adapter"
-	"github.com/ryan-ven/ezbx/internal/jsonpath"
+	"github.com/OranjSvensk/ezbx/internal/adapter"
+	"github.com/OranjSvensk/ezbx/internal/jsonpath"
 )
 
 // maxBody stops a misbehaving server from making us read forever.

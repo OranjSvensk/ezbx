@@ -9,11 +9,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ryan-ven/ezbx/harnesses"
-	"github.com/ryan-ven/ezbx/internal/adapter"
-	"github.com/ryan-ven/ezbx/internal/detect"
-	"github.com/ryan-ven/ezbx/internal/harness"
-	"github.com/ryan-ven/ezbx/providers"
+	"github.com/OranjSvensk/ezbx/harnesses"
+	"github.com/OranjSvensk/ezbx/internal/adapter"
+	"github.com/OranjSvensk/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/harness"
+	"github.com/OranjSvensk/ezbx/providers"
 )
 
 // gatewayKey is the placeholder key harnesses send to the gateway. It is not

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/box"
-	"github.com/ryan-ven/ezbx/internal/config"
+	"github.com/OranjSvensk/ezbx/internal/box"
+	"github.com/OranjSvensk/ezbx/internal/config"
 )
 
 // runEngineUse points a running box's gateway at an engine, found again

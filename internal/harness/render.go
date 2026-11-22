@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/ryan-ven/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/detect"
 )
 
 // Model holds the facts a harness config can use for one model.

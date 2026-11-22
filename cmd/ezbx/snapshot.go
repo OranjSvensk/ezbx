@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/box"
-	"github.com/ryan-ven/ezbx/internal/config"
-	"github.com/ryan-ven/ezbx/internal/paths"
-	"github.com/ryan-ven/ezbx/internal/setup"
-	"github.com/ryan-ven/ezbx/internal/snapshot"
+	"github.com/OranjSvensk/ezbx/internal/box"
+	"github.com/OranjSvensk/ezbx/internal/config"
+	"github.com/OranjSvensk/ezbx/internal/paths"
+	"github.com/OranjSvensk/ezbx/internal/setup"
+	"github.com/OranjSvensk/ezbx/internal/snapshot"
 )
 
 // snapBox is what the snapshot commands need for one box.

@@ -16,15 +16,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryan-ven/ezbx/harnesses"
-	"github.com/ryan-ven/ezbx/internal/adapter"
-	"github.com/ryan-ven/ezbx/internal/box"
-	"github.com/ryan-ven/ezbx/internal/config"
-	"github.com/ryan-ven/ezbx/internal/detect"
-	"github.com/ryan-ven/ezbx/internal/harness"
-	"github.com/ryan-ven/ezbx/internal/paths"
-	"github.com/ryan-ven/ezbx/internal/setup"
-	"github.com/ryan-ven/ezbx/providers"
+	"github.com/OranjSvensk/ezbx/harnesses"
+	"github.com/OranjSvensk/ezbx/internal/adapter"
+	"github.com/OranjSvensk/ezbx/internal/box"
+	"github.com/OranjSvensk/ezbx/internal/config"
+	"github.com/OranjSvensk/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/harness"
+	"github.com/OranjSvensk/ezbx/internal/paths"
+	"github.com/OranjSvensk/ezbx/internal/setup"
+	"github.com/OranjSvensk/ezbx/providers"
 )
 
 // runUp starts the box described in ezbx.toml, then runs the doctor.

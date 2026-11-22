@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/harness"
-	"github.com/ryan-ven/ezbx/internal/tools"
+	"github.com/OranjSvensk/ezbx/internal/harness"
+	"github.com/OranjSvensk/ezbx/internal/tools"
 )
 
 // Names and labels.

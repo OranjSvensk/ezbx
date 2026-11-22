@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/adapter"
-	"github.com/ryan-ven/ezbx/internal/detect"
-	"github.com/ryan-ven/ezbx/providers"
+	"github.com/OranjSvensk/ezbx/internal/adapter"
+	"github.com/OranjSvensk/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/providers"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".

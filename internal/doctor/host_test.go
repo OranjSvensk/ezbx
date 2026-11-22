@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ryan-ven/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/detect"
 )
 
 // fakeDocker answers docker commands from canned JSON shaped like the real

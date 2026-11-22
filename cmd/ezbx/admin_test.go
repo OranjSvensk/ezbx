@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ryan-ven/ezbx/internal/config"
-	"github.com/ryan-ven/ezbx/internal/paths"
+	"github.com/OranjSvensk/ezbx/internal/config"
+	"github.com/OranjSvensk/ezbx/internal/paths"
 )
 
 func targetWith(t *testing.T, ws string, dirs paths.Dirs) target {

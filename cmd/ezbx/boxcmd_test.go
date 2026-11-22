@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ryan-ven/ezbx/internal/config"
+	"github.com/OranjSvensk/ezbx/internal/config"
 )
 
 func TestParseInterleaved(t *testing.T) {

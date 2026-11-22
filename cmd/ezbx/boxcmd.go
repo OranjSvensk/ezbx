@@ -4,8 +4,8 @@ import (
 	"flag"
 	"os"
 
-	"github.com/ryan-ven/ezbx/internal/config"
-	"github.com/ryan-ven/ezbx/internal/paths"
+	"github.com/OranjSvensk/ezbx/internal/config"
+	"github.com/OranjSvensk/ezbx/internal/paths"
 )
 
 // target is the box a command acts on.

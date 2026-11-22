@@ -5,7 +5,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/ryan-ven/ezbx/providers"
+	"github.com/OranjSvensk/ezbx/providers"
 )
 
 // The adapters that ship inside ezbx must all load and pass validation.

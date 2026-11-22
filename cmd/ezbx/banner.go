@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/ryan-ven/ezbx/internal/ui"
+	"github.com/OranjSvensk/ezbx/internal/ui"
 )
 
 // showBanner prints the banner when w is a terminal, so piped or scripted

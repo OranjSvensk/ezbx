@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/config"
+	"github.com/OranjSvensk/ezbx/internal/config"
 )
 
 // Answers are the settings init writes to ezbx.toml.

@@ -18,11 +18,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/box"
-	"github.com/ryan-ven/ezbx/internal/images"
-	"github.com/ryan-ven/ezbx/internal/paths"
-	"github.com/ryan-ven/ezbx/internal/setup"
-	"github.com/ryan-ven/ezbx/internal/snapshot"
+	"github.com/OranjSvensk/ezbx/internal/box"
+	"github.com/OranjSvensk/ezbx/internal/images"
+	"github.com/OranjSvensk/ezbx/internal/paths"
+	"github.com/OranjSvensk/ezbx/internal/setup"
+	"github.com/OranjSvensk/ezbx/internal/snapshot"
 )
 
 // runAdminShell opens a root shell for the human in a temporary container

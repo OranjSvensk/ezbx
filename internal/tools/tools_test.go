@@ -5,7 +5,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/ryan-ven/ezbx/catalog"
+	"github.com/OranjSvensk/ezbx/catalog"
 )
 
 // The real catalogue loads, every pack names real tools, and every tool a

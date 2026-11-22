@@ -10,10 +10,10 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/config"
-	"github.com/ryan-ven/ezbx/internal/detect"
-	"github.com/ryan-ven/ezbx/internal/harness"
-	"github.com/ryan-ven/ezbx/internal/tools"
+	"github.com/OranjSvensk/ezbx/internal/config"
+	"github.com/OranjSvensk/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/harness"
+	"github.com/OranjSvensk/ezbx/internal/tools"
 )
 
 const gib = int64(1 << 30)

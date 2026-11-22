@@ -7,8 +7,8 @@ import (
 	"testing/fstest"
 
 	"github.com/BurntSushi/toml"
-	"github.com/ryan-ven/ezbx/harnesses"
-	"github.com/ryan-ven/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/harnesses"
+	"github.com/OranjSvensk/ezbx/internal/detect"
 )
 
 func TestEmbeddedManifestsLoad(t *testing.T) {

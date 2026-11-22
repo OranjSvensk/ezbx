@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ryan-ven/ezbx/internal/harness"
+	"github.com/OranjSvensk/ezbx/internal/harness"
 )
 
 func TestHarnessEnv(t *testing.T) {

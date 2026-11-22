@@ -1,4 +1,4 @@
-module github.com/ryan-ven/ezbx
+module github.com/OranjSvensk/ezbx
 
 go 1.27
 

@@ -17,11 +17,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/adapter"
-	"github.com/ryan-ven/ezbx/internal/box"
-	"github.com/ryan-ven/ezbx/internal/detect"
-	"github.com/ryan-ven/ezbx/internal/gateway"
-	"github.com/ryan-ven/ezbx/providers"
+	"github.com/OranjSvensk/ezbx/internal/adapter"
+	"github.com/OranjSvensk/ezbx/internal/box"
+	"github.com/OranjSvensk/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/gateway"
+	"github.com/OranjSvensk/ezbx/providers"
 )
 
 const (

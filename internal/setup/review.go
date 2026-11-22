@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ryan-ven/ezbx/internal/harness"
+	"github.com/OranjSvensk/ezbx/internal/harness"
 )
 
 // Plan is what the review screen shows and what apply does.

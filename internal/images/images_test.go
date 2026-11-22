@@ -16,11 +16,11 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/ryan-ven/ezbx"
-	"github.com/ryan-ven/ezbx/catalog"
-	"github.com/ryan-ven/ezbx/harnesses"
-	"github.com/ryan-ven/ezbx/internal/harness"
-	"github.com/ryan-ven/ezbx/internal/tools"
+	"github.com/OranjSvensk/ezbx"
+	"github.com/OranjSvensk/ezbx/catalog"
+	"github.com/OranjSvensk/ezbx/harnesses"
+	"github.com/OranjSvensk/ezbx/internal/harness"
+	"github.com/OranjSvensk/ezbx/internal/tools"
 )
 
 var update = flag.Bool("update", false, "rewrite ezbx.lock at the repository root")

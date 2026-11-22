@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/detect"
 )
 
 // Docker runs one docker command and returns what it printed. It is a field

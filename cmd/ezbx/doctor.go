@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/adapter"
-	"github.com/ryan-ven/ezbx/internal/config"
-	"github.com/ryan-ven/ezbx/internal/detect"
-	"github.com/ryan-ven/ezbx/internal/doctor"
-	"github.com/ryan-ven/ezbx/providers"
+	"github.com/OranjSvensk/ezbx/internal/adapter"
+	"github.com/OranjSvensk/ezbx/internal/config"
+	"github.com/OranjSvensk/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/doctor"
+	"github.com/OranjSvensk/ezbx/providers"
 )
 
 // runDoctor checks a box from the host and from inside its network.

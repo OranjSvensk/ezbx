@@ -11,9 +11,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/ryan-ven/ezbx/harnesses"
-	"github.com/ryan-ven/ezbx/internal/box"
-	"github.com/ryan-ven/ezbx/internal/harness"
+	"github.com/OranjSvensk/ezbx/harnesses"
+	"github.com/OranjSvensk/ezbx/internal/box"
+	"github.com/OranjSvensk/ezbx/internal/harness"
 )
 
 // runShell opens a terminal in the box, or starts a harness there, as the

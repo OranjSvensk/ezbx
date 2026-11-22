@@ -13,7 +13,7 @@ ezbx is a planned one-click setup for running AI coding and agent tools inside a
 
 ```text
 # Download a binary from Releases, or install with Go 1.27+:
-go install github.com/ryan-ven/ezbx/cmd/ezbx@v0.1.0
+go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.1.0
 ezbx --version
 ezbx init                 # asks the questions, shows the plan, builds and starts the box
 ezbx shell pi             # opens Pi in the box (or opencode, omp, codex, claude, hermes, openclaw)
@@ -63,4 +63,4 @@ Contributions will open once the design settles. To report a security problem, s
 
 ## License
 
-MIT. Copyright (c) 2026 Ryan Ven.
+MIT. Copyright (c) 2026 Ryan V.

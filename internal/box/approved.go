@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ryan-ven/ezbx/internal/config"
+	"github.com/OranjSvensk/ezbx/internal/config"
 )
 
 // Hosts approved with "ezbx net allow" are kept in the box's state folder,

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ryan-ven/ezbx/internal/box"
-	"github.com/ryan-ven/ezbx/internal/paths"
+	"github.com/OranjSvensk/ezbx/internal/box"
+	"github.com/OranjSvensk/ezbx/internal/paths"
 )
 
 // fakeGateway answers like a running box's gateway through docker exec.

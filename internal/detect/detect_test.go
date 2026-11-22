@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/adapter"
-	"github.com/ryan-ven/ezbx/providers"
+	"github.com/OranjSvensk/ezbx/internal/adapter"
+	"github.com/OranjSvensk/ezbx/providers"
 )
 
 // fakeEngine starts a server that answers the given paths with the given JSON.

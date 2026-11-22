@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ryan-ven/ezbx/internal/harness"
+	"github.com/OranjSvensk/ezbx/internal/harness"
 )
 
 func testPlan(t *testing.T) Plan {

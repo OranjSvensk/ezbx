@@ -18,18 +18,18 @@ You need three things on your computer:
 
 ## 2. Install ezbx
 
-Download a release archive from [GitHub Releases](https://github.com/ryan-ven/ezbx/releases), unpack `ezbx.exe` (or `ezbx`) onto your `PATH`, and check the SHA-256 checksum in `checksums.txt`.
+Download a release archive from [GitHub Releases](https://github.com/OranjSvensk/ezbx/releases), unpack `ezbx.exe` (or `ezbx`) onto your `PATH`, and check the SHA-256 checksum in `checksums.txt`.
 
 Or install with Go 1.27 or later:
 
 ```text
-go install github.com/ryan-ven/ezbx/cmd/ezbx@v0.1.0
+go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.1.0
 ```
 
 You can also build directly from a clone:
 
 ```text
-git clone https://github.com/ryan-ven/ezbx.git
+git clone https://github.com/OranjSvensk/ezbx.git
 cd ezbx
 go install ./cmd/ezbx
 ```
