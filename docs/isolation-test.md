@@ -176,6 +176,12 @@ The fake engine ran with `--key-env --key-on-models`, so its model list answered
 - `ezbx doctor` passed all 22 checks. It showed Strata as the running engine and the gateway as forwarding to "an engine that asks for a key"; before a fix found here, that row would have warned that no engine was there.
 - Every new protection was mutation-checked (18 of 18 caught), including one that sends every key to every address.
 
+### A workspace the agent can't write, and a leftover admin shell (same day)
+
+- With `/workspace` made owned by root with mode 755 (as Docker leaves a folder it creates itself), the agent got "Permission denied". `ezbx doctor` failed "agent can write the workspace", naming the owner and mode, and `ezbx up` warned the same way after starting the box. Both gave the fix `ezbx admin shell --box vt -- chown 1000:1000 /workspace`, which worked, and the doctor then passed. (Run from Git Bash, the fix needs `MSYS_NO_PATHCONV=1`, because Git Bash turns `/workspace` into a Windows path; PowerShell doesn't.)
+- With an admin shell left running, a second `ezbx admin shell` and `ezbx reset` both said one was open and gave `docker stop ezbx-vt-admin`, which removed it.
+- Every new check was mutation-checked (9 of 9 caught).
+
 Not covered: a real engine started with a key, and Linux, where the gateway's user may not be able to read a key file only you can read (the admin token has the same open question).
 
 ## Limits of this result

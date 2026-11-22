@@ -141,3 +141,14 @@ func TestBackupsPrune(t *testing.T) {
 		}
 	}
 }
+
+func TestAdminShellOpen(t *testing.T) {
+	got := adminShellOpen("main", true)
+	if !strings.Contains(got, "already open (ezbx-main-admin)") || !strings.Contains(got, "docker stop ezbx-main-admin") {
+		t.Error(got)
+	}
+	got = adminShellOpen("work", false)
+	if !strings.Contains(got, "not running") || !strings.Contains(got, "docker rm ezbx-work-admin") || strings.Contains(got, "docker stop") {
+		t.Error(got)
+	}
+}

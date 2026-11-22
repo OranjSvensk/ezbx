@@ -34,6 +34,8 @@ Decided before the code was written (design decisions 16 and 17).
 
 ## Limits
 
+- Closing a terminal window doesn't always end the admin shell in it, and its container then stays, so a new `ezbx admin shell` (and `reset`, `destroy`) says one is open. The message gives the way out: `docker stop ezbx-<box>-admin` (the container is removed when it stops), or `docker rm` for one that is left over but not running.
+
 - An admin shell with `--net` reaches the whole internet; the box's network switch doesn't apply to it.
 - `destroy` on one box removes EZBox images no container uses, even if another box that is down would need them. `ezbx build` makes them again.
 - A backup holds the agent's home, the config and the approved hosts, not the snapshots (they stay where they are) or the images (they can be built again).

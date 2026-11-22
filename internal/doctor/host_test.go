@@ -55,8 +55,9 @@ func goodDocker() *fakeDocker {
 			},
 		},
 		exec: map[string]string{
-			"status": `{"engine":"strata","upstream":"http://host.docker.internal:53000","network":{"mode":"off","allow":[]}}`,
-			"ready":  `{"ready":true,"engine":"strata","models":1}`,
+			"status":       `{"engine":"strata","upstream":"http://host.docker.internal:53000","network":{"mode":"off","allow":[]}}`,
+			"ready":        `{"ready":true,"engine":"strata","models":1}`,
+			writableScript: "writable\n",
 		},
 		inside: Report{Checks: []Check{{Group: "From inside the box", Name: "model list through the gateway", Status: Pass}}},
 	}
@@ -276,6 +277,7 @@ func TestEachProblemIsCaught(t *testing.T) {
 			f.inside = Report{Checks: []Check{{Group: "From inside the box", Name: "gateway ports", Status: Fail}}}
 		}, "gateway ports"},
 		"inside checks give no report": {func(f *fakeDocker) { f.inside = Report{} }, "inside checks"},
+		"workspace owned by root":      {func(f *fakeDocker) { f.exec[writableScript] = "0:0 755\n" }, "agent can write the workspace"},
 	}
 	for name, tc := range cases {
 		f := goodDocker()

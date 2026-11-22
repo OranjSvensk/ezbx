@@ -81,7 +81,7 @@ func runAdminShell(args []string, stdout, stderr io.Writer) int {
 	if ok, err := r.Exists(ctx, "container", box.AdminName(t.name)); err != nil {
 		return report(stderr, err)
 	} else if ok {
-		return report(stderr, fmt.Errorf("an admin shell for box %q is already open (%s)", t.name, box.AdminName(t.name)))
+		return report(stderr, errors.New(adminShellOpen(t.name, adminRunning(ctx, t.name))))
 	}
 	cancel()
 
@@ -117,9 +117,27 @@ func activity(ctx context.Context, name string) ([]string, error) {
 	if ok, err := (&box.Runner{Docker: dockerIn}).Exists(ctx, "container", box.AdminName(name)); err != nil {
 		return nil, err
 	} else if ok {
-		procs = append(procs, "an admin shell")
+		procs = append(procs, "an admin shell; if no terminal has it open any more, end it with: docker stop "+box.AdminName(name))
 	}
 	return procs, nil
+}
+
+// adminRunning reports whether the box's admin shell container is running.
+// If Docker can't say, it is taken as running, the more careful answer.
+func adminRunning(ctx context.Context, name string) bool {
+	out, err := dockerIn(ctx, nil, "container", "inspect", "--format", "{{.State.Running}}", box.AdminName(name))
+	return err != nil || strings.TrimSpace(string(out)) != "false"
+}
+
+// adminShellOpen explains an admin shell container that is still there.
+// Closing a terminal window doesn't always end the shell in it, and then
+// nothing removes the container, so say how.
+func adminShellOpen(name string, running bool) string {
+	c := box.AdminName(name)
+	if !running {
+		return fmt.Sprintf("an admin shell container for box %q (%s) is left over but not running. Remove it with: docker rm %s", name, c, c)
+	}
+	return fmt.Sprintf("an admin shell for box %q is already open (%s). Use that one, or if no terminal has it open any more (a closed window can leave it running), end it with: docker stop %s", name, c, c)
 }
 
 // imagesUsedByOthers lists the images (by name and by ID) that containers

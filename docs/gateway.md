@@ -145,7 +145,7 @@ On the host:
 3. **The inside network** is internal, its bridge has no address (`gateway_mode_ipv4=isolated`) and IPv6 is off. **The outside network** exists and isn't internal.
 4. **The gateway container** is running and healthy; has no capabilities, `no-new-privileges`, a non-root user and a read-only root filesystem; is attached to exactly the two networks, as `gateway` on the inside one; and publishes no port beyond this computer's loopback, and never the admin port.
 5. **Through the admin API** (`docker exec`): it answers, the engine is ready, and the gateway forwards to the port the running engine is on.
-6. **The box container**, if there is one: no capabilities, `no-new-privileges`, not root, attached only to the inside network, and no Docker socket mounted.
+6. **The box container**, if there is one: no capabilities, `no-new-privileges`, not root, attached only to the inside network, and no Docker socket mounted. While it runs, the agent can write to `/workspace` (asked through `docker exec`, as the agent). If Docker made the workspace folder itself, for example after it was deleted while the box existed, the folder is owned by root; the fix is `ezbx admin shell -- chown 1000:1000 /workspace`. `ezbx up` checks this too and warns, since the box starts fine but the agent can't change anything.
 
 From inside, in a throwaway container started from the gateway's own image (which holds `ezbx`), attached only to the inside network, with the box's restrictions:
 

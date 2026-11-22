@@ -217,6 +217,11 @@ func (r *Runner) Up(ctx context.Context, p Plan) error {
 		return fmt.Errorf("starting the box: %w%s", err, cleanupHint)
 	}
 	r.say("started %s (workspace %s, harnesses %s)", p.Names.Box, p.Workspace, strings.Join(p.Harnesses, ", "))
+	// The box works, but the agent can't change anything: say so now
+	// rather than when the agent's first write fails.
+	if why := r.WorkspaceProblem(ctx, p); why != "" {
+		r.say("warning: %s", why)
+	}
 	return nil
 }
 

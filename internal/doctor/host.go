@@ -305,6 +305,10 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 		} else {
 			r.add(gb, "no Docker socket", Fail, "mounted at "+strings.Join(sock, ", "), "Never mount the Docker socket into the box: it gives full control of this computer.")
 		}
+		if box.State.Running {
+			st, detail, fix := writableStatus(ctx, cfg, boxName)
+			r.add(gb, "agent can write the workspace", st, detail, fix)
+		}
 	}
 
 	// From inside, seeing what the box sees.
@@ -537,4 +541,29 @@ func containsFold(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// writableScript runs in the box as the agent: it prints "writable", or the
+// workspace's owner and mode.
+const writableScript = `if [ -w /workspace ]; then echo writable; else stat -c '%u:%g %a' /workspace; fi`
+
+// writableStatus asks the running box, as the agent, whether it can write
+// to /workspace. When Docker creates a missing workspace folder itself (for
+// example after it was deleted while the box existed), it is owned by root.
+func writableStatus(ctx context.Context, cfg HostConfig, boxName string) (Status, string, string) {
+	out, err := cfg.Docker(ctx, "exec", boxName, "sh", "-c", writableScript)
+	got := strings.TrimSpace(string(out))
+	switch {
+	case err != nil:
+		return Warn, "couldn't ask the box: " + shortErr(err), ""
+	case got == "writable":
+		return Pass, "", ""
+	}
+	flag := ""
+	if cfg.Box != "main" {
+		flag = " --box " + cfg.Box
+	}
+	owner, mode, _ := strings.Cut(got, " ")
+	return Fail, "/workspace is owned by " + owner + " with mode " + mode + ", so the agent (user 1000) can't change anything",
+		"Docker probably created the folder itself. Fix it with: ezbx admin shell" + flag + " -- chown 1000:1000 /workspace"
 }
