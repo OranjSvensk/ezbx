@@ -25,11 +25,27 @@ import (
 )
 
 // imageSpecs works out the two images a box needs, from the files carried
-// in this program and the box's tools setting (nil means none chosen).
-func imageSpecs(chosen []string) (gw, bx images.Spec, err error) {
-	hs, err := harness.LoadFS(harnesses.FS)
+// in this program, the box's tools setting (nil means none chosen) and its
+// harnesses (nil means every verified one, for a build without a config).
+func imageSpecs(chosen, harnessIDs []string) (gw, bx images.Spec, err error) {
+	all, err := harness.LoadFS(harnesses.FS)
 	if err != nil {
 		return gw, bx, fmt.Errorf("internal error loading harnesses: %w", err)
+	}
+	var hs []harness.Manifest
+	if harnessIDs == nil {
+		for _, m := range all {
+			if m.Verified.Status == "verified" {
+				hs = append(hs, m)
+			}
+		}
+	}
+	for _, id := range harnessIDs {
+		m, ok := harness.Find(all, id)
+		if !ok {
+			return gw, bx, fmt.Errorf("unknown harness %q", id)
+		}
+		hs = append(hs, m)
 	}
 	cat, err := tools.Load(catalog.FS)
 	if err != nil {
@@ -39,7 +55,7 @@ func imageSpecs(chosen []string) (gw, bx images.Spec, err error) {
 		return gw, bx, err
 	}
 	if bx, err = images.Box(ezbx.Source, hs, cat, chosen); err != nil {
-		return gw, bx, fmt.Errorf("tools: %w", err)
+		return gw, bx, fmt.Errorf("box image: %w", err)
 	}
 	return gw, bx, nil
 }
@@ -70,14 +86,14 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 		return report(stderr, err)
 	}
 	cfgFile := dirs.ConfigFile(*cfgFlag, os.Getenv)
-	var chosen []string
+	var chosen, hs []string
 	switch cfg, err := config.Load(cfgFile); {
 	case err == nil:
 		_, b := cfg.Only()
-		chosen = b.Tools
+		chosen, hs = b.Tools, b.Harnesses
 		fmt.Fprintln(stdout, "config:", cfgFile)
 	case *cfgFlag == "" && os.Getenv("EZBX_CONFIG") == "" && errors.Is(statErr(cfgFile), os.ErrNotExist):
-		fmt.Fprintln(stdout, "No config yet, so the box image gets only the harnesses' own tools. Run ezbx init to choose more.")
+		fmt.Fprintln(stdout, "No config yet, so the box image gets every verified harness and only their own tools. Run ezbx init to choose.")
 	default:
 		return report(stderr, err)
 	}
@@ -88,7 +104,7 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 	if err := r.CheckDocker(ctx); err != nil {
 		return report(stderr, err)
 	}
-	gw, bx, err := imageSpecs(chosen)
+	gw, bx, err := imageSpecs(chosen, hs)
 	if err != nil {
 		return report(stderr, err)
 	}
@@ -147,7 +163,7 @@ func buildImagesWith(ctx context.Context, dirs paths.Dirs, stdout io.Writer, aga
 		}
 		fmt.Fprintf(stdout, "built %s\n", s.Tag())
 		if s.Kind == "box" {
-			fmt.Fprintf(stdout, "  tools: %s\n", toolsLine(s.Tools.Chosen))
+			fmt.Fprintf(stdout, "  harnesses: %s\n  tools: %s\n", harnessLine(s.Harnesses), toolsLine(s.Tools.Chosen))
 		}
 	}
 	if err := rec.Write(file); err != nil {
@@ -155,6 +171,14 @@ func buildImagesWith(ctx context.Context, dirs paths.Dirs, stdout io.Writer, aga
 	}
 	fmt.Fprintln(stdout, "recorded in", file)
 	return nil
+}
+
+func harnessLine(hs []harness.Manifest) string {
+	var ids []string
+	for _, m := range hs {
+		ids = append(ids, m.ID)
+	}
+	return strings.Join(ids, ", ")
 }
 
 func toolsLine(ids []string) string {

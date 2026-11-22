@@ -32,7 +32,7 @@ Tool packs (also decided first):
 For each image, `ezbx` makes the build context as a tar stream: the build files, sorted, with fixed times, owners and modes, so the same files always give the same bytes. The image's name is the first 12 hex digits of a SHA-256 hash over that stream, the Dockerfile's path and the build arguments (for the box, the chosen tools). The full hash is stored on the image as the label `ezbx.inputs`.
 
 - **Gateway:** the whole carried source, because the program carries its own build files and needs them all to compile. Any change to EZBox's code gives a new gateway image. (Before this, the gateway image had to be rebuilt by hand after code changes, and forgetting it meant an old gateway.)
-- **Box:** `docker/box.Dockerfile`, each verified harness's install script, lockfile and `package.json`, and the chosen tools. A harness's `manifest.json` isn't part of it, so editing its notes doesn't rebuild the box.
+- **Box:** `docker/box.Dockerfile`, the install script, lockfile and `package.json` of each harness the box has (`harnesses` in `ezbx.toml`), and the chosen tools. A harness's `manifest.json` isn't part of it, so editing its notes doesn't rebuild the box. Only the box's own harnesses go in (design decision 20), so a box with Pi alone doesn't carry OpenCode's 250 MB, and adding or removing a harness gives a new image name: run `ezbx build`, `ezbx down` and `ezbx up` after changing `harnesses`. `ezbx build` without a config builds every verified harness.
 
 `up` works out the same names from the same files and `ezbx.toml`, and checks that each image exists and carries the right `ezbx.inputs` label. An image with the right name but another label was made some other way (for example by hand with `docker build -t`), and is refused.
 
@@ -69,17 +69,22 @@ For each image, `ezbx` makes the build context as a tar stream: the build files,
 
 Tools are installed when the image is built, never by the agent: the agent has no root and no package manager rights. To add a tool, change `tools` in `ezbx.toml`, then run `ezbx build`, `ezbx down` and `ezbx up`.
 
-Sizes measured on the first build: the box image is 726 MB with `pack:coding` and 2 GB with all three packs. The gateway image is 13 MB.
+Sizes measured on the first build: the box image is 726 MB with `pack:coding` and 2 GB with all three packs. The gateway image is 13 MB. With OpenCode beside Pi and no tools, the box is 1.05 GB.
 
 Chromium runs with `--no-sandbox` in the box. Its own sandbox needs kernel features the box drops on purpose, and Debian's alternative (`chromium-sandbox`) is a setuid helper, which the image removes. The box is the sandbox.
 
 ## Pi's own downloads
 
-Pi looks for `fd` (or `fdfind`) and `rg` when it starts, and if they're missing it downloads the latest release from GitHub. That bypasses pinning, and the box's network blocks it anyway (the first hand run showed a 403 from the proxy). Pi's manifest therefore needs both tools, and `PI_OFFLINE=1` turns off Pi's startup network calls: tool downloads, version and package update checks, its online model catalogue and install telemetry. Model requests to the gateway are not affected.
+Pi looks for `fd` (or `fdfind`) and `rg` when it starts, and if they're missing it downloads the latest release from GitHub. That bypasses pinning, and the box's network blocks it anyway (the first hand run showed a 403 from the proxy). Pi's manifest therefore needs both tools, and `PI_OFFLINE=1` turns off Pi's startup network calls: tool downloads, version and package update checks, its online model catalogue and install telemetry. Model requests to the gateway are not affected. Like every harness's `env`, it is set on the box container by `ezbx up`, not in the image.
+
+## OpenCode's install
+
+OpenCode's npm package, `@opencode/cli`, is only a launcher. Its `opencode` command is a stub that prints an error until the package's install script has run, and that script copies the real program out of a platform package, running `npm install` by itself if the platform package is missing. Install scripts stay off in EZBox, so OpenCode's lockfile pins the platform package directly: `@opencode/cli-linux-x64-baseline`, one prebuilt program of about 250 MB with no install script and no dependencies, checked by its integrity hash like any npm package. The baseline build runs on every x64 CPU; the other build needs AVX2, so choosing between them at build time would make the image depend on the computer that built it.
+
+OpenCode fetches its model catalogue from `models.opencode.ai` every time it runs (seen as blocked requests in the gateway log); `OPENCODE_DISABLE_MODELS_FETCH=1` in its manifest turns that off, and its models come from the generated config instead. It also talks to a background service of its own over the box's loopback, so the box's `NO_PROXY` lists `localhost`, `127.0.0.1` and `::1` beside the gateway. Loopback in the box is the box itself, so nothing leaves it that way.
 
 ## Not built yet
 
-- Install steps for harnesses other than Pi. `docker/box.Dockerfile` has a Pi stage; the next harness gets its own stage, and the box spec refuses a verified harness without one.
 - Direct downloads with checked hashes, for tools Debian lacks.
 - The disk space check in `init` (image sizes are now known: see [isolation-test.md](isolation-test.md)).
 - A doctor check that the running containers use the current images.

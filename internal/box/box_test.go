@@ -24,7 +24,7 @@ func testPlan(t *testing.T) Plan {
 		Workspace: filepath.Join(dir, "workspace"), StateDir: filepath.Join(dir, "state", "t"), LogOn: true,
 		Upstream: "http://host.docker.internal:18080", EngineID: "strata", EngineName: "Strata",
 		Network: "allow", Allow: []string{"registry.npmjs.org"},
-		Memory: "4g", PIDs: 512, Harnesses: []string{"pi"},
+		Memory: "4g", PIDs: 512, Harnesses: []string{"pi"}, Env: map[string]string{"DEMO_QUIET": "1"},
 		HomeFiles: []harness.File{
 			{Path: ".pi/agent/models.json", Mode: 0o600, Data: []byte(`{"m":1}`)},
 			{Path: ".pi/agent/settings.json", Mode: 0o600, Data: []byte(`{"s":1}`)},
@@ -130,7 +130,7 @@ func TestBoxArgs(t *testing.T) {
 		{"--cap-drop", "ALL"}, {"--security-opt", "no-new-privileges"},
 		{"--pids-limit", "512"}, {"--memory", "4g"}, {"--cpus", "2"},
 		{"--label", "ezbx.managed=true"},
-		{"-e", "HTTPS_PROXY=http://gateway:3128"}, {"-e", "http_proxy=http://gateway:3128"}, {"-e", "NO_PROXY=gateway"},
+		{"-e", "HTTPS_PROXY=http://gateway:3128"}, {"-e", "http_proxy=http://gateway:3128"}, {"-e", "NO_PROXY=gateway,localhost,127.0.0.1,::1"}, {"-e", "no_proxy=gateway,localhost,127.0.0.1,::1"}, {"-e", "DEMO_QUIET=1"},
 		{"-v", p.Workspace + ":/workspace"}, {"-v", "ezbx-t-home:/home/agent"},
 		{"ezbx-box:bbb", "sleep", "infinity"},
 	} {

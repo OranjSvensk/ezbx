@@ -11,10 +11,10 @@ A harness is an agent tool that runs inside the box. Each lives in `harnesses/<i
 | `name` | yes | Display name. |
 | `kind` | yes | `coding` or `assistant`. Used to group harnesses in `ezbx init`. |
 | `install` | yes | How it is installed (see below). The version must be pinned. |
-| `binary` | yes | Command name that must exist after install. |
+| `binary` | yes | Command name that must exist after install: lowercase letters, digits, dots and dashes only, because it becomes a word in the image's build script. |
 | `runtime` | yes | `node`, `python` or `binary`. Tells the image builder which toolchain to include. |
 | `tools` | no | Tool ids from the catalogue (`catalog/tools/`) the harness always needs, built into the box with it whatever the config chooses. Pi needs `fd` and `ripgrep`. See [build.md](build.md). |
-| `env` | no | Environment variables set for this harness. Never secrets. |
+| `env` | no | Environment variables set in the box for this harness. Never secrets, and never the variables EZBox sets itself (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `ALL_PROXY`, `HOME`, `PATH`, `USER`), since changing the proxy settings could send traffic past the network switch. Two harnesses in one box may not set the same variable differently. |
 | `config` | no | Config files to generate (see below). |
 | `launch` | yes | Command and working directory used by `ezbx shell <id>`. |
 | `autonomy` | yes | The flag that skips approval prompts, or `null` with a note. Only ever used inside the box. |
@@ -32,7 +32,7 @@ A harness is an agent tool that runs inside the box. Each lives in `harnesses/<i
 - `lockfile`: required for `npm`. The lockfile in the harness folder.
 - `version` is always exact, such as `1.2.3` or `1.2.3-beta.1`. Ranges, tags and `latest` are refused when manifests are loaded, so a rebuild gives the same box.
 - Pinning the harness alone does not pin what it pulls in. An npm harness therefore ships a `package.json` and a `package-lock.json` in its folder. The lockfile pins every package it pulls in with an integrity hash, and the install uses `npm ci`, which refuses anything that doesn't match. `ezbx.lock` records the lockfile's own hash (see [build.md](build.md)).
-- `script` runs at image build time as an **unprivileged** user, in a separate build stage, and must fail loudly if the binary is missing. The result is copied into the image owned by root, so the agent can run the harness but not change it.
+- `script` runs at image build time as an **unprivileged** user, in a separate build stage, in the harness's own folder, and must fail loudly if the binary is missing. It must leave the command at `bin/<binary>` in that folder (usually a relative link), and `bin/<binary> --version` must work. The result is copied into the image owned by root, so the agent can run the harness but not change it. No Dockerfile change is needed for a new harness: the image's harness stage runs the script of every harness the box has.
 - Package install scripts are off (`--ignore-scripts`). A harness that really needs one must say which and why in its install script.
 
 ### `config`
@@ -64,7 +64,15 @@ A value that is exactly one placeholder keeps its type, so a number stays a numb
 "models": { "$each": "models", "as": { "id": "${id}", "contextWindow": "${contextWindow}" } }
 ```
 
-This produces a list with one entry per model the engine reports. A `$each` block has exactly the keys `$each` and `as`, repeats only over `models`, and can't be nested.
+This produces a list with one entry per model the engine reports. A `$each` block has the keys `$each` and `as`, and optionally `key`; it repeats only over `models`, and can't be nested.
+
+Some tools want the models as an object keyed by model id instead of a list. `key` gives that: it is text with model facts in it, filled in for each model, and the block becomes an object with one entry per model under that name.
+
+```json
+"models": { "$each": "models", "key": "${id}", "as": { "name": "${name}", "limit": { "context": "${contextWindow}" } } }
+```
+
+A `key` that isn't text, is empty, gives a number or a list, or gives the same name for two models (two models renamed alike, say) stops rendering with a message.
 
 **Model facts available inside `as`**
 

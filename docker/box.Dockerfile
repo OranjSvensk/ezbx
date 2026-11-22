@@ -1,10 +1,11 @@
-# EZBox box image: Node, git, the Pi harness and the chosen tools, for an
-# unprivileged user.
+# EZBox box image: Node, git, the box's harnesses and the chosen tools, for
+# an unprivileged user.
 #
 # ezbx build builds it from the files carried inside the ezbx program and
-# passes the chosen tools' Debian packages as build arguments. To build it by
-# hand from the repository root (for development; no extra tools):
-#   docker build -f docker/box.Dockerfile -t ezbx-box:dev .
+# passes the harnesses and the chosen tools' Debian packages as build
+# arguments. To build it by hand from the repository root (for development;
+# Pi only, no extra tools):
+#   docker build -f docker/box.Dockerfile --build-arg HARNESS_COMMANDS=pi=pi -t ezbx-box:dev .
 #
 # Run it with every capability dropped and no-new-privileges, attached only
 # to the box's inside network (see docs/isolation-test.md).
@@ -27,12 +28,23 @@ RUN f=/etc/apt/sources.list.d/debian.sources \
 
 # Harness install: runs as the base image's unprivileged "node" user, so no
 # package code could run as root even if install scripts were on.
-FROM base AS pi
+# HARNESS_COMMANDS lists the box's harnesses as id=command pairs, such as
+# "opencode=opencode pi=pi"; ezbx build fills it from their manifests, and
+# the build files hold only those harnesses' folders. Each install script
+# leaves its command in bin/ in its folder, and the command must answer
+# --version.
+FROM base AS harnesses
+ARG HARNESS_COMMANDS=""
 RUN mkdir /build && chown node:node /build
 USER node
-WORKDIR /build/pi
-COPY --chown=node:node harnesses/pi/package.json harnesses/pi/package-lock.json harnesses/pi/install.sh ./
-RUN sh install.sh
+WORKDIR /build
+COPY --chown=node:node harnesses/ ./
+RUN test -n "$HARNESS_COMMANDS" \
+ && for h in $HARNESS_COMMANDS; do \
+      id="${h%%=*}"; cmd="${h#*=}"; \
+      (cd "$id" && sh install.sh) || exit 1; \
+      "$id/bin/$cmd" --version >/dev/null || { echo "harness $id: $id/bin/$cmd --version failed" >&2; exit 1; }; \
+    done
 
 FROM base
 # The chosen tools, as Debian package names, the commands they must provide
@@ -54,10 +66,15 @@ RUN userdel -r node \
  && mkdir /workspace && chown agent:agent /workspace \
  && find / -xdev -perm /6000 -type f -exec chmod a-s {} +
 
-# Harness files belong to root, so the agent can run Pi but not change it.
-COPY --from=pi --chown=root:root /build/pi /opt/ezbx/harnesses/pi
-RUN ln -s /opt/ezbx/harnesses/pi/node_modules/.bin/pi /usr/local/bin/pi \
- && pi --version \
+# Harness files belong to root, so the agent can run the harnesses but not
+# change them.
+ARG HARNESS_COMMANDS=""
+COPY --from=harnesses --chown=root:root /build /opt/ezbx/harnesses
+RUN for h in $HARNESS_COMMANDS; do \
+      id="${h%%=*}"; cmd="${h#*=}"; \
+      ln -s "/opt/ezbx/harnesses/$id/bin/$cmd" "/usr/local/bin/$cmd" || exit 1; \
+      command -v "$cmd" >/dev/null || { echo "the harness command $cmd is missing" >&2; exit 1; }; \
+    done \
  && for l in $TOOL_LINKS; do \
       ln -s "$(command -v "${l#*=}")" "/usr/local/bin/${l%%=*}" || exit 1; \
     done \
@@ -65,10 +82,8 @@ RUN ln -s /opt/ezbx/harnesses/pi/node_modules/.bin/pi /usr/local/bin/pi \
       command -v "$c" >/dev/null || { echo "the tool command $c is missing" >&2; exit 1; }; \
     done
 
-# PI_OFFLINE turns off Pi's startup network calls: tool downloads, version and
-# package update checks, its online model catalogue and install telemetry.
-# Model requests to the gateway are not affected.
-ENV PI_SKIP_VERSION_CHECK=1 PI_OFFLINE=1
+# Each harness's environment (such as Pi's PI_OFFLINE) comes from its
+# manifest, set by ezbx up on the box container, not from the image.
 USER agent
 WORKDIR /workspace
 LABEL ezbx.managed="true"

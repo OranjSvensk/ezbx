@@ -125,7 +125,7 @@ func makePlan(ctx context.Context, cfg *config.Config, dirs paths.Dirs, stdout i
 	if err != nil {
 		return box.Plan{}, err
 	}
-	gw, bx, err := imageSpecs(b.Tools)
+	gw, bx, err := imageSpecs(b.Tools, b.Harnesses)
 	if err != nil {
 		return box.Plan{}, err
 	}
@@ -142,13 +142,17 @@ func makePlan(ctx context.Context, cfg *config.Config, dirs paths.Dirs, stdout i
 	if err != nil {
 		return box.Plan{}, err
 	}
+	env, err := harnessEnv(chosen)
+	if err != nil {
+		return box.Plan{}, err
+	}
 
 	return box.Plan{
 		Box: name, Names: box.NamesFor(name), Workspace: ws, StateDir: dirs.Box(name), LogOn: cfg.LogOn(),
 		Upstream: upstream, EngineID: eng.ID, EngineName: eng.Name, UpstreamHost: override.Host, KeyEnv: override.KeyEnv,
 		Network: b.Network, Allow: box.AllowList(b.Allow, chosen),
 		Memory: memoryLimit(ctx, b.Memory), CPUs: b.CPUsFlag(), PIDs: b.PIDs,
-		Harnesses: b.Harnesses, HomeFiles: files,
+		Harnesses: b.Harnesses, HomeFiles: files, Env: env,
 		GatewayImage: planImage(gw), BoxImage: planImage(bx),
 	}, nil
 }
@@ -192,6 +196,23 @@ func boxHarnesses(b *config.Box) ([]harness.Manifest, error) {
 		chosen = append(chosen, m)
 	}
 	return chosen, nil
+}
+
+// harnessEnv merges the box's harnesses' environment settings. Two
+// harnesses that want different values for one variable are refused, since
+// the box has one environment.
+func harnessEnv(chosen []harness.Manifest) (map[string]string, error) {
+	env := map[string]string{}
+	from := map[string]string{}
+	for _, m := range chosen {
+		for k, v := range m.Env {
+			if old, dup := env[k]; dup && old != v {
+				return nil, fmt.Errorf("harnesses %s and %s set %s differently (%q and %q)", from[k], m.ID, k, old, v)
+			}
+			env[k], from[k] = v, m.ID
+		}
+	}
+	return env, nil
 }
 
 // renderHome fills in each harness's config from the engine's models and

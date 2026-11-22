@@ -116,7 +116,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	if _, err := config.Parse(text); err != nil {
 		return report(stderr, fmt.Errorf("internal error: the config init would write doesn't load: %w", err))
 	}
-	gw, bx, err := imageSpecs(res.Answers.Tools)
+	gw, bx, err := imageSpecs(res.Answers.Tools, res.Answers.Harnesses)
 	if err != nil {
 		return report(stderr, err)
 	}

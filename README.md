@@ -4,7 +4,7 @@
 
 EZBox is a planned one-click setup for running AI coding and agent tools inside a sandboxed container, while the model itself keeps running on your own machine.
 
-> **Status: early development.** One harness (Pi) works end to end on Windows with Docker Desktop: `ezbx init` sets it up from nothing, builds the images and starts the box, and `ezbx shell pi` opens it, after taking a snapshot of the workspace that `ezbx rewind` can go back to. Every command on the road to the first usable version below is built; other harnesses, engines and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), and designs are in [docs/](docs/).
+> **Status: early development.** Pi works end to end on Windows with Docker Desktop: `ezbx init` sets it up from nothing, builds the images and starts the box, and `ezbx shell pi` opens it, after taking a snapshot of the workspace that `ezbx rewind` can go back to. OpenCode is the second harness: it is built and answers through the gateway, but has only been tested with a test engine so far. Every command on the road to the first usable version below is built; other harnesses, engines and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), and designs are in [docs/](docs/).
 
 ```text
 go install ./cmd/ezbx     from a clone; needs Go and Docker Desktop

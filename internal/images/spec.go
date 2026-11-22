@@ -24,13 +24,15 @@ import (
 
 // Names and labels.
 const (
-	GatewayRepo  = "ezbx-gateway"
-	BoxRepo      = "ezbx-box"
-	InputsLabel  = "ezbx.inputs" // the full hash of the inputs
-	KindLabel    = "ezbx.image"  // gateway | box
-	ToolsLabel   = "ezbx.tools"  // the box's tool ids, separated by commas
-	ManagedLabel = "ezbx.managed=true"
-	tagLength    = 12 // hex digits of the hash in the tag
+	GatewayRepo = "ezbx-gateway"
+	BoxRepo     = "ezbx-box"
+	InputsLabel = "ezbx.inputs" // the full hash of the inputs
+	KindLabel   = "ezbx.image"  // gateway | box
+	ToolsLabel  = "ezbx.tools"  // the box's tool ids, separated by commas
+	// HarnessesLabel lists the box's harness ids, separated by commas.
+	HarnessesLabel = "ezbx.harnesses"
+	ManagedLabel   = "ezbx.managed=true"
+	tagLength      = 12 // hex digits of the hash in the tag
 )
 
 // Spec is one image: what goes in, and the name that follows from it.
@@ -42,6 +44,7 @@ type Spec struct {
 	Labels     [][2]string // extra labels, sorted by name
 	Inputs     string      // sha256 of the build files and arguments, in hex
 	Tools      tools.Selection
+	Harnesses  []harness.Manifest // the box's harnesses, sorted by id
 
 	src   fs.FS
 	files []string // sorted paths in src
@@ -71,20 +74,28 @@ func Gateway(src fs.FS) (Spec, error) {
 	return s.finish()
 }
 
-// Box is the box image: the harnesses' install files and the chosen tools.
-// Every verified harness is built in, so each one's own tools are added to
-// the chosen ones. The box Dockerfile installs Pi only, so any other
-// harness is refused until it has an install step there.
+// Box is the box image: the install files of the box's own harnesses and
+// the chosen tools. Only the harnesses given are built in, so each box
+// carries what it uses; each one's own tools are added to the chosen ones.
+// The Dockerfile runs every install script in the build files, so the
+// harnesses given decide what is installed.
 func Box(src fs.FS, hs []harness.Manifest, cat *tools.Catalog, chosen []string) (Spec, error) {
+	if len(hs) == 0 {
+		return Spec{}, fmt.Errorf("the box image needs at least one harness")
+	}
+	sorted := append([]harness.Manifest(nil), hs...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
 	files := []string{"docker/box.Dockerfile"}
-	var needed []string
-	for _, m := range hs {
+	var needed, ids, commands []string
+	for i, m := range sorted {
+		if i > 0 && m.ID == sorted[i-1].ID {
+			return Spec{}, fmt.Errorf("harness %s is listed twice", m.ID)
+		}
 		if m.Verified.Status != "verified" {
-			continue
+			return Spec{}, fmt.Errorf("harness %s is not verified yet, so it can't be built into the box", m.Name)
 		}
-		if m.ID != "pi" {
-			return Spec{}, fmt.Errorf("the box image can't install %s yet: docker/box.Dockerfile has an install step for Pi only", m.Name)
-		}
+		ids = append(ids, m.ID)
+		commands = append(commands, m.ID+"="+m.Binary)
 		dir := "harnesses/" + m.ID + "/"
 		files = append(files, dir+m.Install.Script)
 		if m.Install.Lockfile != "" {
@@ -100,13 +111,14 @@ func Box(src fs.FS, hs []harness.Manifest, cat *tools.Catalog, chosen []string) 
 		return Spec{}, err
 	}
 	s := Spec{
-		Kind: "box", Repo: BoxRepo, Dockerfile: "docker/box.Dockerfile", Tools: sel, src: src, files: files,
+		Kind: "box", Repo: BoxRepo, Dockerfile: "docker/box.Dockerfile", Tools: sel, Harnesses: sorted, src: src, files: files,
 		Args: [][2]string{
 			{"DEBIAN_PACKAGES", strings.Join(sel.Debian, " ")},
 			{"TOOL_COMMANDS", strings.Join(sel.Commands, " ")},
 			{"TOOL_LINKS", strings.Join(sel.Links, " ")},
+			{"HARNESS_COMMANDS", strings.Join(commands, " ")},
 		},
-		Labels: [][2]string{{ToolsLabel, strings.Join(sel.IDs(), ",")}},
+		Labels: [][2]string{{ToolsLabel, strings.Join(sel.IDs(), ",")}, {HarnessesLabel, strings.Join(ids, ",")}},
 	}
 	return s.finish()
 }

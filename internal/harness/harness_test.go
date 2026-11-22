@@ -15,8 +15,61 @@ func TestEmbeddedManifestsLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := Find(list, "pi"); !ok || len(list) != 1 {
-		t.Fatalf("want just pi, got %+v", list)
+	if len(list) != 2 || list[0].ID != "opencode" || list[1].ID != "pi" {
+		t.Fatalf("want opencode and pi, got %d manifests", len(list))
+	}
+}
+
+func TestRenderOpenCodeConfig(t *testing.T) {
+	list, err := LoadFS(harnesses.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oc, _ := Find(list, "opencode")
+	files, err := Render(oc, Values{
+		GatewayBaseURL: "http://gateway:8000/v1",
+		GatewayKey:     "ezbx-placeholder",
+		Models:         Models(strataModels(), Defaults{}, nil),
+		Default:        "small-model",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0].Path != ".config/opencode/opencode.json" || files[0].Mode != 0o600 {
+		t.Fatalf("files: %+v", files)
+	}
+	var cfg struct {
+		Model     string
+		Update    string
+		Providers map[string]struct {
+			Package  string
+			Settings struct {
+				BaseURL string `json:"baseURL"`
+				APIKey  string `json:"apiKey"`
+			}
+			Models map[string]struct {
+				Name         string
+				Capabilities struct {
+					Tools bool
+					Input []string
+				}
+				Limit struct{ Context, Output int }
+			}
+		}
+	}
+	if err := json.Unmarshal(files[0].Data, &cfg); err != nil {
+		t.Fatalf("%v\n%s", err, files[0].Data)
+	}
+	p := cfg.Providers["ezbx"]
+	if cfg.Model != "ezbx/small-model" || cfg.Update != "disable" || p.Package != "@opencode/ai/providers/openai-compatible" ||
+		p.Settings.BaseURL != "http://gateway:8000/v1" || p.Settings.APIKey != "ezbx-placeholder" || len(p.Models) != 2 {
+		t.Fatalf("config: %s", files[0].Data)
+	}
+	if m := p.Models["big-model"]; m.Name != "big-model" || !m.Capabilities.Tools || strings.Join(m.Capabilities.Input, ",") != "text,image" || m.Limit.Context != 262144 || m.Limit.Output != 8192 {
+		t.Errorf("big-model: %+v", m)
+	}
+	if strings.Contains(string(files[0].Data), "${") {
+		t.Error("a placeholder was left unfilled")
 	}
 }
 
@@ -58,6 +111,13 @@ func TestManifestValidation(t *testing.T) {
 		"bad status":            {`"status": "unverified"`, `"status": "works"`},
 		"id not folder":         {`"id": "demo"`, `"id": "other"`},
 		"bad tool id":           {`"kind": "coding"`, `"kind": "coding", "tools": ["Rip Grep"]`},
+		"proxy env":             {`"DEMO_QUIET": "1"`, `"HTTPS_PROXY": "http://elsewhere"`},
+		"no-proxy env":          {`"DEMO_QUIET": "1"`, `"NO_PROXY": "*"`},
+		"path env":              {`"DEMO_QUIET": "1"`, `"PATH": "/tmp"`},
+		"binary with a space":   {`"binary": "demo"`, `"binary": "demo x"`},
+		"binary with a slash":   {`"binary": "demo"`, `"binary": "../demo"`},
+		"binary with a quote":   {`"binary": "demo"`, `"binary": "demo'"`},
+		"no binary":             {`"binary": "demo"`, `"binary": ""`},
 	}
 	for name, sub := range bad {
 		body := strings.Replace(goodManifest, sub[0], sub[1], 1)
@@ -188,6 +248,54 @@ func TestRenderTemplateRules(t *testing.T) {
 	for name, content := range bad {
 		if _, err := render(t, content); err == nil {
 			t.Errorf("%s: expected an error", name)
+		}
+	}
+}
+
+func TestRenderKeyedEach(t *testing.T) {
+	files, err := render(t, `{"models": {"$each": "models", "key": "m-${id}", "as": {"name": "${name}", "limit": {"context": "${contextWindow}"}}}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Models map[string]struct {
+			Name  string
+			Limit struct{ Context int }
+		}
+	}
+	if err := json.Unmarshal(files[0].Data, &got); err != nil {
+		t.Fatalf("%v\n%s", err, files[0].Data)
+	}
+	if len(got.Models) != 2 || got.Models["m-big-model"].Name != "big-model" || got.Models["m-big-model"].Limit.Context != 262144 || got.Models["m-small-model"].Limit.Context != 32768 {
+		t.Errorf("keyed $each: %s", files[0].Data)
+	}
+
+	// Two models with the same name would give the same key.
+	twin := Manifest{Name: "Demo", Config: []ConfigFile{{Path: "~/.demo/c.json", Mode: "0600", Content: json.RawMessage(`{"m": {"$each": "models", "key": "${name}", "as": 1}}`)}}}
+	models := Models(strataModels(), Defaults{}, map[string]Override{"small-model": {Name: "big-model"}})
+	if _, err := Render(twin, Values{Models: models}); err == nil || !strings.Contains(err.Error(), "for two models") {
+		t.Errorf("duplicate keys: %v", err)
+	}
+
+	bad := map[string]string{
+		"key that is a number": `{"m": {"$each": "models", "key": "${contextWindow}", "as": 1}}`,
+		"key that is a list":   `{"m": {"$each": "models", "key": "${input}", "as": 1}}`,
+		"key that isn't text":  `{"m": {"$each": "models", "key": 5, "as": 1}}`,
+		"empty key":            `{"m": {"$each": "models", "key": "", "as": 1}}`,
+		"unknown key fact":     `{"m": {"$each": "models", "key": "${colour}", "as": 1}}`,
+		"key with extra keys":  `{"m": {"$each": "models", "key": "${id}", "as": 1, "sort": true}}`,
+	}
+	want := map[string]string{
+		"key that is a number": "must give text",
+		"key that is a list":   "must give text",
+		"key that isn't text":  "must be text",
+		"empty key":            "must be text",
+		"unknown key fact":     "unknown placeholder",
+		"key with extra keys":  `optionally "key"`,
+	}
+	for name, content := range bad {
+		if _, err := render(t, content); err == nil || !strings.Contains(err.Error(), want[name]) {
+			t.Errorf("%s: got %v, want an error with %q", name, err, want[name])
 		}
 	}
 }

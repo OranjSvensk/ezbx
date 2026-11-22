@@ -184,6 +184,18 @@ The fake engine ran with `--key-env --key-on-models`, so its model list answered
 
 Not covered: a real engine started with a key, and Linux, where the gateway's user may not be able to read a key file only you can read (the admin token has the same open question).
 
+### OpenCode, the second harness (2026-11-22)
+
+A test box with `harnesses = ['opencode', 'pi']`, no tools, the fake engine and the network `off`, built from nothing (no EZBox or base images on the computer beforehand).
+
+- `ezbx build` installed both harnesses from their lockfiles with install scripts off, in the one shared harness stage. The image read back `opencode v2.3.2` and Pi `1.5.0`, and is 1.05 GB with no tools. Its `ezbx.harnesses` label says `opencode,pi`.
+- `up` set each harness's `env` on the box container (`PI_OFFLINE`, `PI_SKIP_VERSION_CHECK`, `OPENCODE_DISABLE_MODELS_FETCH`), and `NO_PROXY` listed the gateway and loopback.
+- OpenCode's generated config was read without changes: `opencode run "say hi"` answered through the gateway, and so did `ezbx shell opencode -- run "say hi"`, after its snapshot. Pi still answered with `pi -p`.
+- **Found:** at every run, OpenCode fetched its model catalogue from `models.opencode.ai`. The gateway refused it (2 blocked requests per run, network `off`). `OPENCODE_DISABLE_MODELS_FETCH=1` stops it: 0 blocked requests in each of 4 runs with it, against 2 per run in 3 runs without it. The manifest now sets it. No other request left the box except to the gateway, and OpenCode's log showed no errors.
+- The race detector and the Linux-only tests passed in the Go container. Every new protection was mutation-checked (17 of 17 caught).
+
+Not covered: OpenCode's file tools (the fake engine can't make tool calls), its full-screen interface, a box with OpenCode alone, and a real model.
+
 ## Limits of this result
 
 - On the test machine, public DNS servers didn't answer even from the outside network, so the "public DNS blocked" checks prove less than they appear to. The checks against Docker Desktop's own DNS server, which did answer from the outside, are the meaningful ones.

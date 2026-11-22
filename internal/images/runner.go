@@ -92,11 +92,18 @@ func (r *Runner) Observe(ctx context.Context, s Spec) (Built, error) {
 		return b, nil
 	}
 	// A throwaway container with no network and no privileges prints the
-	// facts: the snapshot line, then package=version lines, then Pi's version.
+	// facts: the snapshot line, then package=version lines, then one
+	// harness:id=version line per harness. Ids and command names are checked
+	// when manifests load (letters, digits, dots and dashes), so they are
+	// safe as words in the script.
 	pkgs := append([]string{"ca-certificates", "git"}, s.Tools.Debian...)
+	var pairs []string
+	for _, m := range s.Harnesses {
+		pairs = append(pairs, m.ID+"="+m.Binary)
+	}
 	script := `sed -n 's|^URIs: http://snapshot\.debian\.org/archive/debian/||p' /etc/apt/sources.list.d/debian.sources | head -n 1
 dpkg-query -W -f '${Package}=${Version}\n' "$@"
-printf 'pi=%s\n' "$(pi --version 2>/dev/null)"`
+for h in ` + strings.Join(pairs, " ") + `; do printf 'harness:%s=%s\n' "${h%%=*}" "$("${h#*=}" --version 2>/dev/null | head -n 1)"; done`
 	args := append([]string{"run", "--rm", "--label", ManagedLabel, "--network", "none", "--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges", "--entrypoint", "sh", s.Tag(), "-c", script, "sh"}, pkgs...)
 	out, err = r.Docker(ctx, nil, args...)
@@ -108,10 +115,14 @@ printf 'pi=%s\n' "$(pi --version 2>/dev/null)"`
 	b.Packages = map[string]string{}
 	for _, l := range lines[1:] {
 		k, v, ok := strings.Cut(strings.TrimSpace(l), "=")
+		id, isHarness := strings.CutPrefix(k, "harness:")
 		switch {
 		case !ok:
-		case k == "pi":
-			b.Harness = map[string]string{"pi": v}
+		case isHarness:
+			if b.Harness == nil {
+				b.Harness = map[string]string{}
+			}
+			b.Harness[id] = v
 		default:
 			b.Packages[k] = v
 		}

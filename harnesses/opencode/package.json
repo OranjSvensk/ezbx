@@ -1,0 +1,8 @@
+{
+  "name": "ezbx-harness-opencode",
+  "private": true,
+  "description": "OpenCode's prebuilt Linux x64 program for the EZBox box image. The baseline build runs on every x64 CPU, with or without AVX2.",
+  "dependencies": {
+    "@opencode/cli-linux-x64-baseline": "2.3.2"
+  }
+}

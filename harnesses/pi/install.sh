@@ -16,3 +16,7 @@ npm cache clean --force
 
 # Fail the build now if the command is missing, not later at run time.
 test -x node_modules/.bin/pi
+# The box image links bin/pi into the agent's PATH (a relative link, so it
+# still works after the folder moves to /opt/ezbx/harnesses/pi).
+mkdir bin
+ln -s ../node_modules/.bin/pi bin/pi

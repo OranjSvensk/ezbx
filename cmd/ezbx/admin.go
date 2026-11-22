@@ -53,7 +53,7 @@ func runAdminShell(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return report(stderr, err)
 	}
-	_, bx, err := imageSpecs(b.Tools)
+	_, bx, err := imageSpecs(b.Tools, b.Harnesses)
 	if err != nil {
 		return report(stderr, err)
 	}
@@ -609,7 +609,7 @@ func runReset(args []string, stdout, stderr io.Writer) int {
 			return report(stderr, fmt.Errorf("no backup %q with the agent's home; ezbx reset --list shows them", *restore))
 		}
 	}
-	gw, bx, err := imageSpecs(b.Tools)
+	gw, bx, err := imageSpecs(b.Tools, b.Harnesses)
 	if err != nil {
 		return report(stderr, err)
 	}

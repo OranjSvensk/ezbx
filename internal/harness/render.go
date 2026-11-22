@@ -199,18 +199,29 @@ func (r *renderer) value(v any, item map[string]any) (any, error) {
 	}
 }
 
-// each repeats its "as" block once per model.
+// each repeats its "as" block once per model. With "key", the result is an
+// object keyed by that text (filled in per model) instead of a list.
 func (r *renderer) each(t map[string]any, item map[string]any) (any, error) {
 	if item != nil {
 		return nil, fmt.Errorf("$each blocks can't be nested")
 	}
-	if len(t) != 2 || t["as"] == nil {
-		return nil, fmt.Errorf(`a $each block needs exactly "$each" and "as"`)
+	keyTmpl, keyed := t["key"]
+	want := 2
+	if keyed {
+		want = 3
+	}
+	if len(t) != want || t["as"] == nil {
+		return nil, fmt.Errorf(`a $each block needs exactly "$each" and "as", and optionally "key"`)
 	}
 	if t["$each"] != "models" {
 		return nil, fmt.Errorf(`$each can only repeat over "models", not %v`, t["$each"])
 	}
-	out := make([]any, 0, len(r.models))
+	keyText, ok := keyTmpl.(string)
+	if keyed && (!ok || keyText == "") {
+		return nil, fmt.Errorf(`the "key" of a $each block must be text, such as "${id}"`)
+	}
+	list := make([]any, 0, len(r.models))
+	obj := make(map[string]any, len(r.models))
 	for _, m := range r.models {
 		input := make([]any, len(m.Input))
 		for i, s := range m.Input {
@@ -228,9 +239,27 @@ func (r *renderer) each(t map[string]any, item map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, got)
+		if !keyed {
+			list = append(list, got)
+			continue
+		}
+		k, err := r.text(keyText, facts)
+		if err != nil {
+			return nil, err
+		}
+		ks, isText := k.(string)
+		if !isText || ks == "" {
+			return nil, fmt.Errorf(`the "key" of a $each block must give text, but %q gave %v for model %s`, keyText, k, m.ID)
+		}
+		if _, dup := obj[ks]; dup {
+			return nil, fmt.Errorf(`the "key" %q gives %q for two models`, keyText, ks)
+		}
+		obj[ks] = got
 	}
-	return out, nil
+	if keyed {
+		return obj, nil
+	}
+	return list, nil
 }
 
 // text fills placeholders in a string. A string that is exactly one

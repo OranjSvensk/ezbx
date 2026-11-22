@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "id": "opencode",
+  "name": "OpenCode",
+  "kind": "coding",
+
+  "install": {
+    "type": "npm",
+    "package": "@opencode/cli-linux-x64-baseline",
+    "version": "2.3.2",
+    "script": "install.sh",
+    "lockfile": "package-lock.json"
+  },
+
+  "binary": "opencode",
+  "runtime": "binary",
+  "tools": ["ripgrep"],
+
+  "env": {
+    "OPENCODE_DISABLE_MODELS_FETCH": "1"
+  },
+
+  "config": [
+    {
+      "path": "~/.config/opencode/opencode.json",
+      "mode": "0600",
+      "content": {
+        "model": "ezbx/${models.default.id}",
+        "update": "disable",
+        "providers": {
+          "ezbx": {
+            "name": "EZBox",
+            "package": "@opencode/ai/providers/openai-compatible",
+            "settings": {
+              "baseURL": "${gateway.baseUrl}",
+              "apiKey": "${gateway.key}"
+            },
+            "models": {
+              "$each": "models",
+              "key": "${id}",
+              "as": {
+                "name": "${name}",
+                "capabilities": {
+                  "tools": true,
+                  "input": "${input}",
+                  "output": ["text"]
+                },
+                "limit": {
+                  "context": "${contextWindow}",
+                  "output": "${maxTokens}"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+
+  "launch": {
+    "command": ["opencode"],
+    "cwd": "/workspace"
+  },
+
+  "autonomy": {
+    "flag": null,
+    "note": "OpenCode 2's default permissions allow every tool and ask only before reading .env files. It has no approval-skipping flag; the defaults are kept, because the box is the boundary."
+  },
+
+  "network": {
+    "domains": [],
+    "optional": {}
+  },
+
+  "secrets": [],
+
+  "verified": {
+    "version": "2.3.2",
+    "status": "verified",
+    "observedOn": "2026-11-22",
+    "reverify": false,
+    "notes": "The npm package @opencode/cli is a launcher whose command only works after its postinstall script, so the lockfile pins the platform package @opencode/cli-linux-x64-baseline (one prebuilt program) instead, installed with scripts off. Built into an EZBox box image beside Pi; opencode --version gives 'opencode v2.3.2'. On the isolated network with the network off, opencode run answered through the gateway with a fake engine. At every run it fetched its model catalogue from models.opencode.ai (refused by the gateway); OPENCODE_DISABLE_MODELS_FETCH=1 stops that, and with it no request left the box except to the gateway. Its talk with its own background service stays on the box's loopback (NO_PROXY). Not yet checked: its file tools with a real model, and its full-screen interface through ezbx shell."
+  }
+}

@@ -82,7 +82,11 @@ var (
 	// An exact version: 1.2.3, optionally with a pre-release such as 1.2.3-beta.1.
 	exactVersion = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`)
 	envName      = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
-	secretWords  = regexp.MustCompile(`(?i)(key|token|secret|password|passwd|credential)`)
+	// The box's own settings: a harness that changed the proxy variables
+	// could send its traffic past the gateway's network switch.
+	reservedEnv = map[string]bool{"HTTP_PROXY": true, "HTTPS_PROXY": true, "NO_PROXY": true, "ALL_PROXY": true, "HOME": true, "PATH": true, "USER": true}
+	commandName = regexp.MustCompile(`^[a-z][a-z0-9.-]{0,31}$`)
+	secretWords = regexp.MustCompile(`(?i)(key|token|secret|password|passwd|credential)`)
 )
 
 // LoadFS reads every <folder>/manifest.json in fsys, checks each one and
@@ -139,8 +143,9 @@ func (m Manifest) validate(folder string) error {
 		return fmt.Errorf("kind must be coding or assistant, not %q", m.Kind)
 	case m.Runtime != "node" && m.Runtime != "python" && m.Runtime != "binary":
 		return fmt.Errorf("runtime must be node, python or binary, not %q", m.Runtime)
-	case m.Binary == "":
-		return fmt.Errorf("binary is required")
+	case !commandName.MatchString(m.Binary):
+		// It becomes a word in the box image's build and check scripts.
+		return fmt.Errorf("binary %q must be a plain command name (letters, digits, dots and dashes)", m.Binary)
 	case len(m.Launch.Command) == 0:
 		return fmt.Errorf("launch.command is required")
 	case m.Verified.Status != "verified" && m.Verified.Status != "observed-in-prior-setup" && m.Verified.Status != "unverified":
@@ -174,6 +179,9 @@ func (m Manifest) validate(folder string) error {
 	for k, v := range m.Env {
 		if !envName.MatchString(k) {
 			return fmt.Errorf("env name %q is not a valid variable name", k)
+		}
+		if reservedEnv[k] {
+			return fmt.Errorf("env %q is set by EZBox itself (the box's proxy and user settings); a harness can't change it", k)
 		}
 		if secretWords.MatchString(k) {
 			return fmt.Errorf("env %q looks like a secret; secrets never go in a manifest", k)

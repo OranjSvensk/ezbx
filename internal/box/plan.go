@@ -36,6 +36,10 @@ const (
 	approvedInside = "/run/ezbx/approved-hosts"
 	logDirInside   = "/var/log/ezbx"
 	gatewayAlias   = "gateway"
+	// Loopback stays out of the proxy too: a harness may talk to a helper of
+	// its own inside the box (OpenCode starts a local background service).
+	// The box's loopback is the box itself, so nothing leaves it that way.
+	noProxy        = gatewayAlias + ",localhost,127.0.0.1,::1"
 	proxyURL       = "http://gateway:3128"
 	GatewayBaseURL = "http://gateway:8000/v1"
 	// The isolated option leaves the internal network's bridge without an
@@ -77,7 +81,8 @@ type Plan struct {
 	PIDs   int
 
 	Harnesses []string
-	HomeFiles []harness.File // rendered harness configs, relative to the agent's home
+	HomeFiles []harness.File    // rendered harness configs, relative to the agent's home
+	Env       map[string]string // the harnesses' environment, from their manifests
 
 	// The images, named after a hash of their inputs (see internal/images).
 	// Inputs is that full hash, which the image must carry as a label.
@@ -175,7 +180,17 @@ func (p Plan) BoxArgs() []string {
 	for _, k := range []string{"HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"} {
 		a = append(a, "-e", k+"="+proxyURL)
 	}
-	a = append(a, "-e", "NO_PROXY="+gatewayAlias, "-e", "no_proxy="+gatewayAlias,
+	a = append(a, "-e", "NO_PROXY="+noProxy, "-e", "no_proxy="+noProxy)
+	// The harnesses' own settings, from their manifests (never secrets).
+	keys := make([]string, 0, len(p.Env))
+	for k := range p.Env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		a = append(a, "-e", k+"="+p.Env[k])
+	}
+	a = append(a,
 		"-v", p.Workspace+":/workspace",
 		"-v", p.Names.Home+":"+agentHome,
 		p.BoxImage.Tag, "sleep", "infinity")

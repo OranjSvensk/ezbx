@@ -38,7 +38,7 @@ func boxFS() fstest.MapFS {
 }
 
 func pi() harness.Manifest {
-	return harness.Manifest{ID: "pi", Name: "Pi", Tools: []string{"fd"},
+	return harness.Manifest{ID: "pi", Name: "Pi", Binary: "pi", Tools: []string{"fd"},
 		Install:  harness.Install{Type: "npm", Package: "p", Version: "1.0.0", Script: "install.sh", Lockfile: "package-lock.json"},
 		Verified: harness.Verified{Status: "verified"}}
 }
@@ -74,13 +74,13 @@ func TestBoxSpec(t *testing.T) {
 	if got := strings.Join(s.Files(), " "); got != "docker/box.Dockerfile harnesses/pi/install.sh harnesses/pi/package-lock.json harnesses/pi/package.json" {
 		t.Errorf("files: %s", got)
 	}
-	want := [][2]string{{"DEBIAN_PACKAGES", "fd-find jq"}, {"TOOL_COMMANDS", "fd fdfind jq"}, {"TOOL_LINKS", "fd=fdfind"}}
+	want := [][2]string{{"DEBIAN_PACKAGES", "fd-find jq"}, {"HARNESS_COMMANDS", "pi=pi"}, {"TOOL_COMMANDS", "fd fdfind jq"}, {"TOOL_LINKS", "fd=fdfind"}}
 	for i, a := range want {
 		if s.Args[i] != a {
 			t.Errorf("arg %d: %v, want %v", i, s.Args[i], a)
 		}
 	}
-	if s.Labels[0] != [2]string{ToolsLabel, "fd,jq"} {
+	if len(s.Labels) != 2 || s.Labels[0] != [2]string{HarnessesLabel, "pi"} || s.Labels[1] != [2]string{ToolsLabel, "fd,jq"} {
 		t.Errorf("labels %v", s.Labels)
 	}
 
@@ -104,17 +104,45 @@ func TestBoxSpec(t *testing.T) {
 		t.Error("the manifest isn't built in, so changing its notes must not rebuild the box")
 	}
 
-	// Unverified harnesses aren't built in; a verified one without an
-	// install step in the Dockerfile is refused; unknown tools are refused.
-	wip := pi()
-	wip.ID, wip.Verified.Status = "wip", "unverified"
-	if s2, err := Box(boxFS(), []harness.Manifest{pi(), wip}, cat, []string{"jq"}); err != nil || s2.Inputs != s.Inputs {
-		t.Errorf("unverified harness: %v", err)
+	// Only the harnesses given are built in: another harness brings its own
+	// files, command and tools, in id order whatever order it was given in.
+	fsys := boxFS()
+	fsys["harnesses/oc/install.sh"] = &fstest.MapFile{Data: []byte("npm ci\n")}
+	fsys["harnesses/oc/package.json"] = &fstest.MapFile{Data: []byte("{}\n")}
+	fsys["harnesses/oc/package-lock.json"] = &fstest.MapFile{Data: []byte("{\"lock\":3}\n")}
+	oc := pi()
+	oc.ID, oc.Name, oc.Binary, oc.Tools = "oc", "OC", "opencode", []string{"jq"}
+	both, err := Box(fsys, []harness.Manifest{pi(), oc}, cat, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	other2 := pi()
-	other2.ID, other2.Name = "other", "Other"
-	if _, err := Box(boxFS(), []harness.Manifest{other2}, cat, nil); err == nil || !strings.Contains(err.Error(), "install step for Pi only") {
-		t.Error(err)
+	if got := strings.Join(both.Files(), " "); got != "docker/box.Dockerfile harnesses/oc/install.sh harnesses/oc/package-lock.json harnesses/oc/package.json harnesses/pi/install.sh harnesses/pi/package-lock.json harnesses/pi/package.json" {
+		t.Errorf("files with two harnesses: %s", got)
+	}
+	if both.Args[1] != [2]string{"HARNESS_COMMANDS", "oc=opencode pi=pi"} || strings.Join(both.Tools.IDs(), ",") != "fd,jq" || both.Labels[0] != [2]string{HarnessesLabel, "oc,pi"} {
+		t.Errorf("two harnesses: %v %v %v", both.Args, both.Tools.IDs(), both.Labels)
+	}
+	if again, _ := Box(fsys, []harness.Manifest{oc, pi()}, cat, nil); again.Inputs != both.Inputs {
+		t.Error("the order harnesses are listed in must not change the image")
+	}
+	if alone, _ := Box(fsys, []harness.Manifest{pi()}, cat, nil); alone.Inputs == both.Inputs || strings.Contains(strings.Join(alone.Files(), " "), "harnesses/oc/") {
+		t.Error("a box without a harness must not carry its files or share its image")
+	}
+
+	// Unverified, repeated or no harnesses, and unknown tools, are refused.
+	wip := pi()
+	wip.ID, wip.Name, wip.Verified.Status = "wip", "Wip", "unverified"
+	for name, c := range map[string]struct {
+		hs   []harness.Manifest
+		want string
+	}{
+		"unverified": {[]harness.Manifest{pi(), wip}, "Wip is not verified"},
+		"twice":      {[]harness.Manifest{pi(), pi()}, "listed twice"},
+		"none":       {nil, "at least one harness"},
+	} {
+		if _, err := Box(boxFS(), c.hs, cat, nil); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 	if _, err := Box(boxFS(), []harness.Manifest{pi()}, cat, []string{"zzz"}); err == nil || !strings.Contains(err.Error(), `unknown tool "zzz"`) {
 		t.Error(err)
@@ -385,7 +413,7 @@ func TestCheck(t *testing.T) {
 func TestBuildAndObserve(t *testing.T) {
 	s, _ := Box(boxFS(), []harness.Manifest{pi()}, testCatalog(t), []string{"jq"})
 	f := &fakeDocker{images: map[string]string{},
-		run: "20261104T212339Z\nca-certificates=20230311\ngit=1:2.39.5-0+deb12u2\nfd-find=8.6.0-3\njq=1.6-2.1+deb12u3\npi=1.5.0\n"}
+		run: "20261104T212339Z\nca-certificates=20230311\ngit=1:2.39.5-0+deb12u2\nfd-find=8.6.0-3\njq=1.6-2.1+deb12u3\nharness:pi=1.5.0\n"}
 	b, err := f.runner().Build(context.Background(), s)
 	if err != nil {
 		t.Fatal(err)
@@ -408,7 +436,7 @@ func TestBuildAndObserve(t *testing.T) {
 			run = c
 		}
 	}
-	for _, w := range []string{"--rm", "--network none", "--cap-drop ALL", "--security-opt no-new-privileges", "--label ezbx.managed=true", " ca-certificates git fd-find jq"} {
+	for _, w := range []string{"--rm", "--network none", "--cap-drop ALL", "--security-opt no-new-privileges", "--label ezbx.managed=true", " ca-certificates git fd-find jq", "for h in pi=pi; do"} {
 		if !strings.Contains(run, w) {
 			t.Errorf("missing %q in %s", w, run)
 		}

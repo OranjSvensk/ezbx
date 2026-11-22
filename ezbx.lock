@@ -18,6 +18,15 @@ GO_IMAGE = "golang:1.27.4@sha256:205c7636d74e0ffbe3d007162df7d74f859f5a8c8322dfb
 dockerfile = "docker/box.Dockerfile"
 NODE_IMAGE = "node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54"
 
+[harnesses.opencode]
+type = "npm"
+package = "@opencode/cli-linux-x64-baseline"
+version = "2.3.2"
+verified = "verified"
+lockfile = "harnesses/opencode/package-lock.json"
+lockfile_sha256 = "578811922d1e91a5cd65eca295cf4fce4bab48782d2718a9d52909d5e90a8649"
+tools = ["ripgrep"]
+
 [harnesses.pi]
 type = "npm"
 package = "@earendil-works/pi-coding-agent"
