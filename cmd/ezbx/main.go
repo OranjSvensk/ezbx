@@ -241,6 +241,13 @@ func printTable(w io.Writer, res detect.Result) {
 			}
 		}
 	}
+	for _, r := range res.Refused {
+		if r.KeySent {
+			fmt.Fprintf(w, "note: %s refused the key it was sent\n", r.URL)
+		} else {
+			fmt.Fprintf(w, "note: %s asks for a key, so it wasn't checked. Set url and key_env under [engine.ID] in ezbx.toml\n", r.URL)
+		}
+	}
 	for _, n := range res.Notes {
 		fmt.Fprintln(w, "note:", n)
 	}

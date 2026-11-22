@@ -44,6 +44,7 @@ use = "auto"                      # auto | strata | lmstudio | ollama | llamacpp
 # url     = "http://127.0.0.1:PORT"
 # key_env = "STRATA_API_KEY"      # NAME of an environment variable holding the key,
 #                                 # never the key itself
+#                                 # (needs url: the key is only sent there)
 # host    = "localhost:PORT"      # Host header to send, for engines that check it
 
 # Facts about a model that engines don't report. Use the id from

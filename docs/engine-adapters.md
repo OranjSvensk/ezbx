@@ -21,10 +21,10 @@ All engines are expected to offer an OpenAI-style HTTP API. That is what lets th
 Ports are hints, never proof. Different versions and user setups use different ports, and one source says llama.cpp's default has changed. Detection therefore works like this:
 
 1. If an adapter has a `cli` status command and that program is installed, ask it for running servers. This finds engines on custom ports.
-2. Probe each adapter's hint ports on the loopback address only, with a very short timeout. Probes are plain GET requests with no key and no data about you.
+2. Probe each adapter's hint ports on the loopback address only, with a very short timeout. Probes are plain GET requests with no data about you, and no key (see Keys below for the one exception).
 3. Fingerprint each answer using the adapter's `probes`. An engine counts as detected only if every required probe answers with what it expects (see below).
 4. When more than one adapter matches the same server (some engines share routes), the more specific one wins: the one whose probes checked the most fields. Strata and llama.cpp both expose a health route, for example, and Strata's includes extra fields.
-5. Report what was found. If several engines are running, `ezbx init` asks which to use.
+5. Report what was found. If several engines are running, `ezbx init` asks which to use. An address that answered 401 or 403 and matched no adapter is reported as an engine that asks for a key, not as nothing found.
 
 A server that offers an OpenAI-style model list but matches no specific adapter is reported as an **OpenAI-compatible server** (the `openai` adapter). It works with the gateway, but EZBox doesn't claim to know which engine it is. That adapter adds no ports of its own, and any specific adapter that matches wins over it.
 
@@ -62,7 +62,7 @@ These facts feed the harness config generator (see `harness-manifest.md`).
 
 ## Keys
 
-If an engine requires a key, you name an environment variable in your local config (`key_env`). `ezbx up` copies the key into a file that only the gateway mounts, read-only, and the gateway adds it to requests. The key never appears in a repo file, an image, a log or `docker inspect` (see [gateway.md](gateway.md), section 3). Detection doesn't send it yet, so an engine that needs the key for its model list isn't found.
+If an engine requires a key, you name an environment variable in your local config (`key_env`). `ezbx up` copies the key into a file that only the gateway mounts, read-only, and the gateway adds it to requests. The key never appears in a repo file, an image, a log or `docker inspect` (see [gateway.md](gateway.md), section 3). Because some engines also want the key for their model list, detection sends it, but only to the exact `url` set for that engine under `[engine.<id>]` (scheme, host, port and path; a trailing slash doesn't matter). It never goes to the hint ports, to addresses an engine's status command lists, or to another engine's `url`, and redirects are never followed. That is why `key_env` needs `url`: a config with `key_env` and no `url` is refused, and `ezbx init` writes the address where it found the engine. `ezbx up` checks that the variable has a value before it contacts anything. If the engine answers 401 or 403, `up` says the engine refused the key (naming the variable, never the key), or, when no key was set, that it asks for one and how to give it. `ezbx doctor` sends no key; it shows such an engine as running and leaves the real check to the gateway's `engine ready`, which uses the key (design decision 19).
 
 ## Reaching the engine
 

@@ -38,6 +38,12 @@ type Detector struct {
 	Timeout       time.Duration // per request; 0 means 500ms
 	Hosts         []string      // hosts to probe for hint ports; nil means 127.0.0.1
 	SkipHintPorts bool          // tests use this to probe only given addresses
+
+	// Keys maps an address to the key of the engine configured there. A key
+	// is sent only to that exact address (scheme, host, port and path, after
+	// trailing slashes are dropped), never to another candidate, so the port
+	// scan and the status commands never see it. Redirects are never followed.
+	Keys map[string]string
 }
 
 // Model is one model an engine reports.
@@ -59,10 +65,18 @@ type Engine struct {
 	Verified    string   `json:"verified"`
 }
 
+// Refusal is an address that answered 401 or 403 and matched no engine:
+// most likely an engine that wants a key.
+type Refusal struct {
+	URL     string `json:"url"`
+	KeySent bool   `json:"keySent"` // true: it refused the key it was given
+}
+
 // Result is what Detect returns.
 type Result struct {
-	Engines []Engine `json:"engines"`
-	Notes   []string `json:"notes,omitempty"`
+	Engines []Engine  `json:"engines"`
+	Refused []Refusal `json:"refused,omitempty"`
+	Notes   []string  `json:"notes,omitempty"`
 }
 
 // scan holds what one Detect call needs, so the Detector itself never changes.
@@ -70,11 +84,23 @@ type scan struct {
 	d       *Detector
 	client  *http.Client
 	timeout time.Duration
+	keys    map[string]string // trimmed address -> key
+
+	mu      sync.Mutex
+	refused map[string]bool // addresses that answered 401 or 403
 }
+
+// trim is how addresses are compared: without trailing slashes.
+func trim(raw string) string { return strings.TrimRight(raw, "/") }
 
 // Detect looks for engines. extra holds addresses the user gave explicitly.
 func (d *Detector) Detect(ctx context.Context, extra []string) Result {
-	s := &scan{d: d, timeout: d.Timeout}
+	s := &scan{d: d, timeout: d.Timeout, keys: map[string]string{}, refused: map[string]bool{}}
+	for u, k := range d.Keys {
+		if k != "" {
+			s.keys[trim(u)] = k
+		}
+	}
 	if s.timeout <= 0 {
 		s.timeout = 500 * time.Millisecond
 	}
@@ -88,7 +114,7 @@ func (d *Detector) Detect(ctx context.Context, extra []string) Result {
 	var res Result
 	candidates := map[string]bool{}
 	add := func(raw string) {
-		candidates[strings.TrimRight(raw, "/")] = true
+		candidates[trim(raw)] = true
 	}
 
 	// 1. Ask engine programs which servers are running (finds custom ports).
@@ -142,6 +168,18 @@ func (d *Detector) Detect(ctx context.Context, extra []string) Result {
 		}(base)
 	}
 	wg.Wait()
+
+	// 5. Addresses that refused us and matched nothing: say why.
+	found := map[string]bool{}
+	for _, e := range res.Engines {
+		found[e.URL] = true
+	}
+	for base := range s.refused {
+		if !found[base] {
+			res.Refused = append(res.Refused, Refusal{URL: base, KeySent: s.keys[base] != ""})
+		}
+	}
+	sort.Slice(res.Refused, func(i, j int) bool { return res.Refused[i].URL < res.Refused[j].URL })
 
 	sort.Slice(res.Engines, func(i, j int) bool {
 		if res.Engines[i].ID != res.Engines[j].ID {
@@ -279,8 +317,8 @@ func (s *scan) matches(ctx context.Context, base string, a adapter.Adapter, cach
 	return score, true
 }
 
-// fetch does a plain GET and decodes the JSON answer. It sends no key and no
-// information about the user.
+// fetch does a plain GET and decodes the JSON answer. It sends no
+// information about the user, and a key only to the address it belongs to.
 func (s *scan) fetch(ctx context.Context, base, path string, cache map[string]any) (any, bool) {
 	if doc, seen := cache[path]; seen {
 		return doc, doc != nil
@@ -295,12 +333,20 @@ func (s *scan) fetch(ctx context.Context, base, path string, cache map[string]an
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "ezbx-detect")
+	if k := s.keys[base]; k != "" {
+		req.Header.Set("Authorization", "Bearer "+k)
+	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, false
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		s.mu.Lock()
+		s.refused[base] = true
+		s.mu.Unlock()
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, false
 	}

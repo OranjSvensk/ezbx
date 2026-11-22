@@ -230,7 +230,7 @@ Each proxy protection was mutation-checked: turning it off makes a test fail.
 
 Checked against a real engine (Strata), with the hardened gateway in its container: readiness, the model list, a chat reply, a streamed reply that arrived chunk by chunk, a stream cancelled by the box, the path checks, and Pi using tools through it (see [isolation-test.md](isolation-test.md)).
 
-Not built yet: the engine unload call, a setting to allow a chosen local address, the cloud provider routes (design decision 8), and token usage in the log. Engine detection sends no key, so an engine that also needs its key for the model list is reported as not found by `ezbx up`; only engines that leave the model list open work with a key today.
+Not built yet: the engine unload call, a setting to allow a chosen local address, the cloud provider routes (design decision 8), and token usage in the log. Engine detection sends the key only to the engine's configured `url` (design decision 19), so an engine that also wants its key for the model list works too.
 
 Docker: the gateway image ([docker/gateway.Dockerfile](../docker/gateway.Dockerfile)) was run locked down with the proxy and admin API in the isolation test ([isolation-test.md](isolation-test.md)). `ezbx` doesn't create or start containers yet; that was done by hand.
 

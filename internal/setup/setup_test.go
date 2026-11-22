@@ -440,3 +440,34 @@ func TestGatherAllowHostsAreChecked(t *testing.T) {
 		t.Errorf("%v\n%s", res.Answers.Allow, out)
 	}
 }
+
+// A key is only sent to its engine's url, so choosing an engine with a key
+// pins the address where it was found.
+func TestGatherPinsTheURLOfAKey(t *testing.T) {
+	f := facts(t)
+	p, _ := prompter("")
+	p.Auto = true
+	o := Options{Engine: "openai", KeyEnv: "K", Harnesses: []string{"pi"}, Workspace: filepath.Join(t.TempDir(), "ws")}
+	res, err := Gather(f, o, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ov := res.Answers.Overrides["openai"]; ov.URL != "http://127.0.0.1:18080" || ov.KeyEnv != "K" {
+		t.Errorf("%+v", ov)
+	}
+}
+
+func TestGatherExplainsRefusals(t *testing.T) {
+	f := facts(t)
+	f.Refused = []detect.Refusal{{URL: "http://127.0.0.1:18081"}, {URL: "http://127.0.0.1:18082", KeySent: true}}
+	p, out := prompter("")
+	p.Auto = true
+	if _, err := Gather(f, Options{Engine: "later", Harnesses: []string{"pi"}, Workspace: filepath.Join(t.TempDir(), "ws")}, p); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"18081 asks for a key", "--url http://127.0.0.1:18081 --key-env NAME", "18082 refused the key"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("missing %q in:\n%s", want, out.String())
+		}
+	}
+}

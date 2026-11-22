@@ -21,6 +21,7 @@ import (
 // Facts are what the command found before asking anything.
 type Facts struct {
 	Engines      []detect.Engine    // running now
+	Refused      []detect.Refusal   // addresses that answered 401 or 403
 	Harnesses    []harness.Manifest // verified ones, offered
 	Catalog      *tools.Catalog     // the tool catalogue
 	DockerMemory int64              // bytes; 0 if unknown
@@ -156,6 +157,13 @@ func chooseEngine(f Facts, o Options, a *Answers, p *Prompter) (*detect.Engine, 
 		fmt.Fprintln(p.Out, "  none. Start your engine and load a model, then run ezbx init again,")
 		fmt.Fprintln(p.Out, "  or carry on: the config is written, and ezbx up works once the engine runs.")
 	}
+	for _, r := range f.Refused {
+		if r.KeySent {
+			fmt.Fprintf(p.Out, "  (The engine at %s refused the key it was sent. Check the key.)\n", r.URL)
+		} else {
+			fmt.Fprintf(p.Out, "  (An engine at %s asks for a key. To use it: ezbx init --engine ID --url %s --key-env NAME)\n", r.URL, r.URL)
+		}
+	}
 	for i, e := range f.Engines {
 		fmt.Fprintf(p.Out, "  %d. %-26s %s, %d model(s)\n", i+1, e.Name, e.URL, len(e.Models))
 	}
@@ -232,6 +240,11 @@ func chooseEngine(f Facts, o Options, a *Answers, p *Prompter) (*detect.Engine, 
 	}
 	if o.KeyEnv != "" {
 		ov.KeyEnv = o.KeyEnv
+	}
+	if ov.KeyEnv != "" && ov.URL == "" {
+		// A key is only ever sent to its engine's url, so pin where the
+		// engine was found.
+		ov.URL = e.URL
 	}
 	if ov != (config.EngineURL{}) {
 		a.Overrides[e.ID] = ov

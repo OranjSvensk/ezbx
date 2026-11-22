@@ -164,7 +164,17 @@ From a scratch `EZBX_HOME`, with a box named `vt` and the fake engine started wi
 - The key was found 0 times in `docker inspect` of the gateway and the box, and 0 times in the gateway log. The box had no `/run/ezbx` and no key in its environment.
 - A chat request from the box through the gateway got 200 from the engine: the gateway added the key. After `docker restart` of the gateway (as after a Docker Desktop restart), it was healthy and the request again got 200.
 - `ezbx down` removed the key file with the containers and kept the token, log and approved hosts.
-- **Found, not fixed yet:** with the model list behind the key too (`--key-on-models`), `ezbx up` said the engine was not found and changed nothing, because detection sends no key. Every protection was mutation-checked (20 of 20 caught).
+- **Found, then fixed (design decision 19):** with the model list behind the key too (`--key-on-models`), `ezbx up` said the engine was not found and changed nothing, because detection sent no key. Every protection was mutation-checked (20 of 20 caught).
+
+### Detection with the engine's key (same day)
+
+The fake engine ran with `--key-env --key-on-models`, so its model list answered 401 without the key, and a real Strata (no key) ran on its usual port.
+
+- `ezbx engine detect` found Strata as before. With `--url` pointing at the fake engine, it also printed that the address asks for a key, instead of leaving it out silently.
+- `ezbx up` stopped before contacting anything or creating anything when `key_env` had no `url` (refused by the config) and when the variable was empty. With a wrong key it said the engine refused the key in the named variable, and the wrong key wasn't in the output. With no `key_env` it said the engine asks for a key and how to give it.
+- With the right key, `up` found the engine and started the box. A chat request from the box got 200. The key was found 0 times in `docker inspect` and in the state folder apart from the key file, which `down` removed.
+- `ezbx doctor` passed all 22 checks. It showed Strata as the running engine and the gateway as forwarding to "an engine that asks for a key"; before a fix found here, that row would have warned that no engine was there.
+- Every new protection was mutation-checked (18 of 18 caught), including one that sends every key to every address.
 
 Not covered: a real engine started with a key, and Linux, where the gateway's user may not be able to read a key file only you can read (the admin token has the same open question).
 

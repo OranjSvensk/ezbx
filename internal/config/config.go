@@ -217,6 +217,9 @@ func (c *Config) check() error {
 		if o.KeyEnv != "" && !envNameRE.MatchString(o.KeyEnv) {
 			return fmt.Errorf("engine.%s.key_env is the NAME of an environment variable, such as STRATA_API_KEY, never the key itself", id)
 		}
+		if o.KeyEnv != "" && o.URL == "" {
+			return fmt.Errorf("engine.%s.key_env needs url too, such as url = 'http://127.0.0.1:PORT', so the key is only ever sent to that address", id)
+		}
 	}
 	for id, m := range c.Models {
 		if m.ContextWindow < 0 || m.MaxTokens < 0 {

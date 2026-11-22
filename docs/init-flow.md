@@ -62,7 +62,7 @@ If the Docker engine isn't running, `init` says so and offers to wait while you 
 
 2. If one is found, it's the default answer. If several, you choose. If none, you may pick "I'll start one later" and `init` finishes with a note, because the box works without a running model and the gateway just reports "engine not reachable".
 3. If an engine can be started by its adapter (`control.start`), offer to do so. It always asks first.
-4. If the engine requires a key, ask for the **name of an environment variable** that holds it. The key is never typed into a file. (The operating system's credential store comes after 0.1; decided below.)
+4. If the engine requires a key, ask for the **name of an environment variable** that holds it. The key is never typed into a file. (The operating system's credential store comes after 0.1; decided below.) **Built:** `--key-env NAME` is the flag. The engine's address is written as `url` with it, because the key is only ever sent there. An engine that wants the key for its model list answers detection with 401; `init` says so and shows the command to use it: `ezbx init --engine ID --url ADDRESS --key-env NAME`, which sends the key to that address only.
 
 ### 2. Harnesses
 

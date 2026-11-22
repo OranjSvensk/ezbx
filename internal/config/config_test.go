@@ -113,6 +113,7 @@ func TestRefused(t *testing.T) {
 		"no harness":       {strings.Replace(base, `harnesses = ["pi"]`, "harnesses = []", 1), "harnesses is empty"},
 		"readonly":         {base + "[[box.main.readonly]]\npath = '/p'\n", "readonly folders are not supported yet"},
 		"key not env name": {base + "[engine.strata]\nkey_env = 'sk-abc def'\n", "NAME of an environment variable"},
+		"key without url":  {base + "[engine.strata]\nkey_env = 'K'\n", "key_env needs url too"},
 		"url without http": {base + "[engine.strata]\nurl = '127.0.0.1:18080'\n", "must start with http"},
 		"engine not table": {base + "[engine]\nstrata = 'http://x'\n", "must be a table"},
 		"few pids":         {strings.Replace(base, "workspace", "pids = 10\nworkspace", 1), "pids"},

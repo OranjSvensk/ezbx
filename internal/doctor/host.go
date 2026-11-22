@@ -124,6 +124,7 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 	// The engine on this computer.
 	const ge = "Engine"
 	var engines []detect.Engine
+	var refused []detect.Refusal // addresses that asked for a key
 	if cfg.Detect != nil {
 		// Also look where the gateway was started to forward, so an engine on
 		// an unusual port is found too.
@@ -135,8 +136,17 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 			}
 		}
 		res := cfg.Detect(ctx, extra)
-		engines = res.Engines
-		if len(engines) == 0 {
+		engines, refused = res.Engines, res.Refused
+		if len(engines) == 0 && len(refused) > 0 {
+			// The doctor sends no key, so it can't list this engine's
+			// models. The gateway has the key: its "engine ready" check
+			// below asks the engine through it.
+			var asks []string
+			for _, f := range refused {
+				asks = append(asks, f.URL)
+			}
+			r.add(ge, "an engine is running", Pass, "an engine at "+strings.Join(asks, ", ")+" asks for a key (the gateway's engine ready check uses it)", "")
+		} else if len(engines) == 0 {
 			r.add(ge, "an engine is running", Warn, "none found", "Start your inference engine. The box works without one, but has no model.")
 		} else {
 			var found []string
@@ -267,7 +277,7 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 		} else {
 			r.add(gg, "engine ready", Fail, joinOr([]string{ready.Reason}, "no answer"), "Check that the engine is running and that the gateway's --upstream points at it.")
 		}
-		s, detail, fix := upstreamMatches(status.Upstream, engines)
+		s, detail, fix := upstreamMatches(status.Upstream, engines, refused)
 		r.add(gg, "forwards to the running engine", s, detail, fix)
 	}
 
@@ -432,10 +442,15 @@ func lockProblems(c containerInfo, readOnly bool) []string {
 
 // upstreamMatches checks that the gateway forwards to an engine that is
 // running, by port, since the gateway reaches it through the host alias.
-func upstreamMatches(upstream string, engines []detect.Engine) (Status, string, string) {
+func upstreamMatches(upstream string, engines []detect.Engine, refused []detect.Refusal) (Status, string, string) {
 	u, err := url.Parse(upstream)
 	if err != nil || u.Port() == "" {
 		return Warn, "can't tell from " + upstream, ""
+	}
+	// An address that asked for a key is an engine the doctor can't list,
+	// not a missing one.
+	for _, f := range refused {
+		engines = append(engines, detect.Engine{Name: "an engine that asks for a key", URL: f.URL})
 	}
 	for _, e := range engines {
 		if eu, err := url.Parse(e.URL); err == nil && eu.Port() == u.Port() {

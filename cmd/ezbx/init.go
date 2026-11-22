@@ -263,19 +263,27 @@ func gatherFacts(ctx context.Context, existing *config.Config, o setup.Options, 
 		return f, usageError(fmt.Sprintf("--engine %q: use one of %s", o.Engine, strings.Join(ids, ", ")))
 	}
 	var urls []string
+	keys := map[string]string{} // each key goes only to its engine's url
 	if o.URL != "" {
 		urls = append(urls, o.URL)
+		if o.KeyEnv != "" {
+			keys[o.URL] = os.Getenv(o.KeyEnv)
+		}
 	}
 	if existing != nil {
 		for _, ov := range existing.Engine.Overrides {
 			if ov.URL != "" {
 				urls = append(urls, ov.URL)
+				if _, given := keys[ov.URL]; !given && ov.KeyEnv != "" {
+					keys[ov.URL] = os.Getenv(ov.KeyEnv)
+				}
 			}
 		}
 	}
 	sort.Strings(urls)
-	res := (&detect.Detector{Adapters: adapters, Run: runCommand}).Detect(ctx, urls)
+	res := (&detect.Detector{Adapters: adapters, Run: runCommand, Keys: keys}).Detect(ctx, urls)
 	f.Engines = res.Engines
+	f.Refused = res.Refused
 	return f, nil
 }
 

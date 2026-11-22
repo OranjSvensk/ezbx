@@ -67,7 +67,7 @@ func TestShellArgs(t *testing.T) {
 }
 
 func TestEngineChoice(t *testing.T) {
-	c, err := config.Parse("version = 1\n[box.t]\nworkspace = '/w'\nharnesses = ['pi']\n[engine.strata]\nkey_env = 'K'\n")
+	c, err := config.Parse("version = 1\n[box.t]\nworkspace = '/w'\nharnesses = ['pi']\n[engine.strata]\nurl = 'http://127.0.0.1:53000'\nkey_env = 'K'\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestEngineChoice(t *testing.T) {
 	if got.Engine.Use != "strata" || got.Engine.Overrides["strata"].URL != "http://127.0.0.1:18080" || got.Engine.Overrides["strata"].KeyEnv != "K" {
 		t.Errorf("%+v", got.Engine)
 	}
-	if c.Engine.Use != "auto" || c.Engine.Overrides["strata"].URL != "" {
+	if c.Engine.Use != "auto" || c.Engine.Overrides["strata"].URL != "http://127.0.0.1:53000" {
 		t.Error("the loaded config must not change")
 	}
 	if _, err := engineChoice(c, nil, "http://127.0.0.1:18080"); err == nil {

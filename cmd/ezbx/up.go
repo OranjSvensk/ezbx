@@ -137,9 +137,6 @@ func makePlan(ctx context.Context, cfg *config.Config, dirs paths.Dirs, stdout i
 	if err != nil {
 		return box.Plan{}, err
 	}
-	if override.KeyEnv != "" && os.Getenv(override.KeyEnv) == "" {
-		return box.Plan{}, fmt.Errorf("engine.%s.key_env names %s, but that environment variable is empty or not set", eng.ID, override.KeyEnv)
-	}
 	fmt.Fprintf(stdout, "engine: %s at %s, %d model(s)\n", eng.Name, eng.URL, len(eng.Models))
 	files, err := renderHome(cfg, chosen, eng)
 	if err != nil {
@@ -244,16 +241,30 @@ func chooseEngine(ctx context.Context, cfg *config.Config) (detect.Engine, confi
 		return detect.Engine{}, config.EngineURL{}, fmt.Errorf("engine.use %q: use auto or one of %s", use, strings.Join(idList, ", "))
 	}
 	var urls []string
+	keys := map[string]string{}
+	keyVar := map[string]string{} // trimmed url -> the variable its key came from
 	for id, o := range cfg.Engine.Overrides {
 		if !ids[id] {
 			return detect.Engine{}, config.EngineURL{}, fmt.Errorf("[engine.%s]: no such engine; use one of %s", id, strings.Join(idList, ", "))
 		}
-		if o.URL != "" && (use == "auto" || use == id) {
-			urls = append(urls, o.URL)
+		if o.URL == "" || (use != "auto" && use != id) {
+			continue
+		}
+		urls = append(urls, o.URL)
+		if o.KeyEnv != "" {
+			// Checked before anything is contacted, so a missing key is
+			// never a confusing "not found".
+			k := os.Getenv(o.KeyEnv)
+			if k == "" {
+				return detect.Engine{}, config.EngineURL{}, fmt.Errorf("engine.%s.key_env names %s, but that environment variable is empty or not set", id, o.KeyEnv)
+			}
+			keys[o.URL] = k
+			keyVar[strings.TrimRight(o.URL, "/")] = o.KeyEnv
 		}
 	}
 	sort.Strings(urls)
-	d := &detect.Detector{Adapters: adapters, Run: runCommand}
+	// Each key goes only to its engine's configured url (see detect.Keys).
+	d := &detect.Detector{Adapters: adapters, Run: runCommand, Keys: keys}
 	if use != "auto" && cfg.Engine.Overrides[use].URL != "" {
 		// The config says exactly where the engine is: check only there, and
 		// leave other engines on this computer alone.
@@ -274,6 +285,9 @@ func chooseEngine(ctx context.Context, cfg *config.Config) (detect.Engine, confi
 		if use != "auto" {
 			what = "Engine " + use + " not found"
 		}
+		if why := refusedHint(res.Refused, keyVar, use); why != "" {
+			return detect.Engine{}, config.EngineURL{}, errors.New(what + ". " + why)
+		}
 		return detect.Engine{}, config.EngineURL{}, errors.New(what + ". Start it (and load a model), then try again. If it runs on an unusual address, set url under [engine.ID] in ezbx.toml, or use ezbx engine use ID --url ADDRESS on a running box")
 	default:
 		var found []string
@@ -282,6 +296,25 @@ func chooseEngine(ctx context.Context, cfg *config.Config) (detect.Engine, confi
 		}
 		return detect.Engine{}, config.EngineURL{}, fmt.Errorf("more than one engine found (%s). Choose one with engine.use in the config", strings.Join(found, "; "))
 	}
+}
+
+// refusedHint explains addresses that answered 401 or 403. keyVar names the
+// variable whose key was sent to an address, and use is engine.use. It is ""
+// when nothing refused.
+func refusedHint(refused []detect.Refusal, keyVar map[string]string, use string) string {
+	id := use
+	if id == "auto" {
+		id = "ID"
+	}
+	var parts []string
+	for _, r := range refused {
+		if r.KeySent {
+			parts = append(parts, fmt.Sprintf("The engine at %s refused the key in %s: check that it is the right key", r.URL, keyVar[r.URL]))
+		} else {
+			parts = append(parts, fmt.Sprintf("An engine at %s asks for a key: put url = '%s' and key_env = 'NAME' under [engine.%s] in ezbx.toml, with the key in that environment variable", r.URL, r.URL, id))
+		}
+	}
+	return strings.Join(parts, ". ")
 }
 
 // systemDirs are folders that must never be a workspace.

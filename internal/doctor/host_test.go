@@ -394,3 +394,41 @@ func TestEngineKeyCheck(t *testing.T) {
 		}
 	}
 }
+
+// An engine that asks for a key can't be listed by the doctor, which sends
+// no key. That is not a warning: the gateway's engine ready check uses it.
+func TestEngineThatAsksForAKey(t *testing.T) {
+	r := Run(context.Background(), HostConfig{
+		Box:    "t",
+		Docker: goodDocker().run,
+		Detect: func(context.Context, []string) detect.Result {
+			return detect.Result{Refused: []detect.Refusal{{URL: "http://127.0.0.1:18080"}}}
+		},
+		LocalAddrs: func() []string { return []string{"192.0.2.10"} },
+	})
+	c := find(t, r, "an engine is running")
+	if c.Status != Pass || !strings.Contains(c.Detail, "http://127.0.0.1:18080 asks for a key") {
+		t.Errorf("%s %s", c.Status, c.Detail)
+	}
+
+	// Another engine on its usual port doesn't make the keyed one, which
+	// the gateway forwards to, look missing.
+	f := goodDocker()
+	gw := f.ctrs["ezbx-t-gateway"]["Config"].(map[string]any)
+	gw["Cmd"] = []string{"gateway", "serve", "--listen", "0.0.0.0:8000", "--upstream", "http://host.docker.internal:18080", "--key-file", "/run/ezbx/engine-key", "--proxy", "0.0.0.0:3128", "--network", "off", "--admin", "127.0.0.1:8099"}
+	f.exec["status"] = `{"engine":"openai","upstream":"http://host.docker.internal:18080","network":{"mode":"off","allow":[]}}`
+	r = Run(context.Background(), HostConfig{
+		Box:    "t",
+		Docker: f.run,
+		Detect: func(context.Context, []string) detect.Result {
+			return detect.Result{
+				Engines: []detect.Engine{{ID: "strata", Name: "Strata", URL: "http://127.0.0.1:53000", Models: []detect.Model{{ID: "m"}}}},
+				Refused: []detect.Refusal{{URL: "http://127.0.0.1:18080"}},
+			}
+		},
+		LocalAddrs: func() []string { return []string{"192.0.2.10"} },
+	})
+	if c := find(t, r, "forwards to the running engine"); c.Status != Pass || !strings.Contains(c.Detail, "asks for a key") {
+		t.Errorf("forwards: %s %s", c.Status, c.Detail)
+	}
+}
