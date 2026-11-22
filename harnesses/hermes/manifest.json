@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "id": "hermes",
+  "name": "Hermes Agent",
+  "kind": "assistant",
+
+  "install": {
+    "type": "pip",
+    "package": "hermes-agent",
+    "version": "0.19.0",
+    "script": "install.sh",
+    "lockfile": "requirements.lock"
+  },
+
+  "binary": "hermes",
+  "runtime": "python",
+  "tools": ["python3", "ripgrep"],
+
+  "env": {
+    "HERMES_DISABLE_LAZY_INSTALLS": "1",
+    "HERMES_SKIP_NODE_BOOTSTRAP": "1"
+  },
+
+  "config": [
+    {
+      "path": "~/.hermes/config.yaml",
+      "mode": "0600",
+      "format": "yaml",
+      "content": {
+        "model": {
+          "default": "${models.default.id}",
+          "provider": "custom:ezbx",
+          "base_url": "${gateway.baseUrl}",
+          "context_length": 131072
+        },
+        "providers": {
+          "ezbx": {
+            "name": "ezbx",
+            "base_url": "${gateway.baseUrl}",
+            "api_key": "${gateway.key}",
+            "api_mode": "chat_completions",
+            "default_model": "${models.default.id}"
+          }
+        },
+        "security": {
+          "tirith_enabled": false
+        }
+      }
+    }
+  ],
+
+  "launch": {
+    "command": ["hermes"],
+    "cwd": "/workspace"
+  },
+
+  "autonomy": {
+    "flag": "--yolo",
+    "note": "Skips Hermes Agent's command and tool approval prompts (sets HERMES_YOLO_MODE=1). Only ever used inside the box."
+  },
+
+  "network": {
+    "domains": [],
+    "optional": {}
+  },
+
+  "secrets": [],
+
+  "verified": {
+    "version": "0.19.0",
+    "status": "verified",
+    "observedOn": "2026-11-22",
+    "reverify": false,
+    "notes": "Installed from requirements.lock (61 wheels pinned by version and SHA-256 hash) with pip --no-deps --require-hashes --only-binary :all:, so no setup script runs during the build. Stamps packages/.install_method as docker, sets HERMES_DISABLE_LAZY_INSTALLS=1 and HERMES_SKIP_NODE_BOOTSTRAP=1, and configures ~/.hermes/config.yaml (rendered as YAML) with security.tirith_enabled: false and model.context_length: 131072 (above Hermes's 64,000 minimum) so hermes chat -q answers through the gateway with 0 blocked proxy requests when the network is off."
+  }
+}

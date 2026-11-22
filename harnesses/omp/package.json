@@ -1,0 +1,9 @@
+{
+  "name": "ezbx-harness-omp",
+  "private": true,
+  "description": "oh-my-pi and its pinned Bun Linux x64 baseline runtime for the ezbx box image.",
+  "dependencies": {
+    "@oh-my-pi/pi-coding-agent": "19.1.0",
+    "@oven/bun-linux-x64-baseline": "1.4.5"
+  }
+}

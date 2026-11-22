@@ -356,11 +356,13 @@ func askTools(f Facts, o Options, a *Answers, p *Prompter) error {
 		pk := f.Catalog.Packs[id]
 		fmt.Fprintf(p.Out, "  %-14s %s\n  %-14s (%s)\n", tools.PackPrefix+id, pk.Description, "", strings.Join(pk.Tools, ", "))
 	}
-	// Tools a harness needs are in every box anyway, so they aren't offered.
+	// Tools a chosen harness needs are built in with it anyway, so they aren't offered.
 	needed := map[string]bool{}
 	for _, m := range f.Harnesses {
-		for _, t := range m.Tools {
-			needed[t] = true
+		if len(a.Harnesses) == 0 || slices.Contains(a.Harnesses, m.ID) {
+			for _, t := range m.Tools {
+				needed[t] = true
+			}
 		}
 	}
 	var single []string

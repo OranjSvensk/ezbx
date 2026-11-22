@@ -303,6 +303,19 @@ func (g *Gateway) forward(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx = context.WithValue(ctx, ctxKey{}, info)
+	if r.Method == http.MethodPost {
+		switch r.URL.Path {
+		case "/v1/messages/count_tokens":
+			g.serveCountTokens(rec, r.WithContext(ctx), info)
+			return
+		case "/v1/messages":
+			g.serveMessages(rec, r.WithContext(ctx), info)
+			return
+		case "/v1/responses":
+			g.serveResponses(rec, r.WithContext(ctx), info)
+			return
+		}
+	}
 	g.proxy.ServeHTTP(rec, r.WithContext(ctx))
 }
 
@@ -368,6 +381,7 @@ func (g *Gateway) rewrite(pr *httputil.ProxyRequest) {
 
 	// The box's own key is a placeholder and must never reach the engine.
 	pr.Out.Header.Del("Authorization")
+	pr.Out.Header.Del("X-Api-Key")
 	if g.key != "" {
 		pr.Out.Header.Set("Authorization", "Bearer "+g.key)
 	}

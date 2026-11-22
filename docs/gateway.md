@@ -33,7 +33,7 @@ The code refuses an admin address that isn't a loopback address, so a typo can't
 
 ### Forwarding
 
-- Paths are passed straight through: `/v1/models`, `/v1/chat/completions`, `/v1/embeddings` and any other `/v1/...` path. The gateway doesn't interpret request bodies except to log the model name.
+- Paths are passed straight through: `/v1/models`, `/v1/chat/completions`, `/v1/embeddings` and any other `/v1/...` path. For harnesses that speak OpenAI's Responses API (`POST /v1/responses`, used by Codex CLI) or Anthropic's Messages API (`POST /v1/messages` and `/v1/messages/count_tokens`, used by Claude Code), the gateway translates requests and replies (including streaming SSE and tool calls) to and from the engine's `/v1/chat/completions`, so those harnesses work with any OpenAI-compatible engine. The gateway doesn't log request or reply content.
 - Paths that an engine might resolve to somewhere outside `/v1/` are refused with 400: `.` or `..` segments (also when encoded, such as `%2e%2e`), `//`, backslashes and control characters. An encoded slash inside a name, such as `/v1/models/org%2Fmodel`, is allowed.
 - Only `GET`, `HEAD` and `POST` are forwarded (others get 405), and protocol upgrades such as WebSocket are refused.
 - The upstream address is fixed by configuration, so the route can't be turned into a general-purpose relay.

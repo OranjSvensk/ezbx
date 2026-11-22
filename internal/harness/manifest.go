@@ -42,11 +42,13 @@ type Install struct {
 	Lockfile string `json:"lockfile"`
 }
 
-// ConfigFile is one file to generate inside the box. Content is JSON with
-// placeholders, rendered by Render.
+// ConfigFile is one file to generate inside the box. Content is a JSON
+// template with placeholders, rendered by Render as JSON (the default),
+// TOML or YAML.
 type ConfigFile struct {
 	Path    string          `json:"path"`
 	Mode    string          `json:"mode"`
+	Format  string          `json:"format"`
 	Content json.RawMessage `json:"content"`
 }
 
@@ -161,8 +163,8 @@ func (m Manifest) validate(folder string) error {
 	if !exactVersion.MatchString(m.Install.Version) {
 		return fmt.Errorf("install.version %q must be an exact version such as 1.2.3, not a range or tag", m.Install.Version)
 	}
-	if m.Install.Type == "npm" && m.Install.Lockfile == "" {
-		return fmt.Errorf("an npm harness needs install.lockfile, so everything it pulls in is pinned")
+	if (m.Install.Type == "npm" || m.Install.Type == "pip") && m.Install.Lockfile == "" {
+		return fmt.Errorf("a %s harness needs install.lockfile, so everything it pulls in is pinned", m.Install.Type)
 	}
 	if m.Install.Script == "" {
 		return fmt.Errorf("install.script is required")
@@ -202,6 +204,11 @@ func (m Manifest) validate(folder string) error {
 		seen[c.Path] = true
 		if _, err := parseMode(c.Mode); err != nil {
 			return fmt.Errorf("config %q: %w", c.Path, err)
+		}
+		switch c.Format {
+		case "", "json", "toml", "yaml":
+		default:
+			return fmt.Errorf("config %q: format must be json, toml or yaml, not %q", c.Path, c.Format)
 		}
 		if len(c.Content) == 0 || !json.Valid(c.Content) {
 			return fmt.Errorf("config %q: content must be JSON", c.Path)

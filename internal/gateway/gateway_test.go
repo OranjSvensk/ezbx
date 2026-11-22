@@ -94,9 +94,10 @@ func TestStampsEngineAndModelHeaders(t *testing.T) {
 }
 
 func TestKeyIsInjectedAndTheBoxsPlaceholderNeverReachesTheEngine(t *testing.T) {
-	var seen string
+	var seen, seenXKey string
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = r.Header.Get("Authorization")
+		seenXKey = r.Header.Get("X-Api-Key")
 		_, _ = io.WriteString(w, `{}`)
 	}))
 	t.Cleanup(up.Close)
@@ -105,20 +106,22 @@ func TestKeyIsInjectedAndTheBoxsPlaceholderNeverReachesTheEngine(t *testing.T) {
 	_, gw := start(t, up.URL, "real-key", nil)
 	req, _ := http.NewRequest(http.MethodGet, gw.URL+"/v1/models", nil)
 	req.Header.Set("Authorization", "Bearer box-placeholder")
+	req.Header.Set("X-Api-Key", "box-placeholder")
 	resp, _ := http.DefaultClient.Do(req)
 	resp.Body.Close()
-	if seen != "Bearer real-key" {
-		t.Errorf("engine saw Authorization %q", seen)
+	if seen != "Bearer real-key" || seenXKey != "" {
+		t.Errorf("engine saw Authorization %q X-Api-Key %q", seen, seenXKey)
 	}
 
 	// With no key configured, the placeholder is simply dropped.
 	_, gw2 := start(t, up.URL, "", nil)
 	req, _ = http.NewRequest(http.MethodGet, gw2.URL+"/v1/models", nil)
 	req.Header.Set("Authorization", "Bearer box-placeholder")
+	req.Header.Set("X-Api-Key", "box-placeholder")
 	resp, _ = http.DefaultClient.Do(req)
 	resp.Body.Close()
-	if seen != "" {
-		t.Errorf("placeholder leaked to the engine: %q", seen)
+	if seen != "" || seenXKey != "" {
+		t.Errorf("placeholder leaked to the engine: %q %q", seen, seenXKey)
 	}
 }
 
@@ -423,6 +426,191 @@ func TestModelNamesAreSanitised(t *testing.T) {
 	for in, want := range cases {
 		if got := headerSafe(in); got != want {
 			t.Errorf("headerSafe(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestTranslatesAnthropicMessagesAndCountTokens(t *testing.T) {
+	var seenPath, seenAuth, seenXKey string
+	var seenReq map[string]any
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPath = r.URL.Path
+		seenAuth = r.Header.Get("Authorization")
+		seenXKey = r.Header.Get("X-Api-Key")
+		_ = json.NewDecoder(r.Body).Decode(&seenReq)
+		if stream, _ := seenReq["stream"].(bool); stream {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, `data: {"id":"c1","model":"big-model","choices":[{"delta":{"content":"hi "}}]}`+"\n\n")
+			_, _ = io.WriteString(w, `data: {"id":"c1","model":"big-model","choices":[{"delta":{"content":"there"},"finish_reason":"stop"}]}`+"\n\n")
+			_, _ = io.WriteString(w, "data: [DONE]\n\n")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":    "c1",
+			"model": "big-model",
+			"choices": []map[string]any{{
+				"message": map[string]any{
+					"role":    "assistant",
+					"content": "hello from chat",
+					"tool_calls": []map[string]any{{
+						"id":   "call_1",
+						"type": "function",
+						"function": map[string]any{
+							"name":      "read_file",
+							"arguments": `{"path":"a.txt"}`,
+						},
+					}},
+				},
+				"finish_reason": "tool_calls",
+			}},
+			"usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 5},
+		})
+	}))
+	t.Cleanup(up.Close)
+	_, gw := start(t, up.URL, "real-key", nil)
+
+	// Token counting answers locally without contacting the engine.
+	resp, err := http.Post(gw.URL+"/v1/messages/count_tokens", "application/json", strings.NewReader(`{"model":"big-model","messages":[{"role":"user","content":"hi"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tok struct {
+		InputTokens int `json:"input_tokens"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&tok)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || tok.InputTokens < 1 || resp.Header.Get("X-Ezbx-Engine") != "demo" || resp.Header.Get("X-Ezbx-Model") != "big-model" {
+		t.Fatalf("count_tokens: status=%d tokens=%d headers=%v", resp.StatusCode, tok.InputTokens, resp.Header)
+	}
+
+	// Non-streamed /v1/messages translates to /v1/chat/completions and back.
+	reqBody := `{"model":"big-model","system":"be brief","max_tokens":128,"tools":[{"name":"read_file","description":"read","input_schema":{"type":"object"}}],"messages":[{"role":"user","content":[{"type":"text","text":"read a.txt"}]},{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"read_file","input":{"path":"a.txt"}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":"contents"}]}]}`
+	req, _ := http.NewRequest(http.MethodPost, gw.URL+"/v1/messages", strings.NewReader(reqBody))
+	req.Header.Set("X-Api-Key", "box-placeholder")
+	req.Header.Set("Authorization", "Bearer box-placeholder")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mresp struct {
+		Type       string `json:"type"`
+		StopReason string `json:"stop_reason"`
+		Content    []struct {
+			Type  string         `json:"type"`
+			Text  string         `json:"text"`
+			ID    string         `json:"id"`
+			Name  string         `json:"name"`
+			Input map[string]any `json:"input"`
+		} `json:"content"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&mresp)
+	resp.Body.Close()
+	if seenPath != "/v1/chat/completions" || seenAuth != "Bearer real-key" || seenXKey != "" {
+		t.Fatalf("upstream saw path=%q auth=%q x-api-key=%q", seenPath, seenAuth, seenXKey)
+	}
+	if seenJSON, _ := json.Marshal(seenReq["messages"]); !strings.Contains(string(seenJSON), `"role":"tool"`) || !strings.Contains(string(seenJSON), `"tool_call_id":"call_1"`) {
+		t.Fatalf("upstream messages missing tool result: %s", seenJSON)
+	}
+	if mresp.Type != "message" || mresp.StopReason != "tool_use" || len(mresp.Content) != 2 ||
+		mresp.Content[0].Text != "hello from chat" || mresp.Content[1].Name != "read_file" || mresp.Content[1].Input["path"] != "a.txt" {
+		t.Fatalf("messages reply: %+v", mresp)
+	}
+
+	// Streamed /v1/messages produces Anthropic SSE events.
+	resp, err = http.Post(gw.URL+"/v1/messages", "application/json", strings.NewReader(`{"model":"big-model","stream":true,"messages":[{"role":"user","content":"hi"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	s := string(raw)
+	for _, want := range []string{"event: message_start", "event: content_block_start", `"text":"hi "`, `"text":"there"`, "event: message_stop"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("stream missing %q\n%s", want, s)
+		}
+	}
+}
+
+func TestTranslatesOpenAIResponses(t *testing.T) {
+	var seenPath, seenAuth string
+	var seenReq map[string]any
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPath = r.URL.Path
+		seenAuth = r.Header.Get("Authorization")
+		_ = json.NewDecoder(r.Body).Decode(&seenReq)
+		if stream, _ := seenReq["stream"].(bool); stream {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, `data: {"id":"c1","model":"big-model","choices":[{"delta":{"content":"ok"}}],"finish_reason":"stop"}`+"\n\n")
+			_, _ = io.WriteString(w, "data: [DONE]\n\n")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":    "c1",
+			"model": "big-model",
+			"choices": []map[string]any{{
+				"message": map[string]any{
+					"role":    "assistant",
+					"content": "done",
+					"tool_calls": []map[string]any{{
+						"id":   "call_9",
+						"type": "function",
+						"function": map[string]any{
+							"name":      "shell",
+							"arguments": `{"cmd":"ls"}`,
+						},
+					}},
+				},
+				"finish_reason": "tool_calls",
+			}},
+		})
+	}))
+	t.Cleanup(up.Close)
+	_, gw := start(t, up.URL, "real-key", nil)
+
+	reqBody := `{"model":"big-model","instructions":"sys","max_output_tokens":64,"tools":[{"type":"function","name":"shell","parameters":{"type":"object"}}],"input":[{"type":"message","role":"developer","content":[{"type":"input_text","text":"dev"}]},{"type":"function_call","call_id":"call_0","name":"shell","arguments":"{}"},{"type":"function_call_output","call_id":"call_0","output":"out"}]}`
+	req, _ := http.NewRequest(http.MethodPost, gw.URL+"/v1/responses", strings.NewReader(reqBody))
+	req.Header.Set("Authorization", "Bearer box-placeholder")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rresp struct {
+		Object string `json:"object"`
+		Status string `json:"status"`
+		Output []struct {
+			Type      string `json:"type"`
+			Name      string `json:"name"`
+			CallID    string `json:"call_id"`
+			Arguments string `json:"arguments"`
+			Content   []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"output"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&rresp)
+	resp.Body.Close()
+	if seenPath != "/v1/chat/completions" || seenAuth != "Bearer real-key" {
+		t.Fatalf("upstream saw path=%q auth=%q", seenPath, seenAuth)
+	}
+	if seenJSON, _ := json.Marshal(seenReq["messages"]); !strings.Contains(string(seenJSON), `"role":"tool"`) || !strings.Contains(string(seenJSON), `"tool_call_id":"call_0"`) {
+		t.Fatalf("upstream messages missing function_call_output: %s", seenJSON)
+	}
+	if rresp.Object != "response" || rresp.Status != "completed" || len(rresp.Output) != 2 ||
+		rresp.Output[0].Content[0].Text != "done" || rresp.Output[1].Type != "function_call" || rresp.Output[1].Name != "shell" {
+		t.Fatalf("responses reply: %+v", rresp)
+	}
+
+	// Streamed /v1/responses produces Responses SSE events.
+	resp, err = http.Post(gw.URL+"/v1/responses", "application/json", strings.NewReader(`{"model":"big-model","stream":true,"input":"hi"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	s := string(raw)
+	for _, want := range []string{"event: response.created", "event: response.output_text.delta", `"delta":"ok"`, "event: response.completed"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("stream missing %q\n%s", want, s)
 		}
 	}
 }

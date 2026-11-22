@@ -18,6 +18,51 @@ GO_IMAGE = "golang:1.27.4@sha256:205c7636d74e0ffbe3d007162df7d74f859f5a8c8322dfb
 dockerfile = "docker/box.Dockerfile"
 NODE_IMAGE = "node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54"
 
+[harnesses.claude]
+type = "npm"
+package = "@anthropic-ai/claude-code-linux-x64"
+version = "2.1.330"
+verified = "verified"
+lockfile = "harnesses/claude/package-lock.json"
+lockfile_sha256 = "83bfe9050786600865c7ba5a0b9261b511eb6fb2d90c14ef71777659d581329e"
+tools = ["ripgrep"]
+
+[harnesses.codex]
+type = "npm"
+package = "@openai/codex"
+version = "0.171.0"
+verified = "verified"
+lockfile = "harnesses/codex/package-lock.json"
+lockfile_sha256 = "4e1dd52662063e63caa3b6a8fd59829d90ddc30b23bb38b4695704ef6436ba33"
+tools = ["ripgrep"]
+
+[harnesses.hermes]
+type = "pip"
+package = "hermes-agent"
+version = "0.19.0"
+verified = "verified"
+lockfile = "harnesses/hermes/requirements.lock"
+lockfile_sha256 = "5c106b8cf05292f19902b9c01d1c996eca7169a8bfb24d30ed5e48de548e0f96"
+tools = ["python3", "ripgrep"]
+
+[harnesses.omp]
+type = "npm"
+package = "@oh-my-pi/pi-coding-agent"
+version = "19.1.0"
+verified = "verified"
+lockfile = "harnesses/omp/package-lock.json"
+lockfile_sha256 = "2f7098b539640dfed28082193abadaf940b18362fb74a3a13d54ab54c0cdd33a"
+tools = ["fd", "ripgrep"]
+
+[harnesses.openclaw]
+type = "npm"
+package = "openclaw"
+version = "2026.11.6"
+verified = "verified"
+lockfile = "harnesses/openclaw/package-lock.json"
+lockfile_sha256 = "e132377e6036eafb94075162d40e027fea5504733a91b7875817388df52dc2e0"
+tools = ["ripgrep"]
+
 [harnesses.opencode]
 type = "npm"
 package = "@opencode/cli-linux-x64-baseline"

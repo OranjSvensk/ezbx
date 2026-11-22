@@ -42,7 +42,7 @@ For each image, `ezbx` makes the build context as a tar stream: the build files,
 |---|---|
 | Base images (`golang`, `node`) | Digest, as an `ARG NAME_IMAGE=name:tag@sha256:...` default in the Dockerfile. A test refuses any `FROM` that isn't pinned. |
 | Debian packages (git, the tools) | The base image's own snapshot. The Node image records in its apt sources the dated [snapshot.debian.org](https://snapshot.debian.org) archive it was made from, and the box Dockerfile points apt at that snapshot. So the base digest also fixes every package version. apt still checks the snapshot's signatures; only the "valid until" date of its release file is ignored, because an old snapshot's has expired. |
-| Pi and what it pulls in | `package-lock.json` with integrity hashes, installed with `npm ci`, as before. Its hash is in `ezbx.lock`. |
+| Harnesses and what they pull in | `package-lock.json` with integrity hashes (installed with `npm ci --ignore-scripts`) or `requirements.lock` with wheel hashes (installed with `pip install --no-deps --require-hashes --only-binary :all:`), each recorded by hash in `ezbx.lock`. |
 | Go modules (the gateway) | `go.sum`, as before. |
 
 `images.json` records, per image: its name, Docker's image ID, the full inputs hash, when it was built, the name it replaced, and for the box the snapshot date, each Debian package's version and Pi's version. These are read back from the finished image by a throwaway container with no network and no capabilities.
@@ -69,7 +69,7 @@ For each image, `ezbx` makes the build context as a tar stream: the build files,
 
 Tools are installed when the image is built, never by the agent: the agent has no root and no package manager rights. To add a tool, change `tools` in `ezbx.toml`, then run `ezbx build`, `ezbx down` and `ezbx up`.
 
-Sizes measured on the first build: the box image is 726 MB with `pack:coding` and 2 GB with all three packs. The gateway image is 13 MB. With OpenCode beside Pi and no tools, the box is 1.05 GB.
+Sizes measured on the first build: the box image is 726 MB with `pack:coding` and 2 GB with all three packs. The gateway image is 13 to 15 MB. With OpenCode beside Pi and no tools, the box is 1.05 GB; with all seven harnesses and no extra tool packs, it is 4.28 GB.
 
 Chromium runs with `--no-sandbox` in the box. Its own sandbox needs kernel features the box drops on purpose, and Debian's alternative (`chromium-sandbox`) is a setuid helper, which the image removes. The box is the sandbox.
 
@@ -77,11 +77,18 @@ Chromium runs with `--no-sandbox` in the box. Its own sandbox needs kernel featu
 
 Pi looks for `fd` (or `fdfind`) and `rg` when it starts, and if they're missing it downloads the latest release from GitHub. That bypasses pinning, and the box's network blocks it anyway (the first hand run showed a 403 from the proxy). Pi's manifest therefore needs both tools, and `PI_OFFLINE=1` turns off Pi's startup network calls: tool downloads, version and package update checks, its online model catalogue and install telemetry. Model requests to the gateway are not affected. Like every harness's `env`, it is set on the box container by `ezbx up`, not in the image.
 
-## OpenCode's install
+## Prebuilt binaries and Python wheels
 
 OpenCode's npm package, `@opencode/cli`, is only a launcher. Its `opencode` command is a stub that prints an error until the package's install script has run, and that script copies the real program out of a platform package, running `npm install` by itself if the platform package is missing. Install scripts stay off in ezbx, so OpenCode's lockfile pins the platform package directly: `@opencode/cli-linux-x64-baseline`, one prebuilt program of about 250 MB with no install script and no dependencies, checked by its integrity hash like any npm package. The baseline build runs on every x64 CPU; the other build needs AVX2, so choosing between them at build time would make the image depend on the computer that built it.
 
 OpenCode fetches its model catalogue from `models.opencode.ai` every time it runs (seen as blocked requests in the gateway log); `OPENCODE_DISABLE_MODELS_FETCH=1` in its manifest turns that off, and its models come from the generated config instead. It also talks to a background service of its own over the box's loopback, so the box's `NO_PROXY` lists `localhost`, `127.0.0.1` and `::1` beside the gateway. Loopback in the box is the box itself, so nothing leaves it that way.
+
+The other five harnesses follow the same rule (install scripts off, everything pinned by hash):
+
+- **Codex CLI (`codex`)** and **Claude Code (`claude`)** also ship their main npm packages as wrappers around platform binaries. Their lockfiles pin `@openai/codex@0.171.0-linux-x64` (a static Linux x64 musl binary) and `@anthropic-ai/claude-code-linux-x64@2.1.330` directly. Both set their startup update-check and telemetry switches off and talk to the gateway through its `/v1/responses` and `/v1/messages` translation routes.
+- **oh-my-pi (`omp`)** runs on the Bun runtime and uses prebuilt Linux x64 native bindings (`@oh-my-pi/pi-natives-linux-x64`). Its lockfile pins `@oh-my-pi/pi-coding-agent@19.1.0` alongside `@oven/bun-linux-x64-baseline@1.4.5`, and its `/usr/local/bin/omp` wrapper runs the CLI under that pinned baseline Bun executable.
+- **OpenClaw (`openclaw`)** runs on Node 24 from its `package-lock.json` with scripts off.
+- **Hermes Agent (`hermes`)** is a Python package (`hermes-agent@0.19.0`). When a harness folder in the build context has a `requirements.lock`, the harness build stage installs `python3` and `python3-pip` from the pinned Debian snapshot first, then runs `python3 -m pip install --no-deps --require-hashes --only-binary :all:` as `node`. Every transitive wheel (61 wheels) is listed in `requirements.lock` with its SHA-256 hash, so no source archive or `setup.py` runs. Its install script marks `packages/.install_method` as `docker`, and its manifest disables lazy runtime installs and `tirith` binary downloads.
 
 ## Not built yet
 

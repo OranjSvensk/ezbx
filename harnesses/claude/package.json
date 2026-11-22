@@ -1,0 +1,8 @@
+{
+  "name": "ezbx-harness-claude",
+  "private": true,
+  "description": "Claude Code's prebuilt Linux x64 program for the ezbx box image.",
+  "dependencies": {
+    "@anthropic-ai/claude-code-linux-x64": "2.1.330"
+  }
+}

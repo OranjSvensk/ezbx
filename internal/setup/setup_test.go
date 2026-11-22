@@ -430,13 +430,14 @@ func TestGatherNamedEngineNotRunning(t *testing.T) {
 func TestGatherAllowHostsAreChecked(t *testing.T) {
 	f := facts(t)
 	ws := filepath.Join(t.TempDir(), "ws")
-	input := strings.Join([]string{"1", "n", "2", "none", ws, "allow", "10.0.0.1, pypi.org", "pypi.org", "4g"}, "\n") + "\n"
+	input := strings.Join([]string{"1", "n", "1", "none", ws, "allow", "10.0.0.1, pypi.org", "pypi.org", "4g"}, "\n") + "\n"
 	p, out := prompter(input)
 	res, err := Gather(f, Options{}, p)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if strings.Join(res.Answers.Allow, ",") != "pypi.org" || !strings.Contains(out.String(), `"10.0.0.1" is not a host name`) {
+	if strings.Join(res.Answers.Allow, ",") != "pypi.org" || !strings.Contains(out.String(), `"10.0.0.1" is not a host name`) ||
+		!strings.Contains(out.String(), "Single tools: fd, jq, wip\n") {
 		t.Errorf("%v\n%s", res.Answers.Allow, out)
 	}
 }

@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "id": "claude",
+  "name": "Claude Code",
+  "kind": "coding",
+
+  "install": {
+    "type": "npm",
+    "package": "@anthropic-ai/claude-code-linux-x64",
+    "version": "2.1.330",
+    "script": "install.sh",
+    "lockfile": "package-lock.json"
+  },
+
+  "binary": "claude",
+  "runtime": "binary",
+  "tools": ["ripgrep"],
+
+  "env": {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "DISABLE_AUTOUPDATER": "1",
+    "DISABLE_TELEMETRY": "1"
+  },
+
+  "config": [
+    {
+      "path": "~/.claude/settings.json",
+      "mode": "0600",
+      "content": {
+        "model": "${models.default.id}",
+        "env": {
+          "ANTHROPIC_BASE_URL": "${gateway.url}",
+          "ANTHROPIC_AUTH_TOKEN": "${gateway.key}",
+          "ANTHROPIC_MODEL": "${models.default.id}",
+          "ANTHROPIC_DEFAULT_HAIKU_MODEL": "${models.default.id}",
+          "ANTHROPIC_DEFAULT_SONNET_MODEL": "${models.default.id}",
+          "ANTHROPIC_DEFAULT_OPUS_MODEL": "${models.default.id}"
+        }
+      }
+    },
+    {
+      "path": "~/.claude.json",
+      "mode": "0600",
+      "content": {
+        "hasCompletedOnboarding": true,
+        "bypassPermissionsModeAccepted": true
+      }
+    }
+  ],
+
+  "launch": {
+    "command": ["claude"],
+    "cwd": "/workspace"
+  },
+
+  "autonomy": {
+    "flag": "--dangerously-skip-permissions",
+    "note": "Skips Claude Code's tool-approval prompts; intended for container sandboxes with no internet access. Only ever used inside the box."
+  },
+
+  "network": {
+    "domains": [],
+    "optional": {}
+  },
+
+  "secrets": [],
+
+  "verified": {
+    "version": "2.1.330",
+    "status": "verified",
+    "observedOn": "2026-11-22",
+    "reverify": false,
+    "notes": "In version 2.1.330, @anthropic-ai/claude-code is a wrapper whose command is a 500-byte stub until its postinstall script copies the native program out of @anthropic-ai/claude-code-linux-x64. Like OpenCode, the lockfile pins the Linux x64 platform package directly and installs with scripts off. Configured through ~/.claude/settings.json and ~/.claude.json with ANTHROPIC_BASE_URL pointing at the gateway, which translates /v1/messages and /v1/messages/count_tokens to the engine's /v1/chat/completions; claude -p answers through the gateway with 0 blocked proxy requests when the network is off."
+  }
+}

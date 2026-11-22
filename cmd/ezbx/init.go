@@ -46,7 +46,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&o.URL, "url", "", "the engine's address, if detection doesn't find it")
 	fs.StringVar(&o.KeyEnv, "key-env", "", "NAME of an environment variable holding the engine's key")
 	fs.BoolVar(&o.Reasoning, "reasoning", false, "mark the engine's models as reasoning models")
-	harnessList := fs.String("harness", "", "harnesses, separated by commas, such as pi")
+	harnessList := fs.String("harness", "", "harnesses, separated by commas, such as pi,opencode")
 	toolList := fs.String("tools", "", "tool packs and tools, separated by commas, such as pack:coding,ffmpeg, or none")
 	fs.StringVar(&o.Workspace, "workspace", "", "the workspace folder")
 	fs.StringVar(&o.Network, "network", "", "off, allow or on")
@@ -55,7 +55,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--engine ID] [--harness pi] [--tools pack:coding] [--workspace PATH] [--network off|allow|on] [--memory 8g]")
+		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--engine ID] [--harness pi,opencode] [--tools pack:coding] [--workspace PATH] [--network off|allow|on] [--memory 8g]")
 		return 2
 	}
 	if *harnessList != "" {
@@ -243,6 +243,9 @@ func gatherFacts(ctx context.Context, existing *config.Config, o setup.Options, 
 			f.Harnesses = append(f.Harnesses, m)
 		}
 	}
+	sort.SliceStable(f.Harnesses, func(i, j int) bool {
+		return f.Harnesses[i].Kind == "coding" && f.Harnesses[j].Kind != "coding"
+	})
 	if f.Catalog, err = tools.Load(catalog.FS); err != nil {
 		return f, fmt.Errorf("internal error loading the tool catalogue: %w", err)
 	}

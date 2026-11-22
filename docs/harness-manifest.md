@@ -29,9 +29,9 @@ A harness is an agent tool that runs inside the box. Each lives in `harnesses/<i
 ```
 
 - `type`: `npm`, `pip`, `binary` or `script`.
-- `lockfile`: required for `npm`. The lockfile in the harness folder.
+- `lockfile`: required for `npm` and `pip`. The lockfile in the harness folder.
 - `version` is always exact, such as `1.2.3` or `1.2.3-beta.1`. Ranges, tags and `latest` are refused when manifests are loaded, so a rebuild gives the same box.
-- Pinning the harness alone does not pin what it pulls in. An npm harness therefore ships a `package.json` and a `package-lock.json` in its folder. The lockfile pins every package it pulls in with an integrity hash, and the install uses `npm ci`, which refuses anything that doesn't match. `ezbx.lock` records the lockfile's own hash (see [build.md](build.md)).
+- Pinning the harness alone does not pin what it pulls in. An npm harness therefore ships a `package.json` and a `package-lock.json` in its folder, and a pip harness ships a `requirements.lock` listing every wheel with its SHA-256 hash (`pip install --no-deps --require-hashes --only-binary :all:`). `ezbx.lock` records the lockfile's own hash (see [build.md](build.md)).
 - `script` runs at image build time as an **unprivileged** user, in a separate build stage, in the harness's own folder, and must fail loudly if the binary is missing. It must leave the command at `bin/<binary>` in that folder (usually a relative link), and `bin/<binary> --version` must work. The result is copied into the image owned by root, so the agent can run the harness but not change it. No Dockerfile change is needed for a new harness: the image's harness stage runs the script of every harness the box has.
 - Package install scripts are off (`--ignore-scripts`). A harness that really needs one must say which and why in its install script.
 
@@ -40,19 +40,21 @@ A harness is an agent tool that runs inside the box. Each lives in `harnesses/<i
 Each entry creates one file inside the box, owned by the unprivileged `agent` user.
 
 ```json
-{ "path": "~/.tool/config.json", "mode": "0600", "content": { ... } }
+{ "path": "~/.tool/config.json", "mode": "0600", "format": "json", "content": { ... } }
 ```
 
 - `path` starts with `~/` (the agent's home) and has no empty, `.` or `..` parts, so a file can't land outside the home.
 - `mode` is four octal digits. A config file is never executable or writable by others.
+- `format` is optional: `json` (the default), `toml` or `yaml`.
 
-`content` is ordinary JSON with placeholders, so the output is always valid JSON and no text templating is needed.
+`content` is ordinary JSON with placeholders, so the template is always checked as structured data and no text templating is needed, even when the output file is TOML or YAML.
 
 **Placeholders**
 
 | Placeholder | Value |
 |---|---|
-| `${gateway.baseUrl}` | The gateway's OpenAI-compatible address as seen from inside the box. |
+| `${gateway.baseUrl}` | The gateway's OpenAI-compatible address as seen from inside the box (ends with `/v1`). |
+| `${gateway.url}` | The gateway's root address without `/v1`, for tools such as Claude Code that append `/v1/messages` themselves. |
 | `${gateway.key}` | A placeholder key for the gateway. Not a real credential. |
 | `${models.default.id}` | The model chosen as default. |
 

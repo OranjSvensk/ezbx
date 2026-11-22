@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "id": "openclaw",
+  "name": "OpenClaw",
+  "kind": "assistant",
+
+  "install": {
+    "type": "npm",
+    "package": "openclaw",
+    "version": "2026.11.6",
+    "script": "install.sh",
+    "lockfile": "package-lock.json"
+  },
+
+  "binary": "openclaw",
+  "runtime": "node",
+  "tools": ["ripgrep"],
+
+  "env": {},
+
+  "config": [
+    {
+      "path": "~/.openclaw/openclaw.json",
+      "mode": "0600",
+      "content": {
+        "models": {
+          "mode": "merge",
+          "providers": {
+            "ezbx": {
+              "baseUrl": "${gateway.baseUrl}",
+              "apiKey": "${gateway.key}",
+              "api": "openai-completions",
+              "models": {
+                "$each": "models",
+                "as": {
+                  "id": "${id}",
+                  "name": "${name}",
+                  "reasoning": "${reasoning}",
+                  "input": "${input}",
+                  "contextWindow": "${contextWindow}",
+                  "maxTokens": "${maxTokens}"
+                }
+              }
+            }
+          }
+        },
+        "agents": {
+          "defaults": {
+            "model": "ezbx/${models.default.id}",
+            "models": {
+              "$each": "models",
+              "key": "ezbx/${id}",
+              "as": {}
+            }
+          }
+        }
+      }
+    }
+  ],
+
+  "launch": {
+    "command": ["openclaw"],
+    "cwd": "/workspace"
+  },
+
+  "autonomy": {
+    "flag": null,
+    "note": "No separate CLI approval-skipping flag is recorded; tool policy lives in ~/.openclaw/openclaw.json."
+  },
+
+  "network": {
+    "domains": [],
+    "optional": {}
+  },
+
+  "secrets": [],
+
+  "verified": {
+    "version": "2026.11.6",
+    "status": "verified",
+    "observedOn": "2026-11-22",
+    "reverify": false,
+    "notes": "Installed from the lockfile with install scripts off. Configured through ~/.openclaw/openclaw.json with provider ezbx (openai-completions) pointing at the gateway and the engine's models listed as a record under agents.defaults.models; openclaw agent exec answers through the gateway with 0 blocked proxy requests when the network is off."
+  }
+}

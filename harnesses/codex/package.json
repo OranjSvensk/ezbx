@@ -1,0 +1,8 @@
+{
+  "name": "ezbx-harness-codex",
+  "private": true,
+  "description": "OpenAI Codex CLI's prebuilt Linux x64 musl program for the ezbx box image.",
+  "dependencies": {
+    "@openai/codex": "0.171.0-linux-x64"
+  }
+}

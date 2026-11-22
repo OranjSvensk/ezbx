@@ -6,6 +6,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/BurntSushi/toml"
 	"github.com/ryan-ven/ezbx/harnesses"
 	"github.com/ryan-ven/ezbx/internal/detect"
 )
@@ -15,8 +16,86 @@ func TestEmbeddedManifestsLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 2 || list[0].ID != "opencode" || list[1].ID != "pi" {
-		t.Fatalf("want opencode and pi, got %d manifests", len(list))
+	var ids []string
+	for _, m := range list {
+		ids = append(ids, m.ID)
+	}
+	if got := strings.Join(ids, ","); got != "claude,codex,hermes,omp,openclaw,opencode,pi" {
+		t.Fatalf("got manifests %s", got)
+	}
+}
+
+func TestRenderAllEmbeddedHarnesses(t *testing.T) {
+	list, err := LoadFS(harnesses.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vals := Values{
+		GatewayBaseURL: "http://gateway:8000/v1",
+		GatewayKey:     "ezbx-placeholder",
+		Models:         Models(strataModels(), Defaults{Reasoning: true}, nil),
+		Default:        "small-model",
+	}
+	for _, m := range list {
+		files, err := Render(m, vals)
+		if err != nil {
+			t.Fatalf("%s: %v", m.ID, err)
+		}
+		if len(files) == 0 {
+			t.Fatalf("%s rendered no config files", m.ID)
+		}
+		for i, f := range files {
+			text := string(f.Data)
+			if strings.Contains(text, "${") {
+				t.Errorf("%s (%s): unfilled placeholder in:\n%s", m.ID, f.Path, text)
+			}
+			switch m.Config[i].Format {
+			case "", "json":
+				var parsed map[string]any
+				if err := json.Unmarshal(f.Data, &parsed); err != nil {
+					t.Errorf("%s (%s): invalid JSON: %v\n%s", m.ID, f.Path, err, text)
+				}
+			case "toml":
+				var parsed map[string]any
+				if _, err := toml.Decode(text, &parsed); err != nil {
+					t.Errorf("%s (%s): invalid TOML: %v\n%s", m.ID, f.Path, err, text)
+				}
+			case "yaml":
+				if !strings.Contains(text, ": ") || !strings.Contains(text, "small-model") {
+					t.Errorf("%s (%s): unexpected YAML:\n%s", m.ID, f.Path, text)
+				}
+			}
+		}
+	}
+
+	// Spot-check Claude Code's gateway.url placeholder (no /v1 suffix) and Codex's TOML fields.
+	claude, _ := Find(list, "claude")
+	cfiles, err := Render(claude, vals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(cfiles[0].Data), `"ANTHROPIC_BASE_URL": "http://gateway:8000"`) {
+		t.Errorf("claude settings.json should use gateway.url without /v1:\n%s", cfiles[0].Data)
+	}
+	codex, _ := Find(list, "codex")
+	xfiles, err := Render(codex, vals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var xcfg struct {
+		Model          string `toml:"model"`
+		ModelProvider  string `toml:"model_provider"`
+		ModelProviders map[string]struct {
+			BaseURL string `toml:"base_url"`
+			WireAPI string `toml:"wire_api"`
+			EnvKey  string `toml:"env_key"`
+		} `toml:"model_providers"`
+	}
+	if _, err := toml.Decode(string(xfiles[0].Data), &xcfg); err != nil {
+		t.Fatal(err)
+	}
+	if xcfg.Model != "small-model" || xcfg.ModelProvider != "ezbx" || xcfg.ModelProviders["ezbx"].BaseURL != "http://gateway:8000/v1" || xcfg.ModelProviders["ezbx"].WireAPI != "responses" {
+		t.Errorf("codex config.toml: %+v", xcfg)
 	}
 }
 
@@ -98,6 +177,8 @@ func TestManifestValidation(t *testing.T) {
 		"version range":         {`"version": "1.2.3"`, `"version": "^1.2.3"`},
 		"version latest":        {`"version": "1.2.3"`, `"version": "latest"`},
 		"npm without lockfile":  {`, "lockfile": "package-lock.json"`, ``},
+		"pip without lockfile":  {`"type": "npm", "package": "demo", "version": "1.2.3", "script": "install.sh", "lockfile": "package-lock.json"`, `"type": "pip", "package": "demo", "version": "1.2.3", "script": "install.sh"`},
+		"bad config format":     {`"mode": "0600"`, `"mode": "0600", "format": "xml"`},
 		"unknown field":         {`"binary": "demo"`, `"binary": "demo", "binaray": "x"`},
 		"secret-looking env":    {`"DEMO_QUIET": "1"`, `"DEMO_API_KEY": "1"`},
 		"placeholder in env":    {`"DEMO_QUIET": "1"`, `"DEMO_URL": "${gateway.baseUrl}"`},
@@ -307,5 +388,11 @@ func TestRenderNeedsModels(t *testing.T) {
 	}
 	if _, err := Render(m, Values{Models: []Model{{ID: "a"}}, Default: "b"}); err == nil {
 		t.Error("a default model the engine doesn't report should be refused")
+	}
+	for _, format := range []string{"toml", "yaml"} {
+		listTop := Manifest{Name: "Demo", Config: []ConfigFile{{Path: "~/.demo/c", Mode: "0600", Format: format, Content: json.RawMessage(`["not-an-object"]`)}}}
+		if _, err := Render(listTop, Values{Models: []Model{{ID: "a"}}}); err == nil || !strings.Contains(err.Error(), "must be an object at the top") {
+			t.Errorf("%s top-level list: %v", format, err)
+		}
 	}
 }

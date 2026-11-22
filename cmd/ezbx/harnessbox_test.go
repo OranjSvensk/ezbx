@@ -27,6 +27,9 @@ func TestImageSpecsHarnesses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(all.Harnesses) != 7 {
+		t.Fatalf("got %d harnesses, want 7", len(all.Harnesses))
+	}
 	for _, m := range all.Harnesses {
 		if m.Verified.Status != "verified" {
 			t.Errorf("%s is not verified but was built in", m.ID)
@@ -36,8 +39,11 @@ func TestImageSpecsHarnesses(t *testing.T) {
 	if err != nil || len(pi.Harnesses) != 1 || pi.Harnesses[0].ID != "pi" {
 		t.Fatalf("pi only: %v %v", pi.Harnesses, err)
 	}
-	if strings.Contains(strings.Join(pi.Files(), " "), "harnesses/opencode/") {
-		t.Error("a Pi-only box must not carry OpenCode's files")
+	if strings.Contains(strings.Join(pi.Files(), " "), "harnesses/opencode/") || strings.Contains(strings.Join(pi.Files(), " "), "harnesses/hermes/") {
+		t.Error("a Pi-only box must not carry other harnesses' files")
+	}
+	if strings.Contains(strings.Join(pi.Tools.IDs(), ","), "python3") || !strings.Contains(strings.Join(all.Tools.IDs(), ","), "python3") {
+		t.Errorf("python3 is only added when a harness or tool pack needs it: pi=%v all=%v", pi.Tools.IDs(), all.Tools.IDs())
 	}
 	if _, _, err := imageSpecs(nil, []string{"nope"}); err == nil || !strings.Contains(err.Error(), `unknown harness "nope"`) {
 		t.Errorf("unknown: %v", err)

@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "id": "codex",
+  "name": "Codex CLI",
+  "kind": "coding",
+
+  "install": {
+    "type": "npm",
+    "package": "@openai/codex",
+    "version": "0.171.0",
+    "script": "install.sh",
+    "lockfile": "package-lock.json"
+  },
+
+  "binary": "codex",
+  "runtime": "binary",
+  "tools": ["ripgrep"],
+
+  "env": {
+    "EZBX_GATEWAY": "ezbx"
+  },
+
+  "config": [
+    {
+      "path": "~/.codex/config.toml",
+      "mode": "0600",
+      "format": "toml",
+      "content": {
+        "model": "${models.default.id}",
+        "model_provider": "ezbx",
+        "check_for_update_on_startup": false,
+        "analytics": {
+          "enabled": false
+        },
+        "features": {
+          "apps": false,
+          "plugins": false,
+          "remote_plugin": false
+        },
+        "model_providers": {
+          "ezbx": {
+            "name": "ezbx",
+            "base_url": "${gateway.baseUrl}",
+            "wire_api": "responses",
+            "env_key": "EZBX_GATEWAY"
+          }
+        }
+      }
+    }
+  ],
+
+  "launch": {
+    "command": ["codex"],
+    "cwd": "/workspace"
+  },
+
+  "autonomy": {
+    "flag": "--dangerously-bypass-approvals-and-sandbox",
+    "note": "Skips approval prompts and Codex's own Linux namespace sandbox (which needs capabilities the box drops). Only ever used inside the box, where the container is the boundary."
+  },
+
+  "network": {
+    "domains": [],
+    "optional": {}
+  },
+
+  "secrets": [],
+
+  "verified": {
+    "version": "0.171.0",
+    "status": "verified",
+    "observedOn": "2026-11-22",
+    "reverify": false,
+    "notes": "The npm package @openai/codex wraps a prebuilt native Linux x64 musl program published at @openai/codex@0.171.0-linux-x64, so the lockfile pins that platform package directly and installs with scripts off. Configured through ~/.codex/config.toml (rendered as TOML) with wire_api = 'responses' pointing at the gateway, which translates /v1/responses to the engine's /v1/chat/completions; check_for_update_on_startup, analytics and remote plugin checks are off so codex exec answers through the gateway with 0 blocked proxy requests when the network is off."
+  }
+}

@@ -9,7 +9,7 @@
 
 ezbx is a planned one-click setup for running AI coding and agent tools inside a sandboxed container, while the model itself keeps running on your own machine.
 
-> **Status: early development.** Pi works end to end on Windows with Docker Desktop: `ezbx init` sets it up from nothing, builds the images and starts the box, and `ezbx shell pi` opens it, after taking a snapshot of the workspace that `ezbx rewind` can go back to. OpenCode is the second harness: it is built and answers through the gateway, but has only been tested with a test engine so far. Every command on the road to the first usable version below is built; other harnesses, engines and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), and designs are in [docs/](docs/).
+> **Status: early development.** Pi works end to end on Windows with Docker Desktop: `ezbx init` sets it up from nothing, builds the images and starts the box, and `ezbx shell pi` opens it, after taking a snapshot of the workspace that `ezbx rewind` can go back to. Six more harnesses — OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw — are built, pinned in `ezbx.lock` and answer through the gateway, tested with a test engine so far. Every command on the road to the first usable version below is built; other engines and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), and designs are in [docs/](docs/).
 
 ```text
 go install ./cmd/ezbx     from a clone; needs Go and Docker Desktop
@@ -24,7 +24,7 @@ Other commands: `ezbx up` and `ezbx down` start and remove the box described in 
 - **The model stays on your machine.** Your inference engine (Strata, LM Studio, Ollama or llama.cpp) keeps full access to your GPU and models.
 - **The work stays in the box.** Agents run in a container and can only write to folders you choose.
 - **One stable address between them.** A small gateway lets the box talk to whichever engine you run, so switching engines doesn't mean reconfiguring every tool.
-- **You choose the harnesses.** Pick from agent tools such as Pi, OpenCode, Codex CLI, Claude Code, Hermes Agent and OpenClaw, in any combination. Install methods will be verified before each one is added.
+- **You choose the harnesses.** Pick from Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw, in any combination. Each one's install method is verified and pinned in `ezbx.lock`.
 - **Network on or off.** A switch controls whether the agent can reach the internet.
 - **Root stays with you.** The agent runs as an unprivileged user. Admin access is reserved for the human.
 

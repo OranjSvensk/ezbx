@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/ryan-ven/ezbx/internal/detect"
 )
 
@@ -115,6 +117,7 @@ func Render(m Manifest, v Values) ([]File, error) {
 	}
 	top := map[string]any{
 		"gateway.baseUrl":   v.GatewayBaseURL,
+		"gateway.url":       strings.TrimSuffix(strings.TrimSuffix(v.GatewayBaseURL, "/"), "/v1"),
 		"gateway.key":       v.GatewayKey,
 		"models.default.id": def,
 	}
@@ -140,13 +143,148 @@ func Render(m Manifest, v Values) ([]File, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", c.Path, err)
 		}
-		data, err := json.MarshalIndent(out, "", "  ")
+		data, err := encodeConfig(c.Format, out)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", c.Path, err)
 		}
-		files = append(files, File{Path: rel, Mode: mode, Data: append(data, '\n')})
+		files = append(files, File{Path: rel, Mode: mode, Data: data})
 	}
 	return files, nil
+}
+
+// encodeConfig writes a rendered config value in the chosen format (JSON by
+// default, or TOML or YAML).
+func encodeConfig(format string, v any) ([]byte, error) {
+	switch format {
+	case "", "json":
+		data, err := json.MarshalIndent(v, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		return append(data, '\n'), nil
+	case "toml":
+		m, ok := tomlReady(v).(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("a TOML config must be an object at the top")
+		}
+		var buf bytes.Buffer
+		if err := toml.NewEncoder(&buf).Encode(m); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	case "yaml":
+		m, ok := v.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("a YAML config must be an object at the top")
+		}
+		var buf bytes.Buffer
+		writeYAMLMap(&buf, m, 0)
+		return buf.Bytes(), nil
+	default:
+		return nil, fmt.Errorf("unsupported config format %q", format)
+	}
+}
+
+// tomlReady turns json.Number values into int64 or float64 so the TOML
+// encoder writes them as numbers rather than text.
+func tomlReady(v any) any {
+	switch t := v.(type) {
+	case json.Number:
+		if n, err := t.Int64(); err == nil {
+			return n
+		}
+		if f, err := t.Float64(); err == nil {
+			return f
+		}
+		return t.String()
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[k] = tomlReady(val)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, val := range t {
+			out[i] = tomlReady(val)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+var plainYAMLKey = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+func yamlKey(k string) string {
+	if plainYAMLKey.MatchString(k) {
+		return k
+	}
+	return strconv.Quote(k)
+}
+
+func yamlScalar(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return "null"
+	case string:
+		return strconv.Quote(t)
+	default:
+		return fmt.Sprint(t)
+	}
+}
+
+func writeYAMLMap(b *bytes.Buffer, m map[string]any, indent int) {
+	if len(m) == 0 {
+		b.WriteString("{}\n")
+		return
+	}
+	pad := strings.Repeat(" ", indent)
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		key := yamlKey(k)
+		switch val := m[k].(type) {
+		case map[string]any:
+			if len(val) == 0 {
+				fmt.Fprintf(b, "%s%s: {}\n", pad, key)
+			} else {
+				b.WriteString(pad + key + ":\n")
+				writeYAMLMap(b, val, indent+2)
+			}
+		case []any:
+			if len(val) == 0 {
+				fmt.Fprintf(b, "%s%s: []\n", pad, key)
+			} else {
+				b.WriteString(pad + key + ":\n")
+				writeYAMLList(b, val, indent+2)
+			}
+		default:
+			fmt.Fprintf(b, "%s%s: %s\n", pad, key, yamlScalar(val))
+		}
+	}
+}
+
+func writeYAMLList(b *bytes.Buffer, list []any, indent int) {
+	pad := strings.Repeat(" ", indent)
+	for _, item := range list {
+		switch val := item.(type) {
+		case map[string]any:
+			if len(val) == 0 {
+				fmt.Fprintf(b, "%s- {}\n", pad)
+				continue
+			}
+			var sub bytes.Buffer
+			writeYAMLMap(&sub, val, indent+2)
+			trimmed := strings.TrimPrefix(sub.String(), pad+"  ")
+			fmt.Fprintf(b, "%s- %s", pad, trimmed)
+		default:
+			fmt.Fprintf(b, "%s- %s\n", pad, yamlScalar(val))
+		}
+	}
 }
 
 type renderer struct {

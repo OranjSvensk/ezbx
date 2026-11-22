@@ -36,9 +36,14 @@ RUN f=/etc/apt/sources.list.d/debian.sources \
 FROM base AS harnesses
 ARG HARNESS_COMMANDS=""
 RUN mkdir /build && chown node:node /build
-USER node
 WORKDIR /build
 COPY --chown=node:node harnesses/ ./
+RUN if ls */requirements.lock >/dev/null 2>&1; then \
+      apt-get update \
+      && apt-get install -y --no-install-recommends ca-certificates python3 python3-pip \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
+USER node
 RUN test -n "$HARNESS_COMMANDS" \
  && for h in $HARNESS_COMMANDS; do \
       id="${h%%=*}"; cmd="${h#*=}"; \

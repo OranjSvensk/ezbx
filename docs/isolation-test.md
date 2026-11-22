@@ -196,6 +196,23 @@ A test box with `harnesses = ['opencode', 'pi']`, no tools, the fake engine and 
 
 Not covered: OpenCode's file tools (the fake engine can't make tool calls), its full-screen interface, a box with OpenCode alone, and a real model.
 
+### Five more harnesses: oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw (same day)
+
+A test box `vt` with all seven harnesses (`harnesses = ['claude', 'codex', 'hermes', 'omp', 'openclaw', 'opencode', 'pi']`), no extra tool packs, the fake engine and the network `off`.
+
+- `ezbx build` installed all seven harnesses in the shared harness stage with install scripts off (and `pip --no-deps --require-hashes --only-binary :all:` for Hermes Agent's 61 pinned wheels). The image read back `2.1.330 (Claude Code)`, `codex-cli 0.171.0`, `Hermes Agent v0.19.0 (2026.7.20)`, `omp/19.1.0`, `OpenClaw 2026.11.6 (06afb10)`, `opencode v2.3.2` and Pi `1.5.0`, and is 4.28 GB with `fd`, `ripgrep` and `python3` (pulled in by the harnesses' `tools` lists).
+- `ezbx up --no-doctor` rendered all seven harnesses' configs into the agent's home volume — JSON for Pi, OpenCode, Claude Code and OpenClaw, TOML for Codex CLI (`~/.codex/config.toml`), and YAML for oh-my-pi (`~/.omp/agent/models.yml` and `config.yml`) and Hermes Agent (`~/.hermes/config.yaml`) — and set each harness's offline environment variables on the box container.
+- All seven harnesses answered `"say hi"` through the gateway with `"Hello from the fake engine."`:
+  - `pi -p "say hi"` and `opencode run "say hi"` answered over `/v1/chat/completions` with 0 blocked proxy requests.
+  - `omp -p "say hi"` (running under its pinned `@oven/bun-linux-x64-baseline` binary) answered over `/v1/chat/completions`; its non-interactive startup starts a background catalog refresh (`catalog.stencil.so` and 6 provider discovery hosts), which the gateway blocked with 403 (`network_off`) without affecting the reply.
+  - `codex exec --skip-git-repo-check "say hi"` sent `POST /v1/responses` to the gateway, which translated it to the engine's `/v1/chat/completions` and streamed back OpenAI Responses SSE events. With `check_for_update_on_startup = false`, `analytics.enabled = false` and `features = { apps = false, plugins = false, remote_plugin = false }` in `~/.codex/config.toml`, it made 0 blocked proxy requests (down from 4 startup calls to `github.com`, `api.github.com`, `chatgpt.com` and `ab.chatgpt.com`).
+  - `claude -p "say hi"` sent `POST /v1/messages` to the gateway, which stripped `X-Api-Key`, translated the request to `/v1/chat/completions`, and returned Anthropic Messages SSE events, with 0 blocked proxy requests.
+  - `hermes chat -q "say hi"` answered over `/v1/chat/completions` with 0 blocked proxy requests once `~/.hermes/config.yaml` set `security.tirith_enabled: false` (skipping a GitHub release check for `tirith`) and `model.context_length: 131072` (satisfying Hermes Agent's 64,000-token minimum and short-circuiting its OpenRouter metadata lookup).
+  - `openclaw agent exec "say hi"` answered over `/v1/chat/completions` with 0 blocked proxy requests once `agents.defaults.models` in `~/.openclaw/openclaw.json` was rendered as a keyed record (`"ezbx/<id>": {}`).
+- Every new protection was mutation-checked (17 of 17 caught).
+
+Not covered: tool calls and interactive sessions for the five new harnesses with a real model.
+
 ## Limits of this result
 
 - On the test machine, public DNS servers didn't answer even from the outside network, so the "public DNS blocked" checks prove less than they appear to. The checks against Docker Desktop's own DNS server, which did answer from the outside, are the meaningful ones.

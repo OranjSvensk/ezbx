@@ -103,9 +103,9 @@ Each harness is a folder, `harnesses/<id>/`, with a `manifest.json` and an insta
 - **Verified:** nothing ships without a recorded install check.
 - **Pinned:** versions are pinned and recorded in `ezbx.lock`, so a rebuild gives the same box (see [build.md](build.md)).
 - **Tools:** programs such as ripgrep, Chromium or FFmpeg come from a catalogue of verified tools and tool packs, chosen in `ezbx.toml` and built into the image. The agent can't install programs itself.
-- **Config generation:** the harness template is filled from the selected engine adapter's model list, so each harness points at the gateway automatically.
-- **Candidates:** Pi, oh-my-pi (a separate project from Pi), OpenCode, Codex CLI, Claude Code, Hermes Agent and OpenClaw. Daily-driver agents such as Hermes Agent and OpenClaw may need extra services or different runtimes, so they come after the coding harnesses.
-- **Autonomy flag:** each harness's "skip approvals" mode is set only inside the box and is documented per harness (**verify** names against current docs).
+- **Config generation:** the harness template is filled from the selected engine adapter's model list (in JSON, TOML or YAML), so each harness points at the gateway automatically.
+- **Included harnesses:** Pi, OpenCode, oh-my-pi (a separate project from Pi), Codex CLI, Claude Code, Hermes Agent and OpenClaw.
+- **Autonomy flag:** each harness's "skip approvals" mode is set only inside the box and is recorded in its manifest.
 
 ## 8. Snapshots and rewind
 

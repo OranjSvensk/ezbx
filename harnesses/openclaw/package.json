@@ -1,0 +1,8 @@
+{
+  "name": "ezbx-harness-openclaw",
+  "private": true,
+  "description": "OpenClaw for the ezbx box image.",
+  "dependencies": {
+    "openclaw": "2026.11.6"
+  }
+}

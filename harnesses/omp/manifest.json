@@ -1,0 +1,95 @@
+{
+  "schema": 1,
+  "id": "omp",
+  "name": "oh-my-pi",
+  "kind": "coding",
+
+  "install": {
+    "type": "npm",
+    "package": "@oh-my-pi/pi-coding-agent",
+    "version": "19.1.0",
+    "script": "install.sh",
+    "lockfile": "package-lock.json"
+  },
+
+  "binary": "omp",
+  "runtime": "node",
+  "tools": ["fd", "ripgrep"],
+
+  "env": {
+    "PI_OFFLINE": "1",
+    "PI_SKIP_VERSION_CHECK": "1",
+    "OMP_OFFLINE": "1"
+  },
+
+  "config": [
+    {
+      "path": "~/.omp/agent/models.yml",
+      "mode": "0600",
+      "format": "yaml",
+      "content": {
+        "providers": {
+          "ezbx": {
+            "baseUrl": "${gateway.baseUrl}",
+            "api": "openai-completions",
+            "apiKey": "${gateway.key}",
+            "compat": {
+              "supportsDeveloperRole": false,
+              "supportsReasoningEffort": false
+            },
+            "models": {
+              "$each": "models",
+              "as": {
+                "id": "${id}",
+                "name": "${name}",
+                "reasoning": "${reasoning}",
+                "input": "${input}",
+                "contextWindow": "${contextWindow}",
+                "maxTokens": "${maxTokens}",
+                "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "path": "~/.omp/agent/config.yml",
+      "mode": "0600",
+      "format": "yaml",
+      "content": {
+        "defaultProvider": "ezbx",
+        "defaultModel": "${models.default.id}",
+        "defaultThinkingLevel": "medium",
+        "models": {
+          "offline": true
+        }
+      }
+    }
+  ],
+
+  "launch": {
+    "command": ["omp"],
+    "cwd": "/workspace"
+  },
+
+  "autonomy": {
+    "flag": null,
+    "note": "Like Pi, oh-my-pi runs its tools directly inside the working folder without a separate approval-skipping flag."
+  },
+
+  "network": {
+    "domains": [],
+    "optional": {}
+  },
+
+  "secrets": [],
+
+  "verified": {
+    "version": "19.1.0",
+    "status": "verified",
+    "observedOn": "2026-11-22",
+    "reverify": false,
+    "notes": "oh-my-pi (@oh-my-pi/pi-coding-agent) runs on the Bun runtime and ships prebuilt Linux x64 native bindings (@oh-my-pi/pi-natives-linux-x64). Its lockfile pins both @oh-my-pi/pi-coding-agent 19.1.0 and @oven/bun-linux-x64-baseline 1.4.5, installed with scripts off, and bin/omp runs the CLI under that pinned Bun executable. Configured through ~/.omp/agent/models.yml and config.yml (rendered as YAML) pointing at the gateway; omp -p answers through the gateway while the gateway blocks its background catalog discovery calls when the network is off."
+  }
+}
