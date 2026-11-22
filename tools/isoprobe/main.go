@@ -2,7 +2,7 @@
 //
 // Each flag names one thing that must work or must fail. The probe prints
 // one line per check and exits with status 1 if any check went the wrong way.
-// It is a test tool for the EZBox isolation design, not part of a box.
+// It is a test tool for the ezbx isolation design, not part of a box.
 //
 //	isoprobe -allow-http http://gateway:8000/v1/models \
 //	         -scan gateway -open gateway:8000 \

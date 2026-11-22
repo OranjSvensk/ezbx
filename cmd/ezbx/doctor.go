@@ -53,7 +53,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	if *asJSON {
 		rep.PrintJSON(stdout)
 	} else {
-		fmt.Fprintf(stdout, "EZBox doctor, box %q\n", *box)
+		fmt.Fprintf(stdout, "ezbx doctor, box %q\n", *box)
 		rep.Print(stdout)
 	}
 	if rep.Failed() {

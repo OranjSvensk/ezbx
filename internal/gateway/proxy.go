@@ -321,7 +321,7 @@ func (p *Proxy) refuse(w http.ResponseWriter, e *entry, reason string) {
 func blockMessage(reason, host string) string {
 	switch reason {
 	case reasonNetworkOff:
-		return "Blocked: the EZBox network is off. Run `ezbx net allow " + hostOnly(host) + "` or `ezbx net on` on the host to change it."
+		return "Blocked: the ezbx network is off. Run `ezbx net allow " + hostOnly(host) + "` or `ezbx net on` on the host to change it."
 	case reasonNotAllowed:
 		return "Blocked: " + hostOnly(host) + " is not on the allowlist. Run `ezbx net allow " + hostOnly(host) + "` on the host to approve it."
 	case reasonLocalAddress:
@@ -329,7 +329,7 @@ func blockMessage(reason, host string) string {
 	case reasonPort:
 		return "Blocked: only ports 80 and 443 are allowed through the proxy."
 	}
-	return "Blocked by the EZBox network rules."
+	return "Blocked by the ezbx network rules."
 }
 
 func hostOnly(hostport string) string {

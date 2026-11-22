@@ -14,7 +14,7 @@ A harness is an agent tool that runs inside the box. Each lives in `harnesses/<i
 | `binary` | yes | Command name that must exist after install: lowercase letters, digits, dots and dashes only, because it becomes a word in the image's build script. |
 | `runtime` | yes | `node`, `python` or `binary`. Tells the image builder which toolchain to include. |
 | `tools` | no | Tool ids from the catalogue (`catalog/tools/`) the harness always needs, built into the box with it whatever the config chooses. Pi needs `fd` and `ripgrep`. See [build.md](build.md). |
-| `env` | no | Environment variables set in the box for this harness. Never secrets, and never the variables EZBox sets itself (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `ALL_PROXY`, `HOME`, `PATH`, `USER`), since changing the proxy settings could send traffic past the network switch. Two harnesses in one box may not set the same variable differently. |
+| `env` | no | Environment variables set in the box for this harness. Never secrets, and never the variables ezbx sets itself (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `ALL_PROXY`, `HOME`, `PATH`, `USER`), since changing the proxy settings could send traffic past the network switch. Two harnesses in one box may not set the same variable differently. |
 | `config` | no | Config files to generate (see below). |
 | `launch` | yes | Command and working directory used by `ezbx shell <id>`. |
 | `autonomy` | yes | The flag that skips approval prompts, or `null` with a note. Only ever used inside the box. |
@@ -100,7 +100,7 @@ Tested: Pi's rendered config, with no hand edits, worked inside the box against 
 ```
 
 `status` is one of:
-- `verified`: installed and used in an EZBox image, with the date and version recorded.
+- `verified`: installed and used in an ezbx image, with the date and version recorded.
 - `observed-in-prior-setup`: worked elsewhere, still to be re-checked here. `ezbx init` marks these as unverified.
 - `unverified`: listed only. Not offered by default.
 
@@ -108,6 +108,6 @@ Tested: Pi's rendered config, with no hand edits, worked inside the box against 
 
 1. No secrets in a manifest, ever. Keys stay on the host and the gateway injects them.
 2. Pin exact versions and record them in `ezbx.lock`.
-3. Do not mark a harness `verified` until it has actually been built and used in an EZBox image.
+3. Do not mark a harness `verified` until it has actually been built and used in an ezbx image.
 4. Keep `network.domains` as small as possible. Anything optional goes under `optional`.
 5. Autonomy flags are documented per harness and checked against that harness's current docs.

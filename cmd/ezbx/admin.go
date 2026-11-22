@@ -64,7 +64,7 @@ func runAdminShell(args []string, stdout, stderr io.Writer) int {
 	}
 	r := &box.Runner{Docker: dockerIn}
 	n := box.NamesFor(t.name)
-	// The home volume must be EZBox's own: docker run would quietly make an
+	// The home volume must be ezbx's own: docker run would quietly make an
 	// unlabelled one otherwise.
 	if ok, err := r.Exists(ctx, "volume", n.Home); err != nil {
 		return report(stderr, err)
@@ -199,13 +199,13 @@ func stateDirFor(t target) (string, error) {
 	if t.cfg != nil {
 		_, b := t.cfg.Only()
 		if ws, err := workspaceOf(b); err == nil && (paths.Within(ws, dir) || paths.Within(dir, ws)) {
-			return "", fmt.Errorf("the workspace %s and the state folder %s overlap, so EZBox won't remove the state folder. Move one of them", ws, dir)
+			return "", fmt.Errorf("the workspace %s and the state folder %s overlap, so ezbx won't remove the state folder. Move one of them", ws, dir)
 		}
 	}
 	return dir, nil
 }
 
-// runDestroy removes everything EZBox made for a box, never the workspace.
+// runDestroy removes everything ezbx made for a box, never the workspace.
 func runDestroy(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("destroy", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -299,7 +299,7 @@ func runDestroy(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if len(list) == 0 {
-		fmt.Fprintf(stdout, "EZBox has nothing for box %q on this computer. Nothing to remove.\n", t.name)
+		fmt.Fprintf(stdout, "ezbx has nothing for box %q on this computer. Nothing to remove.\n", t.name)
 		return 0
 	}
 
@@ -323,7 +323,7 @@ func runDestroy(args []string, stdout, stderr io.Writer) int {
 	for _, k := range keptImages {
 		fmt.Fprintf(stdout, "  the image %s, because another container uses it\n", k)
 	}
-	fmt.Fprintln(stdout, "  base images Docker downloaded to build EZBox's (node, golang); they aren't EZBox's own. Remove them with docker image rm if you like.")
+	fmt.Fprintln(stdout, "  base images Docker downloaded to build ezbx's (node, golang); they aren't ezbx's own. Remove them with docker image rm if you like.")
 	if len(busyNow) > 0 {
 		fmt.Fprintf(stdout, "Running now, and ended by this: %s\n", strings.Join(busyNow, "; "))
 	}

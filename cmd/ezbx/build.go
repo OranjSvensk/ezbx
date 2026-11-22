@@ -72,7 +72,7 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("build", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfgFlag := fs.String("config", "", "config file; its tools setting decides what goes into the box image")
-	prune := fs.Bool("prune", false, "then remove EZBox's older images, keeping the current ones and the ones before them")
+	prune := fs.Bool("prune", false, "then remove ezbx's older images, keeping the current ones and the ones before them")
 	yes := fs.Bool("yes", false, "with --prune, remove without asking")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -188,7 +188,7 @@ func toolsLine(ids []string) string {
 	return strings.Join(ids, ", ")
 }
 
-// pruneImages removes EZBox's older gateway and box images after asking.
+// pruneImages removes ezbx's older gateway and box images after asking.
 // The current images and the ones they replaced are kept, and so is any
 // image a container uses, running or stopped.
 func pruneImages(ctx context.Context, dirs paths.Dirs, stdout, stderr io.Writer, yes bool, current ...images.Spec) int {
@@ -205,10 +205,10 @@ func pruneImages(ctx context.Context, dirs paths.Dirs, stdout, stderr io.Writer,
 		fmt.Fprintf(stdout, "kept %s: a container uses it (ezbx down first to remove it)\n", t)
 	}
 	if len(old) == 0 {
-		fmt.Fprintln(stdout, "No older EZBox images to remove.")
+		fmt.Fprintln(stdout, "No older ezbx images to remove.")
 		return 0
 	}
-	fmt.Fprintln(stdout, "\nOlder EZBox images (the current ones and the ones before them are kept):")
+	fmt.Fprintln(stdout, "\nOlder ezbx images (the current ones and the ones before them are kept):")
 	for _, t := range old {
 		fmt.Fprintln(stdout, "  "+t)
 	}

@@ -209,7 +209,7 @@ func (rec Record) Keep(current ...Spec) map[string]bool {
 	return keep
 }
 
-// Old lists EZBox's own gateway and box images that prune may remove: those
+// Old lists ezbx's own gateway and box images that prune may remove: those
 // labelled ezbx.managed, with a name, not kept, and not used by any
 // container (running or stopped). The used ones are listed apart.
 func (r *Runner) Old(ctx context.Context, keep map[string]bool) (old, inUse []string, err error) {

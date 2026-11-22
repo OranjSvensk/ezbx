@@ -7,7 +7,7 @@
 # OpenCode's own npm package (@opencode/cli) is only a launcher: its command
 # is a stub until its postinstall script copies the real program out of a
 # platform package, and that script runs npm install by itself when the
-# platform package is missing. EZBox keeps install scripts off, so the
+# platform package is missing. ezbx keeps install scripts off, so the
 # lockfile pins the platform package directly instead, with its integrity
 # hash. It holds one prebuilt program and has no install script or
 # dependencies.

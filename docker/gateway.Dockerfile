@@ -1,4 +1,4 @@
-# EZBox gateway image: the ezbx binary alone, running as a non-root user.
+# ezbx gateway image: the ezbx binary alone, running as a non-root user.
 #
 # ezbx build builds it from the files carried inside the ezbx program. To
 # build it by hand from the repository root (for development):

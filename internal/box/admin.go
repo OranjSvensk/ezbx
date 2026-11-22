@@ -63,19 +63,19 @@ func HomeRestoreArgs(box, image string) []string {
 }
 
 // Exists reports whether a container, network or volume with this exact name
-// exists, refusing one EZBox didn't make.
+// exists, refusing one ezbx didn't make.
 func (r *Runner) Exists(ctx context.Context, kind, name string) (bool, error) {
 	f, err := r.lookup(ctx, kind, name)
 	if err != nil || !f.exists {
 		return false, err
 	}
 	if !f.managed {
-		return false, fmt.Errorf("a %s named %s exists, but EZBox didn't create it, so EZBox won't touch it", kind, name)
+		return false, fmt.Errorf("a %s named %s exists, but ezbx didn't create it, so ezbx won't touch it", kind, name)
 	}
 	return true, nil
 }
 
-// RemoveVolume removes the box's home volume, if it is EZBox's.
+// RemoveVolume removes the box's home volume, if it is ezbx's.
 func (r *Runner) RemoveVolume(ctx context.Context, name string) (bool, error) {
 	ok, err := r.Exists(ctx, "volume", name)
 	if err != nil || !ok {
@@ -93,7 +93,7 @@ func HomeVolumeArgs(box string) []string {
 	return Plan{Box: box, Names: NamesFor(box)}.HomeVolumeArgs()
 }
 
-// LocalImage is an EZBox image on this computer.
+// LocalImage is an ezbx image on this computer.
 type LocalImage struct {
 	ID, Name, Size string // Name is repository:tag, or <none>:<none>
 }

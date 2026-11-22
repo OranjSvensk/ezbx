@@ -26,7 +26,7 @@ type Facts struct {
 	Catalog      *tools.Catalog     // the tool catalogue
 	DockerMemory int64              // bytes; 0 if unknown
 	Home         string
-	Own          []string // EZBox's config and state folders
+	Own          []string // ezbx's config and state folders
 	System       []string // folders that may never be the workspace
 	Existing     *config.Config
 }

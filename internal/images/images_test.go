@@ -521,7 +521,7 @@ func TestKeepAndOld(t *testing.T) {
 		t.Errorf("an image a container uses is kept and named: %s", got)
 	}
 	if !strings.Contains(f.calls[0], "--filter label=ezbx.managed=true") {
-		t.Error("only EZBox's own images may be listed", f.calls)
+		t.Error("only ezbx's own images may be listed", f.calls)
 	}
 	if err := f.runner().Remove(context.Background(), "ezbx-box:dev"); err == nil || !strings.Contains(err.Error(), "used by a container") {
 		t.Error(err)

@@ -1,6 +1,6 @@
 # Security policy
 
-EZBox is in early design and has no released versions yet.
+ezbx is in early design and has no released versions yet.
 
 ## Reporting a problem
 

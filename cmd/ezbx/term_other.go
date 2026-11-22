@@ -16,3 +16,9 @@ func isTerminal(f *os.File) bool {
 	}
 	return true
 }
+
+// enableColor reports whether terminal f takes colour codes. Only a "dumb"
+// terminal is known not to.
+func enableColor(f *os.File) bool {
+	return os.Getenv("TERM") != "dumb"
+}

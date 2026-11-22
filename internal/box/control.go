@@ -15,14 +15,14 @@ func (e ErrNotUp) Error() string {
 }
 
 // Running reports whether a container exists and is running. It refuses a
-// container with that name that EZBox didn't create.
+// container with that name that ezbx didn't create.
 func (r *Runner) Running(ctx context.Context, name string) (bool, error) {
 	f, err := r.lookup(ctx, "container", name)
 	if err != nil || !f.exists {
 		return false, err
 	}
 	if !f.managed {
-		return false, fmt.Errorf("a container named %s exists, but EZBox didn't create it, so EZBox won't use it", name)
+		return false, fmt.Errorf("a container named %s exists, but ezbx didn't create it, so ezbx won't use it", name)
 	}
 	out, err := r.run(ctx, "container", "inspect", "--format", "{{.State.Running}}", name)
 	if err != nil {

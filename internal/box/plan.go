@@ -1,4 +1,4 @@
-// Package box starts and stops one EZBox box: two Docker networks, the
+// Package box starts and stops one ezbx box: two Docker networks, the
 // gateway container and the box container, set up exactly as proven in
 // docs/isolation-test.md.
 //
@@ -279,7 +279,7 @@ func CheckWorkspace(ws, home string, own []string, system []string) error {
 	}
 	for _, d := range own {
 		if d != "" && (paths.Within(ws, d) || paths.Within(d, ws)) {
-			return fmt.Errorf("workspace %s overlaps EZBox's own folder %s, which holds the admin token; choose another folder", ws, d)
+			return fmt.Errorf("workspace %s overlaps ezbx's own folder %s, which holds the admin token; choose another folder", ws, d)
 		}
 	}
 	for _, d := range system {

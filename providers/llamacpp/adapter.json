@@ -43,6 +43,6 @@
   "verified": {
     "status": "docs-only",
     "on": null,
-    "notes": "Sources disagree on the default port: most say 8080, two say current builds use 9931. EZBox treats both as hints and identifies the server by its responses. Detection only: you start and stop it yourself."
+    "notes": "Sources disagree on the default port: most say 8080, two say current builds use 9931. ezbx treats both as hints and identifies the server by its responses. Detection only: you start and stop it yourself."
   }
 }

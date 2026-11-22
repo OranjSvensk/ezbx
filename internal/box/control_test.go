@@ -149,7 +149,7 @@ func TestAdminNeedsARunningGateway(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 	if f.did("exec") {
-		t.Error("exec into a container EZBox didn't make")
+		t.Error("exec into a container ezbx didn't make")
 	}
 }
 

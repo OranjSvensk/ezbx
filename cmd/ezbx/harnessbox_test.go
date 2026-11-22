@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -40,5 +41,33 @@ func TestImageSpecsHarnesses(t *testing.T) {
 	}
 	if _, _, err := imageSpecs(nil, []string{"nope"}); err == nil || !strings.Contains(err.Error(), `unknown harness "nope"`) {
 		t.Errorf("unknown: %v", err)
+	}
+}
+
+// The banner is for people at a terminal: help that goes into a buffer (a
+// pipe or a script) gets only the usage text.
+func TestHelpBannerOnlyAtATerminal(t *testing.T) {
+	var out, errb strings.Builder
+	if code := run([]string{"--help"}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if strings.Contains(errb.String(), "███") || strings.Contains(errb.String(), "\033") {
+		t.Errorf("banner in non-terminal output:\n%s", errb.String())
+	}
+	if !strings.HasPrefix(errb.String(), "ezbx - boxed-up local AI agents") {
+		t.Errorf("usage: %.80q", errb.String())
+	}
+}
+
+// A file that isn't a terminal (help sent to a file) gets no banner either.
+func TestBannerSkipsFiles(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	showBanner(f)
+	if st, _ := f.Stat(); st.Size() != 0 {
+		t.Errorf("wrote %d bytes to a plain file", st.Size())
 	}
 }

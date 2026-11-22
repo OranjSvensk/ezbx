@@ -44,7 +44,7 @@ type found struct {
 }
 
 // lookup finds a container, network or volume by exact name and reports
-// whether EZBox made it. Docker's name filter matches parts of names, so the
+// whether ezbx made it. Docker's name filter matches parts of names, so the
 // exact name is checked here.
 func (r *Runner) lookup(ctx context.Context, kind, name string) (found, error) {
 	var args []string
@@ -79,13 +79,13 @@ func (r *Runner) CheckDocker(ctx context.Context) error {
 	v := strings.TrimSpace(string(out))
 	major, _ := strconv.Atoi(strings.SplitN(v, ".", 2)[0])
 	if major < 28 {
-		return fmt.Errorf("Docker Engine %s is too old: EZBox needs 28 or later for the isolated network option. Update Docker Desktop", v)
+		return fmt.Errorf("Docker Engine %s is too old: ezbx needs 28 or later for the isolated network option. Update Docker Desktop", v)
 	}
 	return nil
 }
 
 // Up creates and starts everything in the plan. It refuses to touch any
-// resource with one of the box's names that EZBox didn't create. If the box
+// resource with one of the box's names that ezbx didn't create. If the box
 // is already up, it says so and changes nothing.
 func (r *Runner) Up(ctx context.Context, p Plan) error {
 	if err := r.CheckDocker(ctx); err != nil {
@@ -121,7 +121,7 @@ func (r *Runner) Up(ctx context.Context, p Plan) error {
 			return err
 		}
 		if f.exists && !f.managed {
-			return fmt.Errorf("a container named %s exists, but EZBox didn't create it, so EZBox won't touch it. Rename or remove it yourself", name)
+			return fmt.Errorf("a container named %s exists, but ezbx didn't create it, so ezbx won't touch it. Rename or remove it yourself", name)
 		}
 		if f.exists {
 			return fmt.Errorf("box %q is already up (or partly up). To apply changes, run ezbx down, then ezbx up", p.Box)
@@ -129,7 +129,7 @@ func (r *Runner) Up(ctx context.Context, p Plan) error {
 	}
 
 	// Networks and the home volume may be left from an earlier run. They are
-	// reused only if EZBox made them, and the inside network only if it is
+	// reused only if ezbx made them, and the inside network only if it is
 	// still isolated.
 	if err := r.ensureNetwork(ctx, p.Names.Inside, p.InsideNetworkArgs(), true); err != nil {
 		return err
@@ -140,7 +140,7 @@ func (r *Runner) Up(ctx context.Context, p Plan) error {
 	if f, err := r.lookup(ctx, "volume", p.Names.Home); err != nil {
 		return err
 	} else if f.exists && !f.managed {
-		return fmt.Errorf("a volume named %s exists, but EZBox didn't create it, so EZBox won't use it", p.Names.Home)
+		return fmt.Errorf("a volume named %s exists, but ezbx didn't create it, so ezbx won't use it", p.Names.Home)
 	} else if !f.exists {
 		if _, err := r.run(ctx, p.HomeVolumeArgs()...); err != nil {
 			return fmt.Errorf("creating the home volume: %w", err)
@@ -233,7 +233,7 @@ func (r *Runner) ensureNetwork(ctx context.Context, name string, create []string
 		return err
 	}
 	if f.exists && !f.managed {
-		return fmt.Errorf("a network named %s exists, but EZBox didn't create it, so EZBox won't use it", name)
+		return fmt.Errorf("a network named %s exists, but ezbx didn't create it, so ezbx won't use it", name)
 	}
 	if !f.exists {
 		if _, err := r.run(ctx, create...); err != nil {
@@ -308,7 +308,7 @@ func (r *Runner) logTail(ctx context.Context, name string) string {
 	return " Its last lines:\n" + strings.TrimRight(string(out), "\n") + "\n"
 }
 
-// Down removes the box's containers and networks, only those EZBox made,
+// Down removes the box's containers and networks, only those ezbx made,
 // then the engine key file in stateDir, which only the gateway used. The
 // home volume, the rest of the state folder and the workspace are kept.
 func (r *Runner) Down(ctx context.Context, box, stateDir string) error {
@@ -342,7 +342,7 @@ func (r *Runner) Down(ctx context.Context, box, stateDir string) error {
 		removed++
 		r.say("removed %s %s", item.kind, item.name)
 	}
-	// The gateway is gone (or was never EZBox's), so its key goes too.
+	// The gateway is gone (or was never ezbx's), so its key goes too.
 	if had, err := RemoveKeyFile(stateDir); err != nil {
 		return err
 	} else if had {
@@ -353,7 +353,7 @@ func (r *Runner) Down(ctx context.Context, box, stateDir string) error {
 		r.say("box %q was not up; nothing to remove", box)
 	}
 	if len(refused) > 0 {
-		return fmt.Errorf("left alone because EZBox didn't create them: %s", strings.Join(refused, ", "))
+		return fmt.Errorf("left alone because ezbx didn't create them: %s", strings.Join(refused, ", "))
 	}
 	return nil
 }

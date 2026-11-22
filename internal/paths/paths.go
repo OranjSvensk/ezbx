@@ -1,4 +1,4 @@
-// Package paths finds EZBox's per-user folders: one for config and one for
+// Package paths finds ezbx's per-user folders: one for config and one for
 // state (the admin token, logs and, later, snapshots).
 //
 // State is never inside a workspace and is never mounted into a box.

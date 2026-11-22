@@ -70,7 +70,7 @@ func BaseImages(src fs.FS, dockerfile string) ([][2]string, error) {
 // and a test keeps the committed copy current.
 func Lock(src fs.FS, hs []harness.Manifest, cat *tools.Catalog) (string, error) {
 	var b strings.Builder
-	b.WriteString(`# ezbx.lock: the pinned inputs of the EZBox images.
+	b.WriteString(`# ezbx.lock: the pinned inputs of the ezbx images.
 #
 # Generated from the Dockerfiles, the harness folders and the tool catalogue,
 # so don't edit it by hand. After changing those, regenerate it with

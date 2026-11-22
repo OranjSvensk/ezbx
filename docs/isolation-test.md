@@ -1,6 +1,6 @@
 # Isolation test
 
-The central safety claim of EZBox is that the box can reach the gateway's model and proxy ports and nothing else. This page records how that is tested and what the results were.
+The central safety claim of ezbx is that the box can reach the gateway's model and proxy ports and nothing else. This page records how that is tested and what the results were.
 
 ## Setup
 
@@ -131,7 +131,7 @@ From a scratch `EZBX_HOME`, with the fake engine, a box named `vt` with all thre
 - In a container like the box (the agent user, every capability dropped, no-new-privileges, no network), every tool did real work: fd and rg found files, jq, python3, make and unzip ran, FFmpeg made a video and ffprobe read it, ImageMagick made and measured a PNG, and Chromium rendered a page and took a screenshot. Chromium needs `--no-sandbox`: its own sandbox needs kernel features the box drops on purpose.
 - `ezbx up` with the new images: about 10 seconds, the doctor passed 21 of 21. In the box, Pi answered through the gateway, `PI_OFFLINE` was set, Pi downloaded no tools of its own, and curl was refused by the proxy (`CONNECT tunnel failed, response 403`) with the network `off`.
 - `ezbx build --prune`, answered "n": it listed the older images, kept the ones containers use and said so, and removed nothing.
-- **Found and fixed:** the first prune offered images that containers were still using (Docker would have refused, but EZBox shouldn't offer them). Prune now leaves them out and names them.
+- **Found and fixed:** the first prune offered images that containers were still using (Docker would have refused, but ezbx shouldn't offer them). Prune now leaves them out and names them.
 
 Not covered: `ezbx init` building images live (covered by unit tests; a live run would have probed the engines on this computer, and the real engine was in use).
 
@@ -186,7 +186,7 @@ Not covered: a real engine started with a key, and Linux, where the gateway's us
 
 ### OpenCode, the second harness (2026-11-22)
 
-A test box with `harnesses = ['opencode', 'pi']`, no tools, the fake engine and the network `off`, built from nothing (no EZBox or base images on the computer beforehand).
+A test box with `harnesses = ['opencode', 'pi']`, no tools, the fake engine and the network `off`, built from nothing (no ezbx or base images on the computer beforehand).
 
 - `ezbx build` installed both harnesses from their lockfiles with install scripts off, in the one shared harness stage. The image read back `opencode v2.3.2` and Pi `1.5.0`, and is 1.05 GB with no tools. Its `ezbx.harnesses` label says `opencode,pi`.
 - `up` set each harness's `env` on the box container (`PI_OFFLINE`, `PI_SKIP_VERSION_CHECK`, `OPENCODE_DISABLE_MODELS_FETCH`), and `NO_PROXY` listed the gateway and loopback.

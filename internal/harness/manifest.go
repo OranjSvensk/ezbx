@@ -181,7 +181,7 @@ func (m Manifest) validate(folder string) error {
 			return fmt.Errorf("env name %q is not a valid variable name", k)
 		}
 		if reservedEnv[k] {
-			return fmt.Errorf("env %q is set by EZBox itself (the box's proxy and user settings); a harness can't change it", k)
+			return fmt.Errorf("env %q is set by ezbx itself (the box's proxy and user settings); a harness can't change it", k)
 		}
 		if secretWords.MatchString(k) {
 			return fmt.Errorf("env %q looks like a secret; secrets never go in a manifest", k)

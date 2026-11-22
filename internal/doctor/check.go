@@ -1,4 +1,4 @@
-// Package doctor checks that a box is set up the way EZBox's safety design
+// Package doctor checks that a box is set up the way ezbx's safety design
 // says it must be, and explains how to fix what isn't. Some checks run on
 // the host (Docker, the engine, the containers' settings) and some run in a
 // throwaway container on the box's inside network, seeing what the box sees.

@@ -1,6 +1,6 @@
 # Engine adapters (schema 1, draft)
 
-An engine is the program that runs the model on your machine. EZBox supports several, and each has a small adapter in `providers/<id>/adapter.json`. Adapters are plain data, so adding an engine doesn't need a code change unless it behaves in a new way.
+An engine is the program that runs the model on your machine. ezbx supports several, and each has a small adapter in `providers/<id>/adapter.json`. Adapters are plain data, so adding an engine doesn't need a code change unless it behaves in a new way.
 
 All engines are expected to offer an OpenAI-style HTTP API. That is what lets the gateway treat them alike.
 
@@ -13,7 +13,7 @@ All engines are expected to offer an OpenAI-style HTTP API. That is what lets th
 | `models` | Where to read each model fact from the engine's replies (id, context size, image input, loaded state). A `null` means the engine doesn't report it, so a configured default is used. |
 | `auth` | Whether the engine wants a key. The key's value is never stored here. |
 | `capabilities` | What the engine can do, as far as we know. |
-| `control` | Optional commands or calls to start, stop, check or unload. `null` means EZBox detects the engine but doesn't control it. |
+| `control` | Optional commands or calls to start, stop, check or unload. `null` means ezbx detects the engine but doesn't control it. |
 | `verified` | What has actually been checked, and when. |
 
 ## Detection
@@ -26,7 +26,7 @@ Ports are hints, never proof. Different versions and user setups use different p
 4. When more than one adapter matches the same server (some engines share routes), the more specific one wins: the one whose probes checked the most fields. Strata and llama.cpp both expose a health route, for example, and Strata's includes extra fields.
 5. Report what was found. If several engines are running, `ezbx init` asks which to use. An address that answered 401 or 403 and matched no adapter is reported as an engine that asks for a key, not as nothing found.
 
-A server that offers an OpenAI-style model list but matches no specific adapter is reported as an **OpenAI-compatible server** (the `openai` adapter). It works with the gateway, but EZBox doesn't claim to know which engine it is. That adapter adds no ports of its own, and any specific adapter that matches wins over it.
+A server that offers an OpenAI-style model list but matches no specific adapter is reported as an **OpenAI-compatible server** (the `openai` adapter). It works with the gateway, but ezbx doesn't claim to know which engine it is. That adapter adds no ports of its own, and any specific adapter that matches wins over it.
 
 If detection fails, you can give the address yourself in `ezbx.toml`, as `url` under `[engine.<id>]`. When `engine.use` names that engine, `ezbx up` checks only that address and leaves other engines on the computer alone.
 
@@ -56,7 +56,7 @@ The gateway and CLI read the engine's model list and fill in what the engine rep
 
 - **Strata** reports context size and image input in its model list, and a loaded state.
 - **Ollama** reports which models are loaded through `/api/ps`.
-- **LM Studio, Ollama and llama.cpp** report little else in the standard list. LM Studio's native list (`/api/v1/models`) has `max_context_length` and `loaded_instances`, which are not read yet. EZBox uses configured defaults (and can later ask each engine's native API) and lets you override them in `ezbx.local.toml`.
+- **LM Studio, Ollama and llama.cpp** report little else in the standard list. LM Studio's native list (`/api/v1/models`) has `max_context_length` and `loaded_instances`, which are not read yet. ezbx uses configured defaults (and can later ask each engine's native API) and lets you override them in `ezbx.local.toml`.
 
 These facts feed the harness config generator (see `harness-manifest.md`).
 

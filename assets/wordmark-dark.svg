@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 64" width="260" height="64" role="img" aria-label="ezbx">
+  <!-- Mark on the left, lowercase wordmark on the right. Light colors for dark backgrounds. -->
+  <g transform="translate(0,0)">
+    <rect x="6" y="6" width="52" height="52" rx="12" fill="none" stroke="#E6EDF3" stroke-width="4"/>
+    <path d="M20 22 L30 32 L20 42" fill="none" stroke="#E6EDF3" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M36 44 H46" fill="none" stroke="#2496ED" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <text x="76" y="44" font-family="'JetBrains Mono', 'Cascadia Code', Consolas, monospace" font-size="38" font-weight="600" fill="#E6EDF3">ezbx</text>
+</svg>

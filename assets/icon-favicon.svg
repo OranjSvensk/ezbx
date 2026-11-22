@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="32" height="32" role="img" aria-label="ezbx icon">
+  <!-- Simplified, heavier strokes so it still reads at 16px and 32px. No cursor line. -->
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#1F2328"/>
+  <path d="M18 21 L31 32 L18 43" fill="none" stroke="#E6EDF3" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M36 44 H48" fill="none" stroke="#2496ED" stroke-width="6" stroke-linecap="round"/>
+</svg>

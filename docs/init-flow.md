@@ -1,12 +1,12 @@
 # `ezbx init` flow (draft 0.1)
 
-`ezbx init` is the one command that takes a new user from nothing to a working box. This page describes what it asks, what it checks, what it writes and what happens when something goes wrong. Naming: the command and files are `ezbx`, the brand is EZBox.
+`ezbx init` is the one command that takes a new user from nothing to a working box. This page describes what it asks, what it checks, what it writes and what happens when something goes wrong. Naming: the command and files are `ezbx`, the brand is ezbx.
 
 **Built.** What the first version does differently from the design below, or doesn't do yet:
 
 - `--config FILE` is the config file to read and write, the same as for every other command (not a separate file of answers). If it exists, `init` starts from it.
 - `--plan` never prompts: it takes the defaults and flags, prints the plan, and stops, so it can be used in scripts.
-- `init` doesn't start engines. Strata's start command needs a preset name EZBox can't know. If no engine runs, `init` says so and can still write the config.
+- `init` doesn't start engines. Strata's start command needs a preset name ezbx can't know. If no engine runs, `init` says so and can still write the config.
 - An engine named with `--engine` that isn't running is written to the config anyway, and the plan says the box won't start yet.
 - For each model, `init` asks whether it is a reasoning model, because engines don't say and a reasoning model's answers can be cut off without it (`--reasoning` answers yes for all).
 - After the harnesses, `init` asks which tool packs and tools go into the box image ([build.md](build.md)). A new config starts with `pack:coding`. An existing config keeps its `tools` setting, and one written before tools existed keeps none, so taking every default still changes nothing. `--tools pack:coding,ffmpeg` or `--tools none` answers it.
@@ -18,7 +18,7 @@
 
 1. **Show the plan before changing anything.** Every run ends with a review screen listing exactly what will be created, downloaded and changed. Nothing happens until you confirm.
 2. **Safe defaults.** Network off, one writable folder, no extra folders exposed, no keys kept on disk (an engine's key is copied into the state folder for the gateway only while the box exists).
-3. **Never touch what it didn't create.** Every Docker resource EZBox makes carries a label, and EZBox only ever changes labelled resources.
+3. **Never touch what it didn't create.** Every Docker resource ezbx makes carries a label, and ezbx only ever changes labelled resources.
 4. **Re-runnable.** Running `init` again reads the existing setup, shows what would change, and offers to add a harness or switch engines. It never silently replaces your config or regenerates secrets.
 5. **Same questions without prompts.** Every prompt has a flag, so the whole flow can run unattended.
 6. **No telemetry.** The only network traffic is what Docker needs to pull images and what each harness's install needs.
@@ -74,7 +74,7 @@ A checklist grouped by kind (coding tools first, assistant-style tools after).
 
 ### 3. Folders
 
-1. **Writable workspace.** Default is a folder inside the user's home, shown with the exact path. It is created if missing. These are refused with a clear reason: a drive root, the home folder itself, a system folder, or a folder that already contains EZBox's own config or state.
+1. **Writable workspace.** Default is a folder inside the user's home, shown with the exact path. It is created if missing. These are refused with a clear reason: a drive root, the home folder itself, a system folder, or a folder that already contains ezbx's own config or state.
 2. **Read-only folders (optional, none by default).** If you add some, `init` scans them and lists any files that look like secrets (environment files, key files, credential files) and offers to mask them. Exposing a whole drive is allowed but gets an explicit warning that anything readable could be sent out if the network is later turned on.
 
 ### 4. Network mode
@@ -88,7 +88,7 @@ Memory defaults to **half of the memory Docker has**, rounded down to whole giga
 ### 6. Review
 
 ```text
-EZBox plan (nothing has been changed yet)
+ezbx plan (nothing has been changed yet)
 
 Engine        Strata (detected)
 Harnesses     Pi 1.5.0 (observed in a prior setup, will be re-checked on first build)
@@ -117,7 +117,7 @@ In order, each step recorded so a failed run can resume:
 6. Run `ezbx doctor`.
 7. Print what to do next, such as `ezbx shell pi`.
 
-If a step fails, `init` stops, explains in plain words, and leaves the earlier steps in place. Running `init` again resumes from the failed step. `ezbx destroy` removes everything EZBox created (never your workspace) if you want a clean slate.
+If a step fails, `init` stops, explains in plain words, and leaves the earlier steps in place. Running `init` again resumes from the failed step. `ezbx destroy` removes everything ezbx created (never your workspace) if you want a clean slate.
 
 ## Where files go
 
@@ -134,7 +134,7 @@ The folders per operating system are design decision 9 in [design.md](design.md)
 
 ## Docker resource naming
 
-All names start with `ezbx-` and include the box name, for example `ezbx-main-gateway`, `ezbx-main-box`, `ezbx-main-inside`, `ezbx-main-home`. Every resource also has a label (`ezbx.managed=true`) so tools can find exactly what belongs to EZBox.
+All names start with `ezbx-` and include the box name, for example `ezbx-main-gateway`, `ezbx-main-box`, `ezbx-main-inside`, `ezbx-main-home`. Every resource also has a label (`ezbx.managed=true`) so tools can find exactly what belongs to ezbx.
 
 ## Failure and edge cases
 

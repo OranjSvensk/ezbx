@@ -81,7 +81,7 @@ func TestExistsAndRemoveVolume(t *testing.T) {
 		t.Error(err)
 	}
 	if _, err := r.RemoveVolume(ctx, "ezbx-t-home"); err == nil || f.did("volume", "rm") {
-		t.Error("a volume EZBox didn't make must never be removed")
+		t.Error("a volume ezbx didn't make must never be removed")
 	}
 	f.volumes["ezbx-t-home"] = true
 	if ok, err := r.RemoveVolume(ctx, "ezbx-t-home"); !ok || err != nil || !f.did("volume", "rm", "ezbx-t-home") {
@@ -112,7 +112,7 @@ func TestImages(t *testing.T) {
 		t.Fatalf("%v %v", imgs, err)
 	}
 	if !strings.Contains(calls[0], "--filter label=ezbx.managed=true") {
-		t.Error("only EZBox's own images may be listed", calls)
+		t.Error("only ezbx's own images may be listed", calls)
 	}
 	if err := r.RemoveImage(context.Background(), imgs[1]); err != nil || calls[len(calls)-1] != "image rm bbb" {
 		t.Error("an image with no name is removed by its ID", calls)

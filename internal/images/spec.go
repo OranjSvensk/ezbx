@@ -1,4 +1,4 @@
-// Package images works out, builds and records EZBox's two images, the
+// Package images works out, builds and records ezbx's two images, the
 // gateway and the box, from the files carried inside the ezbx program. See
 // docs/build.md.
 //

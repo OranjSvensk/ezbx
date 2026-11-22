@@ -1,4 +1,4 @@
-// Package ezbx carries EZBox's own build files inside the ezbx program: the
+// Package ezbx carries ezbx's own build files inside the ezbx program: the
 // Dockerfiles, the harness and tool files, and the Go source the gateway
 // image is compiled from. So ezbx build works without a copy of the
 // repository. See docs/build.md.

@@ -1,4 +1,4 @@
-# EZBox box image: Node, git, the box's harnesses and the chosen tools, for
+# ezbx box image: Node, git, the box's harnesses and the chosen tools, for
 # an unprivileged user.
 #
 # ezbx build builds it from the files carried inside the ezbx program and

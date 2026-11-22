@@ -69,7 +69,7 @@ func MemoryFor(dockerBytes int64) string {
 func ConfigText(a Answers, now time.Time) string {
 	var b strings.Builder
 	w := func(format string, v ...any) { fmt.Fprintf(&b, format, v...) }
-	w("# EZBox config, written by ezbx init on %s.\n", now.Format("2006-01-02"))
+	w("# ezbx config, written by ezbx init on %s.\n", now.Format("2006-01-02"))
 	w("# Edit it by hand, or run ezbx init again. Unknown settings are refused.\n")
 	w("version = 1\n\n")
 

@@ -118,7 +118,7 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 	if major >= 28 {
 		r.add(gd, "Docker engine version", Pass, version, "")
 	} else {
-		r.add(gd, "Docker engine version", Fail, version, "EZBox needs Docker Engine 28 or later, for the isolated network option. Update Docker Desktop.")
+		r.add(gd, "Docker engine version", Fail, version, "ezbx needs Docker Engine 28 or later, for the isolated network option. Update Docker Desktop.")
 	}
 
 	// The engine on this computer.

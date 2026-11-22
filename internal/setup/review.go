@@ -75,7 +75,7 @@ func (p Plan) Review() string {
 	a := p.Result.Answers
 	var b strings.Builder
 	row := func(k, v string) { fmt.Fprintf(&b, "%-13s %s\n", k, v) }
-	b.WriteString("\nEZBox plan (nothing has been changed yet)\n\n")
+	b.WriteString("\nezbx plan (nothing has been changed yet)\n\n")
 
 	if e := p.Result.Engine; e != nil {
 		use := e.Name + " at " + e.URL

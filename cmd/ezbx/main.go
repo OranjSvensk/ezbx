@@ -1,4 +1,4 @@
-// Command ezbx is the EZBox command line tool.
+// Command ezbx is the ezbx command line tool.
 //
 // It starts and stops a box (ezbx up, ezbx down), finds inference engines
 // (ezbx engine detect), runs the gateway (ezbx gateway serve) and more.
@@ -22,7 +22,7 @@ import (
 	"github.com/ryan-ven/ezbx/providers"
 )
 
-const usage = `ezbx - EZBox command line tool (early development)
+const usage = `ezbx - boxed-up local AI agents (early development)
 
 Usage:
   ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--engine ID|auto|later]
@@ -62,7 +62,7 @@ Commands:
                   this program, with the tools chosen in ezbx.toml. Each
                   image is named after a hash of what goes into it, so an
                   image that is built already is skipped. --prune then
-                  removes older EZBox images, after asking.
+                  removes older ezbx images, after asking.
   up              Start the box described in ezbx.toml: its networks, the
                   gateway and the box, with the harness config filled in
                   from the engine's models. Then run the doctor.
@@ -85,9 +85,9 @@ Commands:
   reset           Back up, then give the box a fresh agent home and fresh
                   containers. Keeps the workspace, snapshots, approved hosts,
                   config and images. --restore ID puts a backed-up home back.
-  destroy         Remove everything EZBox made for the box: containers,
+  destroy         Remove everything ezbx made for the box: containers,
                   networks, the agent's home, the state folder (snapshots
-                  too) and EZBox's images. Never the workspace. Asks you to
+                  too) and ezbx's images. Never the workspace. Asks you to
                   type the box name first.
   net             Show the network mode, allowed and recently blocked
                   hosts. net off|allow|on changes the mode until the next
@@ -180,8 +180,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return runHealth(args[2:], stdout, stderr)
 		}
 	}
+	asked := len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h"
+	if asked {
+		showBanner(stderr)
+	}
 	fmt.Fprint(stderr, usage)
-	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+	if asked {
 		return 0
 	}
 	return 2

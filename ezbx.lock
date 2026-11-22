@@ -1,4 +1,4 @@
-# ezbx.lock: the pinned inputs of the EZBox images.
+# ezbx.lock: the pinned inputs of the ezbx images.
 #
 # Generated from the Dockerfiles, the harness folders and the tool catalogue,
 # so don't edit it by hand. After changing those, regenerate it with

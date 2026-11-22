@@ -29,7 +29,7 @@
         "update": "disable",
         "providers": {
           "ezbx": {
-            "name": "EZBox",
+            "name": "ezbx",
             "package": "@opencode/ai/providers/openai-compatible",
             "settings": {
               "baseURL": "${gateway.baseUrl}",
@@ -79,6 +79,6 @@
     "status": "verified",
     "observedOn": "2026-11-22",
     "reverify": false,
-    "notes": "The npm package @opencode/cli is a launcher whose command only works after its postinstall script, so the lockfile pins the platform package @opencode/cli-linux-x64-baseline (one prebuilt program) instead, installed with scripts off. Built into an EZBox box image beside Pi; opencode --version gives 'opencode v2.3.2'. On the isolated network with the network off, opencode run answered through the gateway with a fake engine. At every run it fetched its model catalogue from models.opencode.ai (refused by the gateway); OPENCODE_DISABLE_MODELS_FETCH=1 stops that, and with it no request left the box except to the gateway. Its talk with its own background service stays on the box's loopback (NO_PROXY). Not yet checked: its file tools with a real model, and its full-screen interface through ezbx shell."
+    "notes": "The npm package @opencode/cli is a launcher whose command only works after its postinstall script, so the lockfile pins the platform package @opencode/cli-linux-x64-baseline (one prebuilt program) instead, installed with scripts off. Built into an ezbx box image beside Pi; opencode --version gives 'opencode v2.3.2'. On the isolated network with the network off, opencode run answered through the gateway with a fake engine. At every run it fetched its model catalogue from models.opencode.ai (refused by the gateway); OPENCODE_DISABLE_MODELS_FETCH=1 stops that, and with it no request left the box except to the gateway. Its talk with its own background service stays on the box's loopback (NO_PROXY). Not yet checked: its file tools with a real model, and its full-screen interface through ezbx shell."
   }
 }

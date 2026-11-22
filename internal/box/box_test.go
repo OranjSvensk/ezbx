@@ -247,9 +247,9 @@ func TestCheckWorkspace(t *testing.T) {
 		vol:                            "root of a drive",
 		home:                           "home folder",
 		filepath.Dir(home):             "home folder",
-		state:                          "EZBox's own folder",
-		filepath.Join(state, "x"):      "EZBox's own folder",
-		filepath.Join(home, "appdata"): "EZBox's own folder",
+		state:                          "ezbx's own folder",
+		filepath.Join(state, "x"):      "ezbx's own folder",
+		filepath.Join(home, "appdata"): "ezbx's own folder",
 		filepath.Join(sys, "system32"): "system folder",
 		"relative":                     "full path",
 	}
@@ -597,10 +597,10 @@ func TestDownLeavesForeignAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := f.containers["ezbx-t-box"]; !ok {
-		t.Error("removed a container EZBox didn't make")
+		t.Error("removed a container ezbx didn't make")
 	}
 	if _, ok := f.networks["ezbx-t-inside"]; !ok {
-		t.Error("removed a network EZBox didn't make")
+		t.Error("removed a network ezbx didn't make")
 	}
 	if _, ok := f.containers["ezbx-t-gateway"]; ok {
 		t.Error("its own gateway should still be removed")

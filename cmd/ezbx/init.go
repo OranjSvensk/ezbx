@@ -85,7 +85,8 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	p := &setup.Prompter{In: bufio.NewReader(stdin), Out: stdout, Auto: *yes || *plan}
 
 	// 0. Preflight.
-	fmt.Fprintln(stdout, "EZBox setup")
+	showBanner(stdout)
+	fmt.Fprintln(stdout, "ezbx setup")
 	if err := preflight(ctx, stdout); err != nil {
 		return report(stderr, err)
 	}
@@ -195,10 +196,10 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 func preflight(ctx context.Context, w io.Writer) error {
 	ok := map[string]bool{"windows": true, "linux": true, "darwin": true}
 	if !ok[runtime.GOOS] || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
-		return fmt.Errorf("EZBox doesn't support %s/%s yet", runtime.GOOS, runtime.GOARCH)
+		return fmt.Errorf("ezbx doesn't support %s/%s yet", runtime.GOOS, runtime.GOARCH)
 	}
 	if _, err := exec.LookPath("docker"); err != nil {
-		return errors.New("the docker command isn't installed. Install Docker Desktop (https://docs.docker.com/desktop/), then run ezbx init again. EZBox doesn't install it for you")
+		return errors.New("the docker command isn't installed. Install Docker Desktop (https://docs.docker.com/desktop/), then run ezbx init again. ezbx doesn't install it for you")
 	}
 	r := &box.Runner{Docker: dockerIn}
 	err := r.CheckDocker(ctx)
