@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Actions are pinned to exact commits, so a moved tag cannot change what runs.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Privacy scan
+        run: |
+          sh scripts/privacy-scan-test.sh
+          sh scripts/privacy-scan.sh --all
+          sh scripts/privacy-scan.sh --history
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        run: go vet ./...
+      - name: Test with the race detector
+        run: go test -race ./...
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+      - name: Build release archives
+        run: |
+          set -eu
+          mkdir -p dist
+          tag="${GITHUB_REF_NAME}"
+          ldflags="-s -w -X main.version=${tag}"
+
+          for target in windows/amd64 windows/arm64 linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            stage="stage-${goos}-${goarch}"
+            mkdir -p "${stage}"
+            bin="ezbx"
+            if [ "${goos}" = "windows" ]; then
+              bin="ezbx.exe"
+            fi
+            CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -ldflags="${ldflags}" -o "${stage}/${bin}" ./cmd/ezbx
+            cp README.md LICENSE ezbx.toml.example "${stage}/"
+            if [ "${goos}" = "windows" ]; then
+              (cd "${stage}" && zip -q "../dist/ezbx-${tag}-${goos}-${goarch}.zip" "${bin}" README.md LICENSE ezbx.toml.example)
+            else
+              tar -C "${stage}" -czf "dist/ezbx-${tag}-${goos}-${goarch}.tar.gz" "${bin}" README.md LICENSE ezbx.toml.example
+            fi
+          done
+
+          ./stage-linux-amd64/ezbx --version
+          (cd dist && sha256sum ezbx-* > checksums.txt)
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          tag="${GITHUB_REF_NAME}"
+          notes_file="$(mktemp)"
+          cat <<EOF > "${notes_file}"
+          Early release ${tag}.
+
+          - **Verified platform:** Windows 11 with Docker Desktop (Engine 28+) and Strata across all seven harnesses (\`pi\`, \`opencode\`, \`omp\`, \`codex\`, \`claude\`, \`hermes\`, \`openclaw\`). Linux and macOS archives are included as untested/experimental builds.
+          - **Getting started:** Download an archive below (verify against \`checksums.txt\`) or install with \`go install github.com/ryan-ven/ezbx/cmd/ezbx@${tag}\`, then see [docs/getting-started.md](https://github.com/${GITHUB_REPOSITORY}/blob/${tag}/docs/getting-started.md).
+
+          EOF
+          gh release create "${tag}" dist/* --title "ezbx ${tag}" --notes-file "${notes_file}" --generate-notes

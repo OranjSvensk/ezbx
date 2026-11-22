@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -75,5 +76,27 @@ func TestBannerSkipsFiles(t *testing.T) {
 	showBanner(f)
 	if st, _ := f.Stat(); st.Size() != 0 {
 		t.Errorf("wrote %d bytes to a plain file", st.Size())
+	}
+}
+
+func TestVersionFlags(t *testing.T) {
+	orig := version
+	t.Cleanup(func() { version = orig })
+	version = "v0.1.0"
+
+	for _, arg := range []string{"--version", "-v", "version"} {
+		var out, errb strings.Builder
+		if code := run([]string{arg}, &out, &errb); code != 0 {
+			t.Fatalf("%s exit %d: %s", arg, code, errb.String())
+		}
+		want := "ezbx v0.1.0 (" + runtime.GOOS + "/" + runtime.GOARCH + ")\n"
+		if out.String() != want || errb.Len() != 0 {
+			t.Errorf("%s: got out=%q err=%q, want %q", arg, out.String(), errb.String(), want)
+		}
+	}
+
+	version = ""
+	if got := resolveVersion(); got == "" {
+		t.Error("resolveVersion returned empty string")
 	}
 }

@@ -1,6 +1,6 @@
 # ezbx design (draft 0.1)
 
-Status: first draft. Most of this is a proposal. Built so far: engine detection, the gateway (model route, egress proxy, admin API), config rendering for Pi, `ezbx doctor`, `ezbx up`/`down`, which create the networks, the gateway and the box from `ezbx.toml`, `ezbx shell`, `ezbx net` and `ezbx engine use` for a running box, `ezbx init`, the guided setup, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)). Items marked **verify** depend on facts I still need to confirm against current documentation before building.
+Status: `v0.1.0` early release (verified on Windows 11 with Docker Desktop and Strata across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`). Built: engine detection, the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)). Items marked **verify** depend on facts to confirm against live engines (such as LM Studio, Ollama and llama.cpp).
 
 ## 1. Goal
 

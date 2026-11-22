@@ -1,6 +1,6 @@
 # Security policy
 
-ezbx is in early design and has no released versions yet.
+ezbx is an early `0.x` release, currently verified on Windows 11 with Docker Desktop.
 
 ## Reporting a problem
 

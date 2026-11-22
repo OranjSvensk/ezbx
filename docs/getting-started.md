@@ -18,7 +18,15 @@ You need three things on your computer:
 
 ## 2. Install ezbx
 
-Clone the repository and install the `ezbx` command into your Go bin folder:
+Download a release archive from [GitHub Releases](https://github.com/ryan-ven/ezbx/releases), unpack `ezbx.exe` (or `ezbx`) onto your `PATH`, and check the SHA-256 checksum in `checksums.txt`.
+
+Or install with Go 1.27 or later:
+
+```text
+go install github.com/ryan-ven/ezbx/cmd/ezbx@v0.1.0
+```
+
+You can also build directly from a clone:
 
 ```text
 git clone https://github.com/ryan-ven/ezbx.git
@@ -29,6 +37,7 @@ go install ./cmd/ezbx
 Check that `ezbx` is on your `PATH`:
 
 ```text
+ezbx --version
 ezbx --help
 ```
 
