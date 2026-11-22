@@ -209,9 +209,16 @@ A test box `vt` with all seven harnesses (`harnesses = ['claude', 'codex', 'herm
   - `claude -p "say hi"` sent `POST /v1/messages` to the gateway, which stripped `X-Api-Key`, translated the request to `/v1/chat/completions`, and returned Anthropic Messages SSE events, with 0 blocked proxy requests.
   - `hermes chat -q "say hi"` answered over `/v1/chat/completions` with 0 blocked proxy requests once `~/.hermes/config.yaml` set `security.tirith_enabled: false` (skipping a GitHub release check for `tirith`) and `model.context_length: 131072` (satisfying Hermes Agent's 64,000-token minimum and short-circuiting its OpenRouter metadata lookup).
   - `openclaw agent exec "say hi"` answered over `/v1/chat/completions` with 0 blocked proxy requests once `agents.defaults.models` in `~/.openclaw/openclaw.json` was rendered as a keyed record (`"ezbx/<id>": {}`).
+- **With Strata and a real model (same day):** the same box `vt` (`network = "off"`) was started against Strata with a loaded reasoning model (`262,144`-token context, `reasoning = true`, `max_tokens = 8192`). `ezbx up` ran `ezbx doctor`, passing **22 of 22** checks. Each of the six newer harnesses was asked to read `note.txt` in `/workspace` (`The secret word is lantern.`) and write the secret word into its own `answer-<harness>.txt` file:
+  - `opencode run ...`: read `note.txt` and wrote `/workspace/answer-opencode.txt` (`"lantern"`) over 4 `/v1/chat/completions` requests in 56 seconds, with **0 blocked proxy requests**.
+  - `omp -p ...`: read `note.txt` and wrote `/workspace/answer-omp.txt` (`"lantern"`) over 3 `/v1/chat/completions` requests in 19 seconds (its 7 background catalog refresh requests were blocked with 403 `network_off`).
+  - `codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox ...`: read `note.txt` and wrote `/workspace/answer-codex.txt` (`"lantern"`) over 3 `/v1/responses` requests (including multi-turn `function_call` and `function_call_output` translation) in 18 seconds, with **0 blocked proxy requests**.
+  - `claude -p --dangerously-skip-permissions ...`: read `note.txt` and wrote `/workspace/answer-claude.txt` (`"lantern"`) over 3 `/v1/messages` requests (including multi-turn `tool_use` and `tool_result` translation) in 23 seconds, with **0 blocked proxy requests**.
+  - `hermes chat --yolo -q ...`: called its `read_file` and `write_file` tools to write `/workspace/answer-hermes.txt` (`"lantern"`) over 3 `/v1/chat/completions` requests in 27 seconds, with **0 blocked proxy requests**.
+  - `openclaw agent exec ...`: read `note.txt` and wrote `/workspace/answer-openclaw.txt` (`"lantern"`) over 4 `/v1/chat/completions` requests in 42 seconds, with **0 blocked proxy requests**.
 - Every new protection was mutation-checked (17 of 17 caught).
 
-Not covered: tool calls and interactive sessions for the five new harnesses with a real model.
+Not covered: full-screen interactive sessions for the six newer harnesses (which need a person at a terminal), and boxes containing each harness alone.
 
 ## Limits of this result
 

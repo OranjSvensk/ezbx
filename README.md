@@ -9,7 +9,7 @@
 
 ezbx is a planned one-click setup for running AI coding and agent tools inside a sandboxed container, while the model itself keeps running on your own machine.
 
-> **Status: early development.** Pi works end to end on Windows with Docker Desktop: `ezbx init` sets it up from nothing, builds the images and starts the box, and `ezbx shell pi` opens it, after taking a snapshot of the workspace that `ezbx rewind` can go back to. Six more harnesses — OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw — are built, pinned in `ezbx.lock` and answer through the gateway, tested with a test engine so far. Every command on the road to the first usable version below is built; other engines and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), and designs are in [docs/](docs/).
+> **Status: early development.** Pi works end to end on Windows with Docker Desktop: `ezbx init` sets it up from nothing, builds the images and starts the box, and `ezbx shell pi` opens it, after taking a snapshot of the workspace that `ezbx rewind` can go back to. Six more harnesses — OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw — are built, pinned in `ezbx.lock` and tested against a real model on Strata, including file tool calls in `/workspace` with the network `off`. Every command on the road to the first usable version below is built; other engines and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), and designs are in [docs/](docs/).
 
 ```text
 go install ./cmd/ezbx     from a clone; needs Go and Docker Desktop
