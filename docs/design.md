@@ -1,6 +1,6 @@
 # ezbx design (draft 0.1)
 
-Status: `v0.1.0` early release (verified on Windows 11 with Docker Desktop and Strata across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`). Built: engine detection, the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)). Items marked **verify** depend on facts to confirm against live engines (such as LM Studio, Ollama and llama.cpp).
+Status: `v0.1.1` early release (verified on Windows 11 with Docker Desktop and Strata across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`). Built: engine detection, the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)). Items marked **verify** depend on facts to confirm against live engines (such as LM Studio, Ollama and llama.cpp).
 
 ## 1. Goal
 
