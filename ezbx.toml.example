@@ -31,7 +31,8 @@ tools     = ["pack:coding"]       # built into the box: packs (pack:coding, pack
 
 # Optional, NOT SUPPORTED YET: folders the agent may READ but never change.
 # ezbx refuses to start while these are set, until hiding secret files in
-# them is built.
+# them is built. Design: docs/readonly.md (planned keys: path, name, mask,
+# unmask; common secret files are masked by default).
 [[box.main.readonly]]
 path = "~/projects"
 mask = [".env", "*.pem"]          # these will stay unreadable inside the box

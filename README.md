@@ -59,7 +59,7 @@ The goal: set up Pi with a local model on Strata, from nothing, using only `ezbx
 
 ## Safety note
 
-A container is a strong boundary but not a perfect one. It shares a kernel with its host, and anything you mount into it can be changed by the agent. A short threat model is in [docs/design.md](docs/design.md#11-threat-model-summary-to-expand), section 11. The full one will come with read-only folders, the next feature planned.
+A container is a strong boundary but not a perfect one. It shares a kernel with its host, and anything you mount into it can be changed by the agent. What ezbx protects, against whom, and the risks it leaves to you are in the [threat model](docs/threat-model.md). The most important one: check what the agent wrote (`ezbx review --diff`) before you run it outside the box.
 
 ## Contributing and security
 

@@ -89,7 +89,7 @@ Containers reach the host through a host alias. On Docker Desktop this worked fo
 
 - **User:** an unprivileged `agent` user. No `sudo`, no setuid tricks, `no-new-privileges` on, all Linux capabilities dropped.
 - **Writable:** only the workspace folder you choose (`/workspace`) plus the agent's own home volume.
-- **Optional read-only view:** you may expose extra host folders read-only. Common secret files are masked with empty overlays, and the `ezbx` scanner warns about other secret-like files in anything exposed.
+- **Optional read-only folders (designed, not built):** you may expose extra host folders read-only at `/readonly/<name>`. Common secret files are masked with empty overlays, and ezbx warns about other secret-like files in anything exposed. See [readonly.md](readonly.md).
 - **No Docker socket**, ever.
 - **Resource limits:** memory, CPU and process limits with sensible defaults, adjustable.
 - **Admin access:** reserved for the human. `ezbx admin shell` starts a separate, short-lived admin container from the same image, because root in the main box has no capabilities. It mounts the workspace and the agent's home, has no network unless asked, and nothing else in it lasts: programs for the agent come from the tool catalogue and `ezbx build`, so images stay pinned. See [admin.md](admin.md).
@@ -138,18 +138,9 @@ Language: Go, built as one cross-platform binary. The first milestone targets Wi
 - Secrets live in environment variables on the host in 0.1 (the host's credential store later), never in the repo or the image.
 - The repo has a pre-commit and CI privacy scan. Docs use placeholder paths such as `C:\Users\Example`.
 
-## 11. Threat model (summary, to expand)
+## 11. Threat model
 
-The box protects against:
-- Agent changes outside the writable folder.
-- Unrequested internet access (when the mode is `off` or `allow`).
-- Agents holding real cloud API keys.
-- Accidents that need an undo (snapshots).
-
-It does not fully protect against:
-- A container escape through a kernel or runtime bug, because containers share a kernel with their host.
-- Anything you mount read-write or expose read-only. The agent can read what you expose, and could send it out if the network mode allows.
-- A malicious model or harness working within the allowed network and folders.
+The full threat model is in [threat-model.md](threat-model.md): what is protected, against whom, each boundary with its controls and tests, and the risks that remain. In short, the box protects against agent changes outside the workspace, unrequested network access, and the agent holding the engine's key. It doesn't fully protect against a container escape, against the agent sending what it can read to a host the network mode allows, or against you running, outside the box, something the agent wrote in the workspace.
 
 ## 12. Milestones
 
@@ -182,6 +173,7 @@ It does not fully protect against:
 | 18 | The engine's key | `key_env` in `ezbx.toml` stays the only way to give it. `ezbx up` writes it to `engine-key` in the state folder, mounted read-only into the gateway only, which reads it with `--key-file`; `ezbx down` removes it. Nothing in `docker inspect` shows it. `ezbx engine use` keeps refusing keyed engines. See [gateway.md](gateway.md), section 3. |
 | 19 | Detection and the engine's key | Detection sends a key only to the exact `url` configured for that engine, never to hint ports, status-command addresses or other engines, and never through a redirect, so `key_env` without `url` is refused. A 401 or 403 from an address that matches no adapter is reported as asking for a key (or refusing the one sent), not as nothing found. The doctor sends no key; the gateway's `engine ready` check covers such an engine. Chosen over sending no key ever (an engine that guards its model list could then never be used) and over sending it to every candidate (any local program on a hint port would get it). |
 | 20 | Which harnesses a box image holds | Only the box's own (`harnesses` in `ezbx.toml`), so each box carries what it uses; the list is part of the image's name. The box Dockerfile has one harness stage that runs the install script of every harness folder in the build files, so a new harness needs no Dockerfile change. A harness's `env` is set on the box container by `ezbx up`. Chosen over building every verified harness into every box (OpenCode alone adds about 250 MB). See [build.md](build.md). |
+| 21 | Read-only folders and secret masking | Designed, not built. A read-only bind mount at `/readonly/<name>`, with an empty read-only overlay over each file or folder that matches a mask; a built-in mask list that `mask` adds to and only `unmask` can lift; content warnings rather than refusals; `ezbx shell` refuses a session when a new secret file isn't masked yet; the workspace's folder refusals plus no overlaps; network warnings, not refusals. See [readonly.md](readonly.md). |
 
 ## 14. Open questions
 
