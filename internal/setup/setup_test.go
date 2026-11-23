@@ -518,3 +518,18 @@ func TestDiskWarning(t *testing.T) {
 		t.Errorf("Size: %s, %s", Size(1536<<20), Size(820<<20))
 	}
 }
+
+// A model named by a file path is warned about on the review screen, with
+// the fix for llama.cpp.
+func TestReviewWarnsAboutFileNamedModels(t *testing.T) {
+	p := plan(t)
+	if strings.Contains(p.Review(), "by a file path") {
+		t.Fatal("warned with no file-named model")
+	}
+	e := *p.Result.Engine
+	e.ID, e.Name, e.Models = "llamacpp", "llama.cpp server", []detect.Model{{ID: "/models/big-model.gguf"}}
+	p.Result.Engine = &e
+	if text := p.Review(); !strings.Contains(text, "Warning: llama.cpp server names 1 model(s) by a file path") || !strings.Contains(text, "--alias NAME, then run ezbx init again") {
+		t.Errorf("no warning:\n%s", text)
+	}
+}

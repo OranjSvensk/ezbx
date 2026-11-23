@@ -326,3 +326,74 @@ func TestIsLoopback(t *testing.T) {
 		}
 	}
 }
+
+// LM Studio's model facts come from its own list, which says which models
+// are embedding models (left out: they can't chat) and how much context
+// each has. Its OpenAI list names every downloaded model, both kinds alike.
+func TestLMStudioLeavesOutEmbeddingModels(t *testing.T) {
+	srv := fakeEngine(t, map[string]string{
+		"/v1/models":     `{"object":"list","data":[{"id":"chat-model"},{"id":"embed-model"}]}`,
+		"/api/v1/models": `{"models":[{"type":"llm","key":"chat-model","max_context_length":32768,"loaded_instances":[]},{"type":"embedding","key":"embed-model","max_context_length":2048}]}`,
+	})
+	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
+	if len(res.Engines) != 1 || res.Engines[0].ID != "lmstudio" {
+		t.Fatalf("want lmstudio, got %+v", res.Engines)
+	}
+	ms := res.Engines[0].Models
+	if len(ms) != 1 || ms[0].ID != "chat-model" || ms[0].ContextWindow != 32768 {
+		t.Errorf("want only chat-model with 32768 context, got %+v", ms)
+	}
+}
+
+// A model named by a file path would put a host path into the box's harness
+// config; names that only contain a slash are not paths.
+func TestFileNamedModels(t *testing.T) {
+	for id, want := range map[string]bool{
+		`X:\models\big-model.gguf`:   true, // privacy-ok: made-up placeholder path
+		`D:\models\big-model`:        true, // privacy-ok: made-up placeholder path
+		"C:/models/big-model":        true, // privacy-ok: made-up placeholder path
+		"/models/big-model.gguf":     true,
+		"/models/big-model":          true,
+		`\\server\share\big-model`:   true, // privacy-ok: made-up placeholder path
+		"~/models/big-model":         true,
+		"big-model.GGUF":             true,
+		"weights.safetensors":        true,
+		"model.bin":                  true,
+		"big-model":                  false,
+		"org/big-model":              false,
+		"hf.co/org/big-model:Q4_K_M": false,
+		"big-model:latest":           false,
+		"a:b":                        false,
+	} {
+		if got := isFilePath(id); got != want {
+			t.Errorf("isFilePath(%q) = %v, want %v", id, got, want)
+		}
+	}
+	e := Engine{ID: "llamacpp", Name: "llama.cpp server", Models: []Model{{ID: "/models/big-model.gguf"}, {ID: "big-model"}}}
+	if got := FileNamed(e); len(got) != 1 || got[0] != "/models/big-model.gguf" {
+		t.Errorf("FileNamed: %v", got)
+	}
+	if w := FileNamedWarning(e); !strings.Contains(w, "1 model(s) by a file path") || !strings.Contains(w, "--alias NAME") {
+		t.Errorf("llama.cpp warning: %q", w)
+	}
+	e.ID, e.Name = "openai", "OpenAI-compatible server"
+	if w := FileNamedWarning(e); strings.Contains(w, "--alias") || !strings.Contains(w, "short model name") {
+		t.Errorf("other engine's warning: %q", w)
+	}
+	if w := FileNamedWarning(Engine{Models: []Model{{ID: "big-model"}}}); w != "" {
+		t.Errorf("no file-named models, but warned: %q", w)
+	}
+}
+
+// The llama.cpp server names its model by the file it loaded, and detection
+// says so.
+func TestLlamaCppFilePathModelIsFlagged(t *testing.T) {
+	srv := fakeEngine(t, map[string]string{
+		"/health":    `{"status":"ok"}`,
+		"/v1/models": `{"object":"list","data":[{"id":"/models/big-model.gguf"}]}`,
+	})
+	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
+	if len(res.Engines) != 1 || res.Engines[0].ID != "llamacpp" || len(FileNamed(res.Engines[0])) != 1 {
+		t.Fatalf("want llamacpp with one file-named model, got %+v", res.Engines)
+	}
+}

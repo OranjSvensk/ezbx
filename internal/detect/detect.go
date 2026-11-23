@@ -277,7 +277,7 @@ func (s *scan) check(ctx context.Context, base string) (Engine, bool) {
 	for _, m := range matches[1:] {
 		eng.AlsoMatched = append(eng.AlsoMatched, m.adapter.ID)
 	}
-	if doc, ok := s.fetch(ctx, base, best.adapter.OpenAI.ModelsPath, cache); ok {
+	if doc, ok := s.fetch(ctx, base, best.adapter.ListPath(), cache); ok {
 		eng.Models = readModels(doc, best.adapter.Models)
 		s.markLoaded(ctx, base, best.adapter.Models, eng.Models, cache)
 	}
@@ -400,6 +400,9 @@ func readModels(doc any, spec adapter.Models) []Model {
 		if !isString || name == "" {
 			continue
 		}
+		if skipped(item, arrayPath, spec.Skip) {
+			continue
+		}
 		m := Model{ID: name}
 
 		if v, ok := factAt(item, arrayPath, spec.ContextWindow); ok {
@@ -429,6 +432,65 @@ func readModels(doc any, spec adapter.Models) []Model {
 		out = append(out, m)
 	}
 	return out
+}
+
+// skipped reports whether the adapter's models.skip rule ("list[].field ==
+// value") leaves this model out, such as an embedding model.
+func skipped(item any, arrayPath string, rule *string) bool {
+	if rule == nil {
+		return false
+	}
+	path, want, _ := strings.Cut(*rule, " == ")
+	rel, ok := relative(path, arrayPath)
+	if !ok {
+		return false
+	}
+	v, ok := jsonpath.Get(item, rel)
+	return ok && fmt.Sprint(v) == want
+}
+
+// FileNamed lists the models an engine names by a file path on the host,
+// as llama.cpp's server does unless it is started with --alias. ezbx writes
+// model ids into the harness config inside the box, so such a name would
+// show the box a path on the host.
+func FileNamed(e Engine) []string {
+	var out []string
+	for _, m := range e.Models {
+		if isFilePath(m.ID) {
+			out = append(out, m.ID)
+		}
+	}
+	return out
+}
+
+// isFilePath reports whether a model id looks like a path to a file rather
+// than a name: a model file's extension, a drive letter, or a leading slash.
+// Names such as "org/model" or "hf.co/org/model:Q4" are not paths.
+func isFilePath(id string) bool {
+	low := strings.ToLower(id)
+	for _, ext := range []string{".gguf", ".bin", ".safetensors"} {
+		if strings.HasSuffix(low, ext) {
+			return true
+		}
+	}
+	if len(id) >= 3 && id[1] == ':' && (id[2] == '\\' || id[2] == '/') {
+		return true
+	}
+	return strings.HasPrefix(id, "/") || strings.HasPrefix(id, "\\") || strings.HasPrefix(id, "~/")
+}
+
+// FileNamedWarning explains FileNamed models and the fix, or is "" when there
+// are none.
+func FileNamedWarning(e Engine) string {
+	names := FileNamed(e)
+	if len(names) == 0 {
+		return ""
+	}
+	fix := "start the engine with a short model name"
+	if e.ID == "llamacpp" {
+		fix = "start llama-server with --alias NAME"
+	}
+	return fmt.Sprintf("%s names %d model(s) by a file path on this computer, and that path would be written into the harness config inside the box. To keep it out, %s", e.Name, len(names), fix)
 }
 
 // factAt reads one fact for one list item, when the adapter names a path.

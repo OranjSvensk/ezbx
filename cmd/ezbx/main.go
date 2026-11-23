@@ -265,6 +265,9 @@ func printTable(w io.Writer, res detect.Result) {
 			if len(e.AlsoMatched) > 0 {
 				fmt.Fprintf(w, "      (also looked like: %s; the most specific match was chosen)\n", strings.Join(e.AlsoMatched, ", "))
 			}
+			if fw := detect.FileNamedWarning(e); fw != "" {
+				fmt.Fprintf(w, "      warning: %s.\n", fw)
+			}
 		}
 	}
 	for _, r := range res.Refused {

@@ -67,11 +67,28 @@ type OpenAI struct {
 //
 //	"data[].status.value == loaded"   a field in the model list equals a value
 //	"/api/ps models[].name"           the model's id is listed by another route
+//
+// List is the route the facts are read from, when it isn't the OpenAI model
+// list (openai.modelsPath): an engine's own list often says more. Its ids
+// must be the ones the chat route accepts.
+//
+// Skip leaves out models that can't chat, such as embedding models, in the
+// form "models[].type == embedding": a field in the list equals a value.
 type Models struct {
+	List          string  `json:"list,omitempty"`
 	ID            string  `json:"id"`
 	ContextWindow *string `json:"contextWindow"`
 	Input         *string `json:"input"`
 	Loaded        *string `json:"loaded"`
+	Skip          *string `json:"skip,omitempty"`
+}
+
+// ListPath is the route the model facts are read from.
+func (a Adapter) ListPath() string {
+	if a.Models.List != "" {
+		return a.Models.List
+	}
+	return a.OpenAI.ModelsPath
 }
 
 // Auth describes the engine's key handling. It never holds a key.
@@ -175,9 +192,18 @@ func (m Models) validate() error {
 		return fmt.Errorf("models.id %q must point into a list, such as data[].id", m.ID)
 	}
 	prefix := list + "[]."
+	if m.List != "" && (!strings.HasPrefix(m.List, "/") || strings.ContainsAny(m.List, " ?#")) {
+		return fmt.Errorf("models.list %q must be a route such as /api/v1/models", m.List)
+	}
 	for name, p := range map[string]*string{"contextWindow": m.ContextWindow, "input": m.Input} {
 		if p != nil && !strings.HasPrefix(*p, prefix) {
 			return fmt.Errorf("models.%s %q must start with %q, like models.id", name, *p, prefix)
+		}
+	}
+	if m.Skip != nil {
+		path, want, found := strings.Cut(*m.Skip, " == ")
+		if !found || !strings.HasPrefix(path, prefix) || len(path) == len(prefix) || want == "" {
+			return fmt.Errorf("models.skip %q must be \"%sfield == value\"", *m.Skip, prefix)
 		}
 	}
 	if m.Loaded == nil {

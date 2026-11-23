@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/OranjSvensk/ezbx/internal/detect"
 	"github.com/OranjSvensk/ezbx/internal/harness"
 )
 
@@ -205,6 +206,11 @@ func (p Plan) Review() string {
 	if low := p.LowDisks(); len(low) > 0 {
 		fmt.Fprintf(&b, "\nWarning: about %s of free space is needed (images, Docker's build cache and snapshots), and %s has only %s.\n", Size(p.DiskNeed()), low[0].Path, Size(low[0].Free))
 		b.WriteString("Free some space first. docker system df shows what Docker keeps, and ezbx build --prune removes ezbx's old images.\n")
+	}
+	if e := p.Result.Engine; e != nil {
+		if w := detect.FileNamedWarning(*e); w != "" {
+			fmt.Fprintf(&b, "\nWarning: %s, then run ezbx init again.\n", w)
+		}
 	}
 
 	b.WriteString("\nWill create or change\n")

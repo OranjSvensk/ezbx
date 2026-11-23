@@ -48,7 +48,14 @@ A probe must expect at least one thing. `"optional": true` makes a probe add to 
 | `data[].status.value == loaded` | A field in the model list equals a value. |
 | `/api/ps models[].name` | The model is loaded if another route lists its id there. If that route doesn't answer, loaded stays unknown. |
 
+Two optional settings go with them:
+
+- `models.list` reads the facts from another route than the OpenAI model list (`openai.modelsPath`), such as an engine's own, richer list. Its ids must be the ones the chat route accepts.
+- `models.skip` leaves out models that can't chat, in the form `models[].type == embedding`: a field in the list equals a value.
+
 Anything else is refused when adapters load, so a fact is never silently ignored.
+
+Model ids are written into the harness config inside the box, so `ezbx engine detect`, the `ezbx init` review and `ezbx up` warn about a model named by a file path on the host (a model file's extension such as `.gguf`, a drive letter, or a leading slash), as llama.cpp's server does unless it is started with `--alias NAME`. Names such as `org/model` are not paths.
 
 ## Model facts
 
@@ -56,7 +63,8 @@ The gateway and CLI read the engine's model list and fill in what the engine rep
 
 - **Strata** reports context size and image input in its model list, and a loaded state.
 - **Ollama** reports which models are loaded through `/api/ps`.
-- **LM Studio, Ollama and llama.cpp** report little else in the standard list. LM Studio's native list (`/api/v1/models`) has `max_context_length` and `loaded_instances`, which are not read yet. ezbx uses configured defaults (and can later ask each engine's native API) and lets you override them in `ezbx.local.toml`.
+- **LM Studio**'s facts come from its own list (`models.list` is `/api/v1/models`), which gives each model's context size (`max_context_length`) and says which are embedding models; those are left out (`models.skip`), since its OpenAI list names every downloaded model alike. Its `loaded_instances` and `capabilities.vision` are not read yet.
+- **Ollama and llama.cpp** report little else in the standard list. ezbx uses configured defaults (and can later ask each engine's native API) and lets you override them in `ezbx.local.toml`.
 
 These facts feed the harness config generator (see `harness-manifest.md`).
 
@@ -73,9 +81,9 @@ Engines normally listen on the loopback address only, which is the safe default.
 | Engine | Status | Notes |
 |---|---|---|
 | Strata | **probed-live** (2026-11-20) | Detection fields and control commands were read from a running install. Context size and image input come from its model list. |
-| LM Studio | **verified** (2026-11-22) | Recognised by its native `GET /api/v1/models`; port 1234, and `lms server start`, `lms unload --all` and `lms server stop` confirmed. One with its API token on shows up as a generic OpenAI-compatible server. Its `/v1/models` also lists embedding models. |
+| LM Studio | **verified** (2026-11-22) | Recognised by its native `GET /api/v1/models`; port 1234, and `lms server start`, `lms unload --all` and `lms server stop` confirmed. One with its API token on shows up as a generic OpenAI-compatible server. Model facts come from its own list, which leaves out embedding models and gives the context size. |
 | Ollama | **verified** (2026-11-22) | Port 11434, `/api/ps` for the loaded state, and the `keep_alive: 0` unload confirmed on 0.40.17. Found even with no models. |
-| llama.cpp | **verified** (2026-11-22) | Build 12648 listens on 9931 by default; 8080 stays a hint for older builds. Detection only. Recognised by `/health` with a `status` field, which is a weak sign: another server with such a route would be labelled llama.cpp. Start it with `--alias NAME`, or the model is named by its file path. |
+| llama.cpp | **verified** (2026-11-22) | Build 12648 listens on 9931 by default; 8080 stays a hint for older builds. Detection only. Recognised by `/health` with a `status` field, which is a weak sign: another server with such a route would be labelled llama.cpp. Start it with `--alias NAME`, or the model is named by its file path (ezbx warns). |
 | OpenAI-compatible | generic | The fallback for any server with an OpenAI-style model list. |
 
 Do not change a status to `verified` until the adapter has been exercised against a real install and the date recorded. The three engines above were checked through the gateway run on the host, not yet from a box ([isolation-test.md](isolation-test.md)).

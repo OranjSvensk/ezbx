@@ -58,6 +58,12 @@ func TestValidation(t *testing.T) {
 		"context outside the list": strings.Replace(good, `"contextWindow": null`, `"contextWindow": "meta.n_ctx"`, 1),
 		"probe expects nothing":    strings.Replace(good, `"expect": {"hasFields": ["data[].id"]}`, `"expect": {}`, 1),
 		"hasLists with brackets":   strings.Replace(good, `"expect": {"hasFields": ["data[].id"]}`, `"expect": {"hasLists": ["data[]"]}`, 1),
+		"list not a route":         strings.Replace(good, `"id": "data[].id"`, `"list": "api/v1/models", "id": "data[].id"`, 1),
+		"list with a query":        strings.Replace(good, `"id": "data[].id"`, `"list": "/api/models?all=1", "id": "data[].id"`, 1),
+		"skip without ==":          strings.Replace(good, `"loaded": null`, `"loaded": null, "skip": "data[].type"`, 1),
+		"skip outside the list":    strings.Replace(good, `"loaded": null`, `"loaded": null, "skip": "other[].type == embedding"`, 1),
+		"skip without a field":     strings.Replace(good, `"loaded": null`, `"loaded": null, "skip": "data[]. == embedding"`, 1),
+		"skip without a value":     strings.Replace(good, `"loaded": null`, `"loaded": null, "skip": "data[].type == "`, 1),
 	}
 	for name, body := range bad {
 		if err := load(t, "demo", body); err == nil {
@@ -74,5 +80,26 @@ func TestLoadedForms(t *testing.T) {
 	}
 	if err := load(t, "demo", strings.Replace(good, `"expect": {"hasFields": ["data[].id"]}`, `"expect": {"hasLists": ["data"]}`, 1)); err != nil {
 		t.Errorf("hasLists should be accepted: %v", err)
+	}
+}
+
+// An engine's own model list and a skip rule load, and the list is read
+// instead of the OpenAI one.
+func TestListAndSkip(t *testing.T) {
+	body := strings.Replace(good, `"id": "data[].id", "contextWindow": null, "input": null, "loaded": null`,
+		`"list": "/api/v1/models", "id": "models[].key", "contextWindow": "models[].max_context_length", "input": null, "loaded": null, "skip": "models[].type == embedding"`, 1)
+	adapters, err := LoadFS(fstest.MapFS{"demo/adapter.json": {Data: []byte(body)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := adapters[0].ListPath(); got != "/api/v1/models" {
+		t.Errorf("ListPath = %s", got)
+	}
+	plain, err := LoadFS(fstest.MapFS{"demo/adapter.json": {Data: []byte(good)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := plain[0].ListPath(); got != "/v1/models" {
+		t.Errorf("without a list, ListPath = %s, want the OpenAI model list", got)
 	}
 }

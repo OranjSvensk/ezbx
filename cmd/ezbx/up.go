@@ -138,6 +138,9 @@ func makePlan(ctx context.Context, cfg *config.Config, dirs paths.Dirs, stdout i
 		return box.Plan{}, err
 	}
 	fmt.Fprintf(stdout, "engine: %s at %s, %d model(s)\n", eng.Name, eng.URL, len(eng.Models))
+	if w := detect.FileNamedWarning(eng); w != "" {
+		fmt.Fprintln(stdout, "warning:", w+".")
+	}
 	files, err := renderHome(cfg, chosen, eng)
 	if err != nil {
 		return box.Plan{}, err
