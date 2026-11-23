@@ -18,7 +18,20 @@ You need three things on your computer:
 
 ## 2. Install ezbx
 
-Download a release archive from [GitHub Releases](https://github.com/OranjSvensk/ezbx/releases), unpack `ezbx.exe` (or `ezbx`) onto your `PATH`, and check the SHA-256 checksum in `checksums.txt`.
+Install via **Scoop** (Windows):
+
+```text
+scoop bucket add ezbx https://github.com/OranjSvensk/scoop-bucket
+scoop install ezbx
+```
+
+Or install via **Winget** (once the `microsoft/winget-pkgs` submission is merged):
+
+```text
+winget install OranjSvensk.ezbx
+```
+
+Or download a release archive from [GitHub Releases](https://github.com/OranjSvensk/ezbx/releases), unpack `ezbx.exe` (or `ezbx`) onto your `PATH`, and check the SHA-256 checksum in `checksums.txt`.
 
 Or install with Go 1.27 or later:
 
