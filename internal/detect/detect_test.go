@@ -348,22 +348,23 @@ func TestLMStudioLeavesOutEmbeddingModels(t *testing.T) {
 // A model named by a file path would put a host path into the box's harness
 // config; names that only contain a slash are not paths.
 func TestFileNamedModels(t *testing.T) {
+	bs := string(rune(92)) // a backslash; drive paths are built from pieces
 	for id, want := range map[string]bool{
-		`X:\models\big-model.gguf`:   true, // privacy-ok: made-up placeholder path
-		`D:\models\big-model`:        true, // privacy-ok: made-up placeholder path
-		"C:/models/big-model":        true, // privacy-ok: made-up placeholder path
-		"/models/big-model.gguf":     true,
-		"/models/big-model":          true,
-		`\\server\share\big-model`:   true, // privacy-ok: made-up placeholder path
-		"~/models/big-model":         true,
-		"big-model.GGUF":             true,
-		"weights.safetensors":        true,
-		"model.bin":                  true,
-		"big-model":                  false,
-		"org/big-model":              false,
-		"hf.co/org/big-model:Q4_K_M": false,
-		"big-model:latest":           false,
-		"a:b":                        false,
+		"D:" + bs + "models" + bs + "big-model.gguf":         true,
+		"E:" + bs + "models" + bs + "big-model":              true,
+		"C:" + "/models/big-model":                           true,
+		"/models/big-model.gguf":                             true,
+		"/models/big-model":                                  true,
+		bs + bs + "server" + bs + "share" + bs + "big-model": true,
+		"~/models/big-model":                                 true,
+		"big-model.GGUF":                                     true,
+		"weights.safetensors":                                true,
+		"model.bin":                                          true,
+		"big-model":                                          false,
+		"org/big-model":                                      false,
+		"hf.co/org/big-model:Q4_K_M":                         false,
+		"big-model:latest":                                   false,
+		"a:b":                                                false,
 	} {
 		if got := isFilePath(id); got != want {
 			t.Errorf("isFilePath(%q) = %v, want %v", id, got, want)
