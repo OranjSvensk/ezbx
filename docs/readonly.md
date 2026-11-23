@@ -45,8 +45,8 @@ Matched against each file or folder name at any depth, ignoring case (Windows do
 2. **Build the mask list.** Every match becomes one mount. More than 256 mounts stops `up` and names the pattern with the most matches, so you can mask its parent folder instead. The list is saved as `masks.json` in the box's state folder (never mounted into the box) for the check in R5.
 3. **Look for secret-looking contents** (R4) in files up to 1 MB that aren't masked: private key headers, well-known token shapes (cloud, code host and API keys), and credentials written into a URL in `.git/config`. Warnings name the file and the kind of secret, never the text that matched.
 4. **Start the box** with, for each folder, `--mount type=bind,src=<folder>,dst=/readonly/<name>,readonly`, then one mount per mask:
-   - a file: `--mount type=bind,src=/dev/null,dst=<path>,readonly`. It reads as empty. `/dev/null` is Docker's VM's own, so no host file is involved and nothing from the state folder is mounted (design decision 9).
-   - a folder: `--mount type=tmpfs,dst=<path>,tmpfs-size=4k,tmpfs-mode=0555`, an empty folder owned by root that the agent (user 1000) can't write to.
+   - a file: `--mount type=bind,src=/dev/null,dst=<path>,readonly`. It reads as empty, and anything written to it is thrown away (a device ignores the read-only flag for writes, but the host file is never reached). `/dev/null` is Docker's VM's own, so no host file is involved and nothing from the state folder is mounted (design decision 9).
+   - a folder: `--mount type=tmpfs,dst=<path>,tmpfs-size=4k,tmpfs-mode=0555,readonly`, an empty read-only folder owned by root. Without `readonly`, Docker mounts it writable and only the folder's mode keeps the agent out.
 
 Mounts are applied parent first, so each mask lands on top of the read-only folder. Read-only is enforced by the mount itself, not file permissions; the agent has no capabilities, so it can't remount anything.
 
@@ -59,12 +59,12 @@ Before the session (and its snapshot), the names are walked again (R5). A newly 
 - **Snapshots** cover the workspace only; the agent can't change a read-only folder.
 - **`ezbx admin shell`** doesn't mount read-only folders. It's for fixing the workspace and the agent's home.
 - **`reset`, `destroy`, `down`** never touch the folders.
-- **`ezbx doctor`** gains a "read-only folders" check from inside the box: writing to each folder fails, each masked file reads as empty, each masked folder lists nothing. It also compares `docker inspect` (every read-only source mounted read-only) with the config, and warns about unmasked defaults (R3) and secret-looking contents (R4).
+- **`ezbx doctor`** gains a "read-only folders" check from inside the box: writing to each folder fails, each masked file reads as empty (writing to one isn't a useful check, since `/dev/null` accepts and discards it), each masked folder lists nothing and refuses writes. It also compares `docker inspect` (every read-only source mounted read-only) with the config, and warns about unmasked defaults (R3) and secret-looking contents (R4).
 - **`ezbx init`** asks for read-only folders after the workspace (none by default), runs the same checks, lists what it found, and offers to mask each finding (R4). The review screen shows each folder, its mask count and any `unmask`.
 
-## Still to prove live
+## Proven live, and still to prove
 
-On Docker Desktop for Windows, a host folder reaches the container through Docker's VM. Not tested yet: that a `/dev/null` mount and a tmpfs mount both land on top of paths inside a read-only bind mount of a Windows folder, that names in the box keep their host case so mask paths line up, and how long a walk of a large folder takes. If `/dev/null` can't be used as a source there, the fallback is one empty file in a folder of ezbx's own that holds nothing else, kept separate from the state folder. Results will go in [isolation-test.md](isolation-test.md).
+On Docker Desktop for Windows, a host folder reaches the container through Docker's VM. A hand-run test (2026-11-23, [isolation-test.md](isolation-test.md), "Read-only folder masks") confirmed that `/dev/null` and tmpfs masks land on top of paths inside a read-only bind mount of a Windows folder, that every write, delete, rename, unmount and remount was refused for both the agent and a root user without capabilities, and that names in the box keep their host case. Still to prove once it's built: how long a walk of a large folder takes, and links and junctions inside a read-only folder.
 
 ## Limits
 

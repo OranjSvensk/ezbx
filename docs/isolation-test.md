@@ -238,6 +238,18 @@ Each engine was run on the host, bound to loopback, with one local 12B reasoning
 
 Not covered: these engines from a box through Docker Desktop's host alias (only Strata has been), and engines started with a key.
 
+### Read-only folder masks (2026-11-23, before the code)
+
+A hand-run check of the mounts planned in [readonly.md](readonly.md), so the design rests on something tested. A scratch folder on the host held `app.txt` and fake secrets (`.env`, `sub/.env.local`, `keys/server.pem`, `Upper/.ENV`, `.ssh/id_ed25519`). It was mounted with `--mount type=bind,...,readonly` into a throwaway container from the box's pinned base image, with `--network none`, every capability dropped and `no-new-privileges`. The four files were masked with `type=bind,src=/dev/null,readonly`, and `.ssh` with `type=tmpfs,tmpfs-size=4k,tmpfs-mode=0555`. The container ran once as user 1000 and once as root (still without capabilities).
+
+- `app.txt` read normally; each masked file read as 0 bytes; `.ssh` listed nothing. Names kept their host case (`Upper/.ENV`).
+- Refused for both users: creating, overwriting, deleting and renaming files, `mkdir`, writing into `.ssh`, `umount` of a mask, and `mount -o remount,rw` of the folder. `app.txt` was unchanged afterwards.
+- **Found:** writing to a masked file "succeeds", because the write goes to `/dev/null`, which ignores a read-only mount for writes. The host file was checked afterwards and still held its text, so nothing leaks or changes; the doctor's check reads masks instead of writing them.
+- **Found:** a tmpfs mask is mounted read-write unless `readonly` is added; only its 0555 mode kept both users out. With `readonly`, `/proc/self/mountinfo` showed `ro,nosuid,nodev,noexec` and `touch` failed with "Read-only file system". The design uses `readonly`.
+- The folder reaches the VM through Docker Desktop's file share, which carries the whole host drive. A container escape would see it, as the threat model says.
+
+Not covered: links and junctions inside a read-only folder, a large folder's walk time, and the masks as `ezbx up` will build them (they were typed by hand here). The test image and folder were removed afterwards.
+
 ## Limits of this result
 
 - On the test machine, public DNS servers didn't answer even from the outside network, so the "public DNS blocked" checks prove less than they appear to. The checks against Docker Desktop's own DNS server, which did answer from the outside, are the meaningful ones.
