@@ -276,6 +276,25 @@ type chatCompletionResp struct {
 	} `json:"usage"`
 }
 
+// anthropicStop is the Messages stop_reason for a reply the engine ended with
+// finish (its chat finish_reason). A reply cut off by the token limit says
+// max_tokens, so the harness knows it is incomplete; otherwise the reason
+// worked out from the reply's content stands (end_turn or tool_use).
+func anthropicStop(finish, fromContent string) string {
+	if finish == "length" {
+		return "max_tokens"
+	}
+	return fromContent
+}
+
+// lastFinish keeps the finish_reason of a streamed chunk, if it has one.
+func lastFinish(prev string, fr *string) string {
+	if fr != nil && *fr != "" {
+		return *fr
+	}
+	return prev
+}
+
 func (g *Gateway) writeAnthropicNonStream(w http.ResponseWriter, body io.Reader, reqModel, reqID string) {
 	var cresp chatCompletionResp
 	if err := json.NewDecoder(body).Decode(&cresp); err != nil {
@@ -310,6 +329,7 @@ func (g *Gateway) writeAnthropicNonStream(w http.ResponseWriter, body io.Reader,
 			})
 			stopReason = "tool_use"
 		}
+		stopReason = anthropicStop(cresp.Choices[0].FinishReason, stopReason)
 	}
 	if len(content) == 0 {
 		content = []map[string]any{{"type": "text", "text": ""}}
@@ -383,6 +403,7 @@ func (g *Gateway) writeAnthropicStream(w http.ResponseWriter, body io.Reader, re
 
 	textStarted := false
 	nextIndex := 0
+	finish := ""
 	var tools []*accToolCall
 	toolByIndex := map[int]*accToolCall{}
 
@@ -401,6 +422,7 @@ func (g *Gateway) writeAnthropicStream(w http.ResponseWriter, body io.Reader, re
 		if json.Unmarshal([]byte(data), &chunk) != nil || len(chunk.Choices) == 0 {
 			continue
 		}
+		finish = lastFinish(finish, chunk.Choices[0].FinishReason)
 		delta := chunk.Choices[0].Delta
 		if delta.Content != "" {
 			if !textStarted {
@@ -482,7 +504,7 @@ func (g *Gateway) writeAnthropicStream(w http.ResponseWriter, body io.Reader, re
 	}
 	writeSSE(w, flusher, "message_delta", map[string]any{
 		"type":  "message_delta",
-		"delta": map[string]any{"stop_reason": stopReason, "stop_sequence": nil},
+		"delta": map[string]any{"stop_reason": anthropicStop(finish, stopReason), "stop_sequence": nil},
 		"usage": map[string]any{"output_tokens": 1},
 	})
 	writeSSE(w, flusher, "message_stop", map[string]any{"type": "message_stop"})
@@ -656,13 +678,35 @@ func responsesToChat(rreq responsesRequest) map[string]any {
 	return out
 }
 
-func buildResponsesObject(reqID, status, model, text string, tools []*accToolCall, promptTokens, completionTokens int) map[string]any {
+// responsesEnd is how a Responses reply ends, from the engine's chat
+// finish_reason: a reply cut off by the token limit or a content filter is
+// "incomplete", with the reason in incomplete_details (nil otherwise).
+func responsesEnd(finish string) (status string, incomplete map[string]any) {
+	switch finish {
+	case "length":
+		return "incomplete", map[string]any{"reason": "max_output_tokens"}
+	case "content_filter":
+		return "incomplete", map[string]any{"reason": "content_filter"}
+	}
+	return "completed", nil
+}
+
+// itemStatus is the status of a finished output item in a reply that ended
+// with status: an incomplete reply's message is incomplete too.
+func itemStatus(status string) string {
+	if status == "incomplete" {
+		return "incomplete"
+	}
+	return "completed"
+}
+
+func buildResponsesObject(reqID, status, model, text string, tools []*accToolCall, incomplete map[string]any, promptTokens, completionTokens int) map[string]any {
 	var output []map[string]any
 	if text != "" || len(tools) == 0 {
 		output = append(output, map[string]any{
 			"type":   "message",
 			"id":     "msg_" + reqID,
-			"status": "completed",
+			"status": itemStatus(status),
 			"role":   "assistant",
 			"content": []map[string]any{{
 				"type":        "output_text",
@@ -689,16 +733,17 @@ func buildResponsesObject(reqID, status, model, text string, tools []*accToolCal
 			"status":    "completed",
 		})
 	}
-	if status != "completed" {
+	if status == "in_progress" {
 		output = []map[string]any{}
 	}
 	return map[string]any{
-		"id":         "resp_" + reqID,
-		"object":     "response",
-		"created_at": time.Now().Unix(),
-		"status":     status,
-		"model":      model,
-		"output":     output,
+		"id":                 "resp_" + reqID,
+		"object":             "response",
+		"created_at":         time.Now().Unix(),
+		"status":             status,
+		"incomplete_details": incomplete,
+		"model":              model,
+		"output":             output,
 		"usage": map[string]any{
 			"input_tokens":  promptTokens,
 			"output_tokens": completionTokens,
@@ -717,18 +762,19 @@ func (g *Gateway) writeResponsesNonStream(w http.ResponseWriter, body io.Reader,
 	if model == "" {
 		model = reqModel
 	}
-	text := ""
+	text, finish := "", ""
 	var tools []*accToolCall
 	if len(cresp.Choices) > 0 {
 		msg := cresp.Choices[0].Message
-		text = msg.Content
+		text, finish = msg.Content, cresp.Choices[0].FinishReason
 		for _, tc := range msg.ToolCalls {
 			acc := &accToolCall{id: tc.ID, name: tc.Function.Name}
 			acc.args.WriteString(tc.Function.Arguments)
 			tools = append(tools, acc)
 		}
 	}
-	writeJSON(w, http.StatusOK, buildResponsesObject(reqID, "completed", model, text, tools, cresp.Usage.PromptTokens, cresp.Usage.CompletionTokens))
+	status, incomplete := responsesEnd(finish)
+	writeJSON(w, http.StatusOK, buildResponsesObject(reqID, status, model, text, tools, incomplete, cresp.Usage.PromptTokens, cresp.Usage.CompletionTokens))
 }
 
 func (g *Gateway) writeResponsesStream(w http.ResponseWriter, body io.Reader, reqModel, reqID string) {
@@ -745,14 +791,15 @@ func (g *Gateway) writeResponsesStream(w http.ResponseWriter, body io.Reader, re
 	}
 
 	emit("response.created", map[string]any{
-		"response": buildResponsesObject(reqID, "in_progress", reqModel, "", nil, 0, 0),
+		"response": buildResponsesObject(reqID, "in_progress", reqModel, "", nil, nil, 0, 0),
 	})
 	emit("response.in_progress", map[string]any{
-		"response": buildResponsesObject(reqID, "in_progress", reqModel, "", nil, 0, 0),
+		"response": buildResponsesObject(reqID, "in_progress", reqModel, "", nil, nil, 0, 0),
 	})
 
 	msgID := "msg_" + reqID
 	textStarted := false
+	finish := ""
 	var fullText strings.Builder
 	var tools []*accToolCall
 	toolByIndex := map[int]*accToolCall{}
@@ -772,6 +819,7 @@ func (g *Gateway) writeResponsesStream(w http.ResponseWriter, body io.Reader, re
 		if json.Unmarshal([]byte(data), &chunk) != nil || len(chunk.Choices) == 0 {
 			continue
 		}
+		finish = lastFinish(finish, chunk.Choices[0].FinishReason)
 		delta := chunk.Choices[0].Delta
 		if delta.Content != "" {
 			if !textStarted {
@@ -817,6 +865,7 @@ func (g *Gateway) writeResponsesStream(w http.ResponseWriter, body io.Reader, re
 			acc.args.WriteString(tc.Function.Arguments)
 		}
 	}
+	status, incomplete := responsesEnd(finish)
 	outIndex := 0
 	if textStarted || len(tools) == 0 {
 		txt := fullText.String()
@@ -855,7 +904,7 @@ func (g *Gateway) writeResponsesStream(w http.ResponseWriter, body io.Reader, re
 			"item": map[string]any{
 				"type":   "message",
 				"id":     msgID,
-				"status": "completed",
+				"status": itemStatus(status),
 				"role":   "assistant",
 				"content": []map[string]any{{
 					"type":        "output_text",
@@ -910,7 +959,13 @@ func (g *Gateway) writeResponsesStream(w http.ResponseWriter, body io.Reader, re
 		})
 		outIndex++
 	}
-	emit("response.completed", map[string]any{
-		"response": buildResponsesObject(reqID, "completed", reqModel, fullText.String(), tools, 1, 1),
+	// A reply cut off by the token limit ends with response.incomplete, as
+	// OpenAI's own stream does, so the harness doesn't take it as finished.
+	end := "response.completed"
+	if status == "incomplete" {
+		end = "response.incomplete"
+	}
+	emit(end, map[string]any{
+		"response": buildResponsesObject(reqID, status, reqModel, fullText.String(), tools, incomplete, 1, 1),
 	})
 }
