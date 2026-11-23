@@ -37,12 +37,12 @@
     "status": null,
     "start": { "command": ["lms", "server", "start"] },
     "stop": { "command": ["lms", "server", "stop"] },
-    "unload": { "command": ["lms", "unload", "--all"], "note": "Flag name unconfirmed." }
+    "unload": { "command": ["lms", "unload", "--all"] }
   },
 
   "verified": {
-    "status": "docs-only",
-    "on": null,
-    "notes": "Port 1234 (used in every example) and the OpenAI-style API are from LM Studio's server docs. It is recognised by its native REST API, GET /api/v1/models, which answers with a models list (LM Studio 0.4.0 and later, per its docs read 2026-11-20). Older versions, or a server with its API token switched on, show up as a generic OpenAI-compatible server instead. The native list also reports max_context_length and loaded_instances per model, which are not read yet. The lms subcommands are listed by a community index of its CLI; confirm each with `lms --help` before relying on them."
+    "status": "verified",
+    "on": "2026-11-22",
+    "notes": "Exercised on Windows 11 with the lms CLI (commit 43d4b26): lms server start listened on port 1234, GET /api/v1/models answered with a models list and /health with a 404, so detection named LM Studio over the generic adapter. Through ezbx gateway serve on the host: the model list, a chat, a streamed chat ending in [DONE], /v1/messages and /v1/responses all answered; the model loaded on first request. lms unload --all and lms server stop worked as listed. /v1/models lists every downloaded model, embedding models included. The native list also reports type (llm or embedding), max_context_length, capabilities.vision and loaded_instances per model, which are not read yet. A server with its API token switched on shows up as a generic OpenAI-compatible server. Not yet checked from a box through Docker Desktop's host alias."
   }
 }

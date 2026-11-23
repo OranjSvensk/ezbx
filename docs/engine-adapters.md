@@ -18,7 +18,7 @@ All engines are expected to offer an OpenAI-style HTTP API. That is what lets th
 
 ## Detection
 
-Ports are hints, never proof. Different versions and user setups use different ports, and one source says llama.cpp's default has changed. Detection therefore works like this:
+Ports are hints, never proof. Different versions and user setups use different ports; llama.cpp's default, for one, moved from 8080 to 9931. Detection therefore works like this:
 
 1. If an adapter has a `cli` status command and that program is installed, ask it for running servers. This finds engines on custom ports.
 2. Probe each adapter's hint ports on the loopback address only, with a very short timeout. Probes are plain GET requests with no data about you, and no key (see Keys below for the one exception).
@@ -73,12 +73,12 @@ Engines normally listen on the loopback address only, which is the safe default.
 | Engine | Status | Notes |
 |---|---|---|
 | Strata | **probed-live** (2026-11-20) | Detection fields and control commands were read from a running install. Context size and image input come from its model list. |
-| LM Studio | docs-only | Recognised by its native `GET /api/v1/models` (LM Studio 0.4.0 and later, from its docs read 2026-11-20). Older versions, or one with its API token on, show up as a generic OpenAI-compatible server. The lms commands need confirming on a real install. |
-| Ollama | docs-only | The OpenAI-compatible base path is from official docs. The port, the running-models route and the unload call are from third-party guides. |
-| llama.cpp | docs-only | Port is disputed between sources. Detection only. Recognised by `/health` with a `status` field, which is a weak sign: another server with such a route would be labelled llama.cpp. |
+| LM Studio | **verified** (2026-11-22) | Recognised by its native `GET /api/v1/models`; port 1234, and `lms server start`, `lms unload --all` and `lms server stop` confirmed. One with its API token on shows up as a generic OpenAI-compatible server. Its `/v1/models` also lists embedding models. |
+| Ollama | **verified** (2026-11-22) | Port 11434, `/api/ps` for the loaded state, and the `keep_alive: 0` unload confirmed on 0.40.17. Found even with no models. |
+| llama.cpp | **verified** (2026-11-22) | Build 12648 listens on 9931 by default; 8080 stays a hint for older builds. Detection only. Recognised by `/health` with a `status` field, which is a weak sign: another server with such a route would be labelled llama.cpp. Start it with `--alias NAME`, or the model is named by its file path. |
 | OpenAI-compatible | generic | The fallback for any server with an OpenAI-style model list. |
 
-Do not change a status to `verified` until the adapter has been exercised against a real install and the date recorded.
+Do not change a status to `verified` until the adapter has been exercised against a real install and the date recorded. The three engines above were checked through the gateway run on the host, not yet from a box ([isolation-test.md](isolation-test.md)).
 
 ## Sources
 

@@ -41,8 +41,8 @@
   },
 
   "verified": {
-    "status": "docs-only",
-    "on": null,
-    "notes": "Sources disagree on the default port: most say 8080, two say current builds use 9931. ezbx treats both as hints and identifies the server by its responses. Detection only: you start and stop it yourself."
+    "status": "verified",
+    "on": "2026-11-22",
+    "notes": "Exercised on Windows 11 with llama-server build 12648 (the Vulkan release): with no --port it listened on 9931, which its --help gives as the default; older builds and most guides use 8080, so both stay hints and the server is identified by its responses. /health answered {status: ok} and /v1/models a data list, so detection named llama.cpp. Through ezbx gateway serve on the host: the model list, a chat, a streamed chat ending in [DONE], /v1/messages and /v1/responses all answered. The model id is the model file's full path unless llama-server is started with --alias NAME, and that id ends up in the harness config inside the box, so start it with --alias. Detection only: you start and stop it yourself. Not yet checked from a box through Docker Desktop's host alias."
   }
 }

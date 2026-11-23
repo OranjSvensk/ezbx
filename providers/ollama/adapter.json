@@ -38,14 +38,13 @@
     "start": null,
     "stop": null,
     "unload": {
-      "http": { "method": "POST", "path": "/api/generate", "body": { "model": "{model}", "keep_alive": 0 } },
-      "note": "From a third-party guide. Confirm against the Ollama API reference."
+      "http": { "method": "POST", "path": "/api/generate", "body": { "model": "{model}", "keep_alive": 0 } }
     }
   },
 
   "verified": {
-    "status": "docs-only",
-    "on": null,
-    "notes": "The OpenAI-compatible base path and the placeholder key are from Ollama's official docs, which describe a subset of the OpenAI API. Port 11434, /api/ps and the keep_alive unload come from third-party guides and need confirming."
+    "status": "verified",
+    "on": "2026-11-22",
+    "notes": "Exercised on Windows 11 with Ollama 0.40.17 (ollama serve from the release zip): it listened on 11434, and /api/ps and /v1/models answered lists, empty ones before any model existed, so detection named Ollama. With an imported model, /api/ps marked it loaded after the first request. Through ezbx gateway serve on the host (with a placeholder key): the model list, a chat, a streamed chat ending in [DONE], /v1/messages and /v1/responses all answered. POST /api/generate with keep_alive 0 unloaded it (done_reason unload) and /api/ps was empty again. Not yet checked from a box through Docker Desktop's host alias."
   }
 }

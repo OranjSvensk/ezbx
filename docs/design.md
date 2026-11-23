@@ -1,6 +1,6 @@
 # ezbx design (draft 0.1)
 
-Status: `v0.1.1` early release (verified on Windows 11 with Docker Desktop and Strata across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`). Built: engine detection, the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)). Items marked **verify** depend on facts to confirm against live engines (such as LM Studio, Ollama and llama.cpp).
+Status: `v0.1.1` early release (verified on Windows 11 with Docker Desktop and Strata across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`). Built: engine detection, the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)). The engine facts once marked **verify** were confirmed against live installs of Strata, LM Studio, Ollama and llama.cpp ([engine-adapters.md](engine-adapters.md)).
 
 ## 1. Goal
 
@@ -61,11 +61,11 @@ Decided: the gateway is one small Go binary, shipped in a minimal image and shar
 Each engine has a small adapter folder, `providers/<id>/`, with an `adapter.json` file. The format is described in [engine-adapters.md](engine-adapters.md), and `providers/strata/adapter.json` is a complete example.
 
 The adapter does the following:
-- **Detect:** probe known local ports and report what's running. Default ports differ per engine, so they get verified at implementation time (**verify**).
+- **Detect:** probe known local ports and report what's running. Default ports differ per engine; each was confirmed on a live install (1234 LM Studio, 11434 Ollama, 9931 for current llama.cpp builds).
 - **Discover:** read the model list from `/v1/models`, so no model name is ever hardcoded.
 - **Control (optional):** start the engine, stop it, or unload the model to free the GPU. Engines without a documented control interface are simply "detected, not controlled".
 
-Engines planned for the first set: Strata, LM Studio, Ollama and llama.cpp's server. All are expected to expose an OpenAI-compatible API (**verify** per engine).
+Engines planned for the first set: Strata, LM Studio, Ollama and llama.cpp's server. All four expose an OpenAI-compatible API (confirmed live, 2026-11-22).
 
 ### Host reachability
 

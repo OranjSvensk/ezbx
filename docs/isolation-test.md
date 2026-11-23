@@ -220,6 +220,24 @@ A test box `vt` with all seven harnesses (`harnesses = ['claude', 'codex', 'herm
 
 Not covered: full-screen interactive sessions for the six newer harnesses (which need a person at a terminal), and boxes containing each harness alone.
 
+### LM Studio, llama.cpp and Ollama (same day)
+
+Each engine was run on the host, bound to loopback, with one local 12B reasoning model, and checked with `ezbx engine detect` and with `ezbx gateway serve` on the host (`--listen 127.0.0.1:18080`, `--upstream` set to the engine). No box or Docker was involved; prompts were capped at 64 tokens.
+
+| Engine | Version | Port | Detected as | Through the gateway | Control |
+|---|---|---|---|---|---|
+| LM Studio | `lms` CLI commit `43d4b26` | 1234 | LM Studio (by `/api/v1/models`) | model list, chat, streamed chat, `/v1/messages`, `/v1/responses` | `lms server start`, `lms unload --all`, `lms server stop` worked |
+| llama.cpp | `llama-server` build 12648 (Vulkan) | 9931, its default with no `--port` | llama.cpp (by `/health`) | the same five | none (started and stopped by hand) |
+| Ollama | 0.40.17 (`ollama serve` from the release zip) | 11434 | Ollama (by `/api/ps`), also with no models | the same five | `/api/ps` showed the model loaded; `POST /api/generate` with `keep_alive: 0` unloaded it |
+
+- Every reply carried `X-Ezbx-Engine` with the right engine id, and `X-Ezbx-Model` when the request named a model.
+- **Found:** LM Studio's `/v1/models` lists every downloaded model, embedding models too, so a harness config offers an embedding model as a chat model. Its native list says which is which (`type`), with the context size, image input and loaded state, but ezbx doesn't read it yet.
+- **Found:** llama.cpp names its model by the model file's full path unless `llama-server` is given `--alias NAME`, and that name is written into the harness config inside the box. Start it with `--alias`.
+- **Found:** the gateway doesn't pass on why a reply ended. A reply cut off by `max_tokens` (`finish_reason: length`, seen here when a reasoning model spent its 64 tokens thinking) comes back from `/v1/messages` as `stop_reason: end_turn` instead of `max_tokens`, and from `/v1/responses` as `completed` instead of `incomplete`. Not fixed yet.
+- With 8 tokens, the reasoning model spent all of them thinking and every reply was empty, which is why `ezbx init` asks whether a model is a reasoning model.
+
+Not covered: these engines from a box through Docker Desktop's host alias (only Strata has been), and engines started with a key.
+
 ## Limits of this result
 
 - On the test machine, public DNS servers didn't answer even from the outside network, so the "public DNS blocked" checks prove less than they appear to. The checks against Docker Desktop's own DNS server, which did answer from the outside, are the meaningful ones.
