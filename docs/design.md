@@ -1,6 +1,6 @@
 # ezbx design (draft 0.1)
 
-Status: `v0.1.1` early release (verified on Windows 11 with Docker Desktop and Strata across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`). Built: engine detection, the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)). The engine facts once marked **verify** were confirmed against live installs of Strata, LM Studio, Ollama and llama.cpp ([engine-adapters.md](engine-adapters.md)).
+Status: `v0.2.0` early release (verified on Windows 11 with Docker Desktop and Strata across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`). Built: engine detection, the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)). The engine facts once marked **verify** were confirmed against live installs of Strata, LM Studio, Ollama and llama.cpp ([engine-adapters.md](engine-adapters.md)).
 
 ## 1. Goal
 
@@ -153,9 +153,9 @@ It does not fully protect against:
 
 ## 12. Milestones
 
-1. **0.1:** `init`, engine detection for Strata and one other engine, the gateway with the model route and `off`/`on`, one harness, snapshots.
-2. **0.2:** `allow` mode, more engines and harnesses, `doctor`, `reset` with backup and restore.
-3. **0.3:** the remaining harnesses, `review`, starter profiles (web dev, Python/ML, research, offline).
+1. **0.1 (done, `v0.1.0`):** `init`, engine detection for Strata and one other engine, the gateway with the model route and `off`/`on`, one harness, snapshots.
+2. **0.2 (done, `v0.2.0`):** `allow` mode, more engines and harnesses, `doctor`, `reset` with backup and restore. The remaining harnesses and `review`, first planned for 0.3, came early.
+3. **0.3:** read-only folders with secret masking and the full threat model, starter profiles (web dev, Python/ML, research, offline).
 4. **Later:** tray or GUI front end, other container runtimes, a tool-calling self-test for models.
 
 ## 13. Decisions

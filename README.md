@@ -9,7 +9,7 @@
 
 ezbx is a planned one-click setup for running AI coding and agent tools inside a sandboxed container, while the model itself keeps running on your own machine.
 
-> **Status: early release (`v0.1.1`).** All seven harnesses — Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw — are built, pinned in `ezbx.lock`, and verified end to end on Windows 11 with Docker Desktop and Strata (including file tools in `/workspace` with `network = "off"`). Every command on the road to 0.1 below is built. LM Studio, llama.cpp and Ollama have been checked live through the gateway too. Linux, macOS and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), and designs are in [docs/](docs/).
+> **Status: early release (`v0.2.0`).** All seven harnesses — Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw — are built, pinned in `ezbx.lock`, and verified end to end on Windows 11 with Docker Desktop and Strata (including file tools in `/workspace` with `network = "off"`). Every command on the road to 0.1 below is built. LM Studio, llama.cpp and Ollama have been checked live through the gateway too. Linux, macOS and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), and designs are in [docs/](docs/).
 
 ```text
 # Scoop (Windows):
@@ -17,7 +17,7 @@ scoop bucket add ezbx https://github.com/OranjSvensk/scoop-bucket
 scoop install ezbx
 
 # Or install with Go 1.27+ (or download a binary from Releases):
-go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.1.1
+go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.2.0
 ezbx --version
 ezbx init                 # asks the questions, shows the plan, builds and starts the box
 ezbx shell pi             # opens Pi in the box (or opencode, omp, codex, claude, hermes, openclaw)
@@ -59,7 +59,7 @@ The goal: set up Pi with a local model on Strata, from nothing, using only `ezbx
 
 ## Safety note
 
-A container is a strong boundary but not a perfect one. It shares a kernel with its host, and anything you mount into it can be changed by the agent. A full threat model will be written before the first release.
+A container is a strong boundary but not a perfect one. It shares a kernel with its host, and anything you mount into it can be changed by the agent. A short threat model is in [docs/design.md](docs/design.md#11-threat-model-summary-to-expand), section 11. The full one will come with read-only folders, the next feature planned.
 
 ## Contributing and security
 

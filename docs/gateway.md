@@ -237,8 +237,8 @@ Docker: the gateway image ([docker/gateway.Dockerfile](../docker/gateway.Dockerf
 
 ## 12. Milestones
 
-- **0.1:** model route, streaming, key injection, response headers, `off` and `on` modes, logging, health, admin API.
-- **0.2:** `allow` mode, blocked-request workflow, `doctor` end-to-end checks.
+- **0.1 (done):** model route, streaming, key injection, response headers, `off` and `on` modes, logging, health, admin API.
+- **0.2 (done):** `allow` mode, blocked-request workflow, `doctor` end-to-end checks.
 - **Later:** the `default` alias, usage metering, several engines at once.
 
 ## 13. Open questions
