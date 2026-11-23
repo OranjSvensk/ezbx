@@ -32,7 +32,7 @@ func no() *bool  { v := false; return &v }
 
 func TestConfigTextRoundTrip(t *testing.T) {
 	a := Answers{
-		Box: "main", Workspace: `C:\Users\Example\my "work"` + "\tspace", Memory: "8g", CPUs: 2.5, PIDs: 1024,
+		Box: "main", Workspace: `/home/example\my "work"` + "\tspace", Memory: "8g", CPUs: 2.5, PIDs: 1024,
 		Network: "allow", Allow: []string{"registry.npmjs.org", "*.example.com"}, Harnesses: []string{"pi"},
 		Tools:     []string{"pack:coding", "ffmpeg"},
 		Engine:    "strata",
@@ -470,5 +470,51 @@ func TestGatherExplainsRefusals(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("missing %q in:\n%s", want, out.String())
 		}
+	}
+}
+
+// The disk estimate grows with the harnesses when images must be built,
+// and the review warns about a drive with less free space than that.
+func TestDiskWarning(t *testing.T) {
+	p := plan(t)
+	built := p.DiskNeed()
+	if built != headroom {
+		t.Errorf("with every image built, need %d, want only the headroom %d", built, headroom)
+	}
+	p.Images[1].Present = false
+	one := p.DiskNeed()
+	if one != headroom+2*firstHarness {
+		t.Errorf("one harness to build: need %d", one)
+	}
+	p.Result.Answers.Harnesses = []string{"pi", "opencode", "codex"}
+	if three := p.DiskNeed(); three != one+2*2*moreHarness {
+		t.Errorf("three harnesses to build: need %d", three)
+	}
+	p.NoStart = true // nothing is built
+	if p.DiskNeed() != headroom {
+		t.Errorf("--no-start builds nothing: need %d", p.DiskNeed())
+	}
+	p.NoStart = false
+
+	need := p.DiskNeed()
+	p.Disks = []Disk{{What: "the state folder", Path: "/home/example", Free: need}}
+	if text := p.Review(); strings.Contains(text, "Warning: about") || !strings.Contains(text, "Disk          "+Size(need)+" free at /home/example, the state folder") {
+		t.Errorf("exactly enough space:\n%s", text)
+	}
+	p.Disks = append(p.Disks, Disk{What: "Docker Desktop's disk", Path: "/srv/docker", Free: need - 1})
+	text := p.Review()
+	if !strings.Contains(text, "Warning: about "+Size(need)) || !strings.Contains(text, "/srv/docker has only") || !strings.Contains(text, "docker system df") {
+		t.Errorf("low space not warned:\n%s", text)
+	}
+	if len(p.LowDisks()) != 1 {
+		t.Errorf("low disks: %+v", p.LowDisks())
+	}
+	// A drive whose free space couldn't be read is shown, not warned about.
+	p.Disks = []Disk{{What: "the state folder", Path: "X:\\", Err: errors.New("no")}}
+	if text := p.Review(); strings.Contains(text, "Warning: about") || !strings.Contains(text, "free space unknown at X:\\") {
+		t.Errorf("unknown space:\n%s", text)
+	}
+	if Size(1536<<20) != "1.5 GB" || Size(820<<20) != "820 MB" {
+		t.Errorf("Size: %s, %s", Size(1536<<20), Size(820<<20))
 	}
 }

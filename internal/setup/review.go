@@ -17,10 +17,66 @@ type Plan struct {
 	Images     []Image  // the gateway and box images this config needs
 	Tools      []string // the tool ids chosen for the box (the harnesses' own are always added)
 	Harnesses  []harness.Manifest
-	NoStart    bool // --no-start
-	BoxUp      bool // the box's containers exist already
-	KeyEnvSet  bool // the engine's key variable has a value
-	Workspace  bool // the workspace folder exists already
+	NoStart    bool   // --no-start
+	BoxUp      bool   // the box's containers exist already
+	KeyEnvSet  bool   // the engine's key variable has a value
+	Workspace  bool   // the workspace folder exists already
+	Disks      []Disk // free space where the images and snapshots go
+}
+
+// Disk is the free space on one drive init will use.
+type Disk struct {
+	What string // what lives there, such as "the state folder"
+	Path string
+	Free uint64
+	Err  error // the free space couldn't be read
+}
+
+// Sizes behind the disk estimate, from the image sizes in
+// docs/isolation-test.md: the box image with Pi and pack:coding is about
+// 726 MB, and each more harness adds about 600 MB (4.28 GB for all seven).
+// A build needs about as much again for Docker's build cache, and snapshots
+// need room of their own.
+const (
+	firstHarness = 750 << 20
+	moreHarness  = 600 << 20
+	headroom     = 1 << 30
+)
+
+// DiskNeed estimates the free space the plan needs on each drive: room to
+// build the box image twice over when it isn't built yet, plus room for
+// snapshots.
+func (p Plan) DiskNeed() uint64 {
+	need := uint64(headroom)
+	if start, _ := p.Start(); start && len(p.MissingImages()) > 0 {
+		n := uint64(len(p.Result.Answers.Harnesses))
+		if n == 0 {
+			n = 1
+		}
+		need += 2 * (firstHarness + (n-1)*moreHarness)
+	}
+	return need
+}
+
+// LowDisks lists the drives with less free space than DiskNeed.
+func (p Plan) LowDisks() []Disk {
+	var low []Disk
+	for _, d := range p.Disks {
+		if d.Err == nil && d.Free < p.DiskNeed() {
+			low = append(low, d)
+		}
+	}
+	return low
+}
+
+// Size writes a number of bytes the way people read them: 1.5 GB, 820 MB.
+func Size(n uint64) string {
+	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
+	default:
+		return fmt.Sprintf("%d MB", n>>20)
+	}
 }
 
 // Changed reports whether the config file would be written.
@@ -135,6 +191,21 @@ func (p Plan) Review() string {
 	}
 	row("Network", net)
 	row("Memory", a.Memory)
+	for i, d := range p.Disks {
+		k := ""
+		if i == 0 {
+			k = "Disk"
+		}
+		if d.Err != nil {
+			row(k, fmt.Sprintf("free space unknown at %s, %s", d.Path, d.What))
+		} else {
+			row(k, fmt.Sprintf("%s free at %s, %s", Size(d.Free), d.Path, d.What))
+		}
+	}
+	if low := p.LowDisks(); len(low) > 0 {
+		fmt.Fprintf(&b, "\nWarning: about %s of free space is needed (images, Docker's build cache and snapshots), and %s has only %s.\n", Size(p.DiskNeed()), low[0].Path, Size(low[0].Free))
+		b.WriteString("Free some space first. docker system df shows what Docker keeps, and ezbx build --prune removes ezbx's old images.\n")
+	}
 
 	b.WriteString("\nWill create or change\n")
 	switch {

@@ -18,7 +18,14 @@ type fakeDocker struct {
 	ctrs     map[string]map[string]any
 	exec     map[string]string // admin call -> reply
 	inside   Report
+	imageIDs map[string]string // image name -> ID
 	ran      [][]string
+}
+
+// goodImages are the images the good setup's config needs.
+var goodImages = map[string]Image{
+	"gateway": {Tag: "ezbx-gateway:dev", Inputs: "gwinputs"},
+	"box":     {Tag: "ezbx-box:dev", Inputs: "boxinputs"},
 }
 
 func goodDocker() *fakeDocker {
@@ -34,8 +41,9 @@ func goodDocker() *fakeDocker {
 		ctrs: map[string]map[string]any{
 			"ezbx-t-gateway": {
 				"Name":  "/ezbx-t-gateway",
+				"Image": "sha256:gw1",
 				"State": map[string]any{"Running": true, "Health": map[string]string{"Status": "healthy"}},
-				"Config": map[string]any{"Image": "ezbx-gateway:dev", "User": "65532:65532",
+				"Config": map[string]any{"Image": "ezbx-gateway:dev", "User": "65532:65532", "Labels": map[string]string{"ezbx.inputs": "gwinputs"},
 					"Cmd": []string{"gateway", "serve", "--listen", "0.0.0.0:8000", "--upstream", "http://host.docker.internal:53000", "--proxy", "0.0.0.0:3128", "--network", "off", "--admin", "127.0.0.1:8099"}},
 				"HostConfig": map[string]any{"ReadonlyRootfs": true, "CapDrop": []string{"ALL"}, "SecurityOpt": []string{"no-new-privileges"}, "PortBindings": map[string]any{}},
 				"NetworkSettings": map[string]any{"Networks": map[string]any{
@@ -45,8 +53,9 @@ func goodDocker() *fakeDocker {
 			},
 			"ezbx-t-box": {
 				"Name":       "/ezbx-t-box",
+				"Image":      "sha256:box1",
 				"State":      map[string]any{"Running": true},
-				"Config":     map[string]any{"Image": "ezbx-box:dev", "User": "agent"},
+				"Config":     map[string]any{"Image": "ezbx-box:dev", "User": "agent", "Labels": map[string]string{"ezbx.inputs": "boxinputs"}},
 				"HostConfig": map[string]any{"CapDrop": []string{"ALL"}, "SecurityOpt": []string{"no-new-privileges"}},
 				"Mounts":     []map[string]any{{"Source": "/host/work", "Destination": "/workspace", "RW": true}},
 				"NetworkSettings": map[string]any{"Networks": map[string]any{
@@ -59,7 +68,8 @@ func goodDocker() *fakeDocker {
 			"ready":        `{"ready":true,"engine":"strata","models":1}`,
 			writableScript: "writable\n",
 		},
-		inside: Report{Checks: []Check{{Group: "From inside the box", Name: "model list through the gateway", Status: Pass}}},
+		inside:   Report{Checks: []Check{{Group: "From inside the box", Name: "model list through the gateway", Status: Pass}}},
+		imageIDs: map[string]string{"ezbx-gateway:dev": "sha256:gw1", "ezbx-box:dev": "sha256:box1"},
 	}
 }
 
@@ -83,6 +93,11 @@ func (f *fakeDocker) run(_ context.Context, args ...string) ([]byte, error) {
 		}
 		b, _ := json.Marshal([]any{v})
 		return b, nil
+	case len(args) == 5 && args[0] == "image" && args[1] == "inspect" && args[3] == "{{.Id}}":
+		if id, ok := f.imageIDs[args[4]]; ok {
+			return []byte(id + "\n"), nil
+		}
+		return nil, errors.New("No such image: " + args[4])
 	case args[0] == "exec":
 		if out, ok := f.exec[args[len(args)-1]]; ok {
 			return []byte(out), nil
@@ -119,6 +134,7 @@ func runEngines(f *fakeDocker, usual []detect.Engine, onlyAt map[string]detect.E
 			return res
 		},
 		LocalAddrs: func() []string { return []string{"192.0.2.10"} },
+		Images:     goodImages,
 	})
 }
 
@@ -432,5 +448,65 @@ func TestEngineThatAsksForAKey(t *testing.T) {
 	})
 	if c := find(t, r, "forwards to the running engine"); c.Status != Pass || !strings.Contains(c.Detail, "asks for a key") {
 		t.Errorf("forwards: %s %s", c.Status, c.Detail)
+	}
+}
+
+// An image older than the current files and config, or not the build that
+// carries its name today, is a warning on that container's image check.
+func TestImageIsCurrent(t *testing.T) {
+	gwCfg := func(f *fakeDocker) map[string]any { return f.ctrs["ezbx-t-gateway"]["Config"].(map[string]any) }
+	boxCfg := func(f *fakeDocker) map[string]any { return f.ctrs["ezbx-t-box"]["Config"].(map[string]any) }
+	cases := map[string]struct {
+		change func(f *fakeDocker)
+		group  string
+		detail string
+	}{
+		"gateway from older files": {func(f *fakeDocker) { gwCfg(f)["Image"] = "ezbx-gateway:old" }, "Gateway", "runs ezbx-gateway:old"},
+		"box from an older config": {func(f *fakeDocker) { boxCfg(f)["Image"] = "ezbx-box:old" }, "Box", "make ezbx-box:dev"},
+		"box image made by hand":   {func(f *fakeDocker) { boxCfg(f)["Labels"] = map[string]string{"ezbx.inputs": "other"} }, "Box", "wasn't built by ezbx build"},
+		"box image unlabelled":     {func(f *fakeDocker) { delete(boxCfg(f), "Labels") }, "Box", "wasn't built by ezbx build"},
+		"gateway image removed":    {func(f *fakeDocker) { delete(f.imageIDs, "ezbx-gateway:dev") }, "Gateway", "no longer on this computer"},
+		"box image rebuilt":        {func(f *fakeDocker) { f.imageIDs["ezbx-box:dev"] = "sha256:box2" }, "Box", "built again"},
+	}
+	for name, tc := range cases {
+		f := goodDocker()
+		tc.change(f)
+		r := runWith(f)
+		found := false
+		for _, c := range r.Checks {
+			if c.Name != "image is current" {
+				continue
+			}
+			if c.Group == tc.group {
+				found = true
+				if c.Status != Warn || !strings.Contains(c.Detail, tc.detail) || !strings.Contains(c.Fix, "ezbx build") {
+					t.Errorf("%s: %s %q, fix %q", name, c.Status, c.Detail, c.Fix)
+				}
+			} else if c.Status != Pass {
+				t.Errorf("%s: the other container's image check is %s %q", name, c.Status, c.Detail)
+			}
+		}
+		if !found {
+			t.Errorf("%s: no image check for %s", name, tc.group)
+		}
+		if r.Failed() {
+			t.Errorf("%s: an old image should warn, not fail", name)
+		}
+	}
+
+	// Without a config there is nothing to compare with: skipped, with the reason.
+	f := goodDocker()
+	r := Run(context.Background(), HostConfig{Box: "t", Docker: f.run, ImagesNote: "no config"})
+	n := 0
+	for _, c := range r.Checks {
+		if c.Name == "image is current" {
+			n++
+			if c.Status != Skip || c.Detail != "no config" {
+				t.Errorf("without a config: %s %q", c.Status, c.Detail)
+			}
+		}
+	}
+	if n != 2 {
+		t.Errorf("want 2 skipped image checks, got %d", n)
 	}
 }

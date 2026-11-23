@@ -93,5 +93,3 @@ The other five harnesses follow the same rule (install scripts off, everything p
 ## Not built yet
 
 - Direct downloads with checked hashes, for tools Debian lacks.
-- The disk space check in `init` (image sizes are now known: see [isolation-test.md](isolation-test.md)).
-- A doctor check that the running containers use the current images.

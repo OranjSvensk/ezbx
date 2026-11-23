@@ -70,7 +70,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	fmt.Fprintln(stdout)
-	if code := runDoctor([]string{"--box", plan.Box}, stdout, stderr); code != 0 {
+	if code := runDoctor([]string{"--config", cfgFile, "--box", plan.Box}, stdout, stderr); code != 0 {
 		fmt.Fprintf(stderr, "Box %q is up, but the doctor found problems (above).\n", plan.Box)
 		return code
 	}

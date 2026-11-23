@@ -21,6 +21,7 @@ import (
 	"github.com/OranjSvensk/ezbx/internal/box"
 	"github.com/OranjSvensk/ezbx/internal/config"
 	"github.com/OranjSvensk/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/disk"
 	"github.com/OranjSvensk/ezbx/internal/harness"
 	"github.com/OranjSvensk/ezbx/internal/images"
 	"github.com/OranjSvensk/ezbx/internal/paths"
@@ -46,7 +47,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&o.URL, "url", "", "the engine's address, if detection doesn't find it")
 	fs.StringVar(&o.KeyEnv, "key-env", "", "NAME of an environment variable holding the engine's key")
 	fs.BoolVar(&o.Reasoning, "reasoning", false, "mark the engine's models as reasoning models")
-	harnessList := fs.String("harness", "", "harnesses, separated by commas, such as pi,opencode")
+	harnessList := fs.String("harness", "", "harnesses, separated by commas: pi, opencode, omp, codex, claude, hermes, openclaw")
 	toolList := fs.String("tools", "", "tool packs and tools, separated by commas, such as pack:coding,ffmpeg, or none")
 	fs.StringVar(&o.Workspace, "workspace", "", "the workspace folder")
 	fs.StringVar(&o.Network, "network", "", "off, allow or on")
@@ -55,7 +56,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--engine ID] [--harness pi,opencode] [--tools pack:coding] [--workspace PATH] [--network off|allow|on] [--memory 8g]")
+		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--engine ID] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--network off|allow|on] [--memory 8g]")
 		return 2
 	}
 	if *harnessList != "" {
@@ -138,6 +139,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	if st, err := os.Stat(res.Answers.Workspace); err == nil && st.IsDir() {
 		pl.Workspace = true
 	}
+	pl.Disks = diskChecks(dirs.State, dockerDataDir())
 	fmt.Fprint(stdout, pl.Review())
 
 	if *plan {
@@ -190,6 +192,54 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "\nNext: ezbx shell %s   (or ezbx shell for a terminal in the box)\n", res.Answers.Harnesses[0])
 	}
 	return 0
+}
+
+// diskChecks measures the drives init fills: the state folder (snapshots and
+// backups) and Docker's own data folder, when it is in its usual place. Two
+// on the same Windows drive are shown once.
+func diskChecks(state, docker string) []setup.Disk {
+	places := [][2]string{{"the state folder (snapshots)", state}}
+	if docker != "" {
+		places = append(places, [2]string{"Docker's images", docker})
+	}
+	var out []setup.Disk
+	for _, p := range places {
+		vol := strings.ToLower(filepath.VolumeName(p[1]))
+		merged := false
+		for i := range out {
+			if vol != "" && strings.ToLower(filepath.VolumeName(out[i].Path)) == vol {
+				out[i].What += " and " + p[0]
+				merged = true
+			}
+		}
+		if !merged {
+			n, err := disk.Free(p[1])
+			out = append(out, setup.Disk{What: p[0], Path: p[1], Free: n, Err: err})
+		}
+	}
+	return out
+}
+
+// dockerDataDir is where Docker keeps images on this computer, in its usual
+// place, or "" when it isn't there (Docker Desktop lets you move it).
+func dockerDataDir() string {
+	var dir string
+	switch runtime.GOOS {
+	case "windows":
+		if l := os.Getenv("LOCALAPPDATA"); l != "" {
+			dir = filepath.Join(l, "Docker")
+		}
+	case "darwin":
+		if home, err := os.UserHomeDir(); err == nil {
+			dir = filepath.Join(home, "Library", "Containers", "com.docker.docker")
+		}
+	case "linux":
+		dir = "/var/lib/docker"
+	}
+	if st, err := os.Stat(dir); dir == "" || err != nil || !st.IsDir() {
+		return ""
+	}
+	return dir
 }
 
 // preflight checks the system and waits for Docker if it isn't running.

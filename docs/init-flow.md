@@ -11,7 +11,8 @@
 - For each model, `init` asks whether it is a reasoning model, because engines don't say and a reasoning model's answers can be cut off without it (`--reasoning` answers yes for all).
 - After the harnesses, `init` asks which tool packs and tools go into the box image ([build.md](build.md)). A new config starts with `pack:coding`. An existing config keeps its `tools` setting, and one written before tools existed keeps none, so taking every default still changes nothing. `--tools pack:coding,ffmpeg` or `--tools none` answers it.
 - Images are built by `ezbx build` right before `ezbx up`, only if they aren't built yet; the plan says which. `ezbx.lock` is part of the repository, not written by `init` (see [build.md](build.md)). With `--no-start`, nothing is built.
-- Not yet: read-only folders (refused until masking is built), the disk space check, and `--here`.
+- Not yet: read-only folders (refused until masking is built) and `--here`.
+- The disk space check is a warning on the review screen, not a refusal. It measures the drive of the state folder (snapshots) and of Docker's data folder in its usual place (`%LOCALAPPDATA%\Docker` on Windows, `~/Library/Containers/com.docker.docker` on macOS, `/var/lib/docker` on Linux), once per drive. When images must be built it asks for twice the estimated box image (about 750 MB for the first harness and 600 MB for each more, from the sizes in [isolation-test.md](isolation-test.md), doubled for Docker's build cache) plus 1 GB for snapshots; otherwise 1 GB. Docker Desktop can keep its disk elsewhere, and tool packs such as Chromium add more, so the number is a guide.
 - On a box that is already up, `init` writes a changed config but doesn't restart the box. It says to run `ezbx down`, then `ezbx up`.
 
 ## Principles
@@ -44,7 +45,7 @@ Checks, in this order, each with a plain-language fix if it fails:
 
 - The operating system and architecture are supported.
 - The Docker command exists, and the Docker engine answers.
-- Enough free disk space for the images (the exact threshold is decided once image sizes are known).
+- Enough free disk space for the images and snapshots (built as a warning on the review screen; see above).
 - The chosen workspace parent folder exists and is writable.
 
 If the Docker engine isn't running, `init` says so and offers to wait while you start it. It does not start other programs without asking. It also does not install Docker.
@@ -96,6 +97,7 @@ Workspace     <workspace path>   (will be created)
 Read-only     none
 Network       off
 Memory        8g
+Disk          120.0 GB free at <state folder>, the state folder (snapshots) and Docker's images
 
 Will create
   2 Docker networks, 1 volume, 2 containers, 1 image set (build needs internet once)

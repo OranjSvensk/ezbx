@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/OranjSvensk/ezbx/internal/adapter"
-	"github.com/OranjSvensk/ezbx/internal/config"
 	"github.com/OranjSvensk/ezbx/internal/detect"
 	"github.com/OranjSvensk/ezbx/internal/doctor"
 	"github.com/OranjSvensk/ezbx/providers"
@@ -24,14 +23,19 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	}
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	box := fs.String("box", "main", "box name; its containers are ezbx-<box>-gateway and so on")
+	cfgFlag := fs.String("config", "", "config file; default EZBX_CONFIG, then ezbx.toml in the config folder")
+	boxFlag := fs.String("box", "", "box name; its containers are ezbx-<box>-gateway and so on (default: the config's box, else main)")
 	asJSON := fs.Bool("json", false, "print the report as JSON")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if !config.BoxName(*box) {
-		fmt.Fprintln(stderr, "A box name is short, lowercase letters, digits and dashes.")
-		return 2
+	t, err := resolveBox(*cfgFlag, *boxFlag)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		if _, ok := err.(usageError); ok {
+			return 2
+		}
+		return 1
 	}
 
 	adapters, err := adapter.LoadFS(providers.FS)
@@ -40,26 +44,48 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	cfg := doctor.HostConfig{
-		Box:    *box,
+		Box:    t.name,
 		Docker: dockerCLI,
 		Detect: func(ctx context.Context, extra []string) detect.Result {
 			return (&detect.Detector{Adapters: adapters, Run: runCommand}).Detect(ctx, extra)
 		},
 		LocalAddrs: localAddrs,
 	}
+	cfg.Images, cfg.ImagesNote = expectedImages(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	rep := doctor.Run(ctx, cfg)
 	if *asJSON {
 		rep.PrintJSON(stdout)
 	} else {
-		fmt.Fprintf(stdout, "ezbx doctor, box %q\n", *box)
+		fmt.Fprintf(stdout, "ezbx doctor, box %q\n", t.name)
 		rep.Print(stdout)
 	}
 	if rep.Failed() {
 		return 1
 	}
 	return 0
+}
+
+// expectedImages works out the images the box's config needs now, the same
+// way ezbx up does, so the doctor can tell a box started from older ones.
+// With no config for the box, it says why instead.
+func expectedImages(t target) (map[string]doctor.Image, string) {
+	if t.cfg == nil {
+		return nil, "no ezbx.toml to compare with"
+	}
+	b, ok := t.cfg.Box[t.name]
+	if !ok {
+		return nil, fmt.Sprintf("ezbx.toml has no box %q to compare with", t.name)
+	}
+	gw, bx, err := imageSpecs(b.Tools, b.Harnesses)
+	if err != nil {
+		return nil, "can't work out the images from ezbx.toml: " + err.Error()
+	}
+	return map[string]doctor.Image{
+		"gateway": {Tag: gw.Tag(), Inputs: gw.Inputs},
+		"box":     {Tag: bx.Tag(), Inputs: bx.Inputs},
+	}, ""
 }
 
 // runDoctorInside runs in the check container on the inside network and

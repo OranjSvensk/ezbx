@@ -136,7 +136,7 @@ The gateway image has no shell or curl, so its Docker healthcheck runs `ezbx gat
 
 ### What `ezbx doctor` checks
 
-`ezbx doctor [--box NAME] [--json]` (built). Every failure or warning comes with what to do about it, and the command exits 1 if anything failed.
+`ezbx doctor [--config FILE] [--box NAME] [--json]` (built). Every failure or warning comes with what to do about it, and the command exits 1 if anything failed.
 
 On the host:
 
@@ -145,6 +145,7 @@ On the host:
 3. **The inside network** is internal, its bridge has no address (`gateway_mode_ipv4=isolated`) and IPv6 is off. **The outside network** exists and isn't internal.
 4. **The gateway container** is running and healthy; has no capabilities, `no-new-privileges`, a non-root user and a read-only root filesystem; is attached to exactly the two networks, as `gateway` on the inside one; and publishes no port beyond this computer's loopback, and never the admin port.
 5. **Through the admin API** (`docker exec`): it answers, the engine is ready, and the gateway forwards to the port the running engine is on.
+5a. **Images are current** (a warning, not a failure, since an older image still works): the gateway and the box each run the image that the current `ezbx` files and the box's `ezbx.toml` call for (the same names `ezbx up` works out), that image carries the matching `ezbx.inputs` label, and it is still the build with that name (`ezbx reset --rebuild` builds a new one under the same name). The fix is `ezbx build`, then `ezbx down` and `ezbx up`, which keeps the workspace, the agent's home and snapshots. Without a config for the box, the check is skipped and says why.
 6. **The box container**, if there is one: no capabilities, `no-new-privileges`, not root, attached only to the inside network, and no Docker socket mounted. While it runs, the agent can write to `/workspace` (asked through `docker exec`, as the agent). If Docker made the workspace folder itself, for example after it was deleted while the box existed, the folder is owned by root; the fix is `ezbx admin shell -- chown 1000:1000 /workspace`. `ezbx up` checks this too and warns, since the box starts fine but the agent can't change anything.
 
 From inside, in a throwaway container started from the gateway's own image (which holds `ezbx`), attached only to the inside network, with the box's restrictions:

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/OranjSvensk/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/images"
 )
 
 // Docker runs one docker command and returns what it printed. It is a field
@@ -24,7 +25,15 @@ type HostConfig struct {
 	Docker     Docker
 	Detect     func(ctx context.Context, extra []string) detect.Result // finds engines on this computer, also checking the extra addresses
 	LocalAddrs func() []string                                         // this computer's own non-loopback addresses
+	// Images are the images the box needs now, by kind ("gateway", "box"),
+	// worked out from the files carried in ezbx and the box's ezbx.toml.
+	// Nil skips the image checks, with ImagesNote (or a default) as the reason.
+	Images     map[string]Image
+	ImagesNote string
 }
+
+// Image is one image the box should run: its name and the hash of its inputs.
+type Image struct{ Tag, Inputs string }
 
 // Docker resource names for a box.
 func names(box string) (inside, outside, gateway, boxName string) {
@@ -51,6 +60,7 @@ type networkInfo struct {
 
 type containerInfo struct {
 	Name  string `json:"Name"`
+	Image string `json:"Image"` // the ID of the image it was started from
 	State struct {
 		Running bool `json:"Running"`
 		Health  *struct {
@@ -212,6 +222,8 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 	if st, detail := keyStatus(gw, args); st != "" {
 		r.add(gg, "engine key", st, detail, "Run ezbx down, then ezbx up: this version gives the gateway its key in a read-only file, which docker inspect doesn't show.")
 	}
+	st, detail, fix := imageStatus(ctx, cfg, "gateway", gw)
+	r.add(gg, "image is current", st, detail, fix)
 
 	nets := sortedKeys(gw.NetworkSettings.Networks)
 	if len(nets) == 2 && nets[0] == insideNet && nets[1] == outsideNet {
@@ -288,6 +300,8 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 		r.add(gb, boxName, Skip, "no box container yet", "")
 	} else {
 		r.add(gb, "locked down", lockStatus(box, false), lockDetail(box, false), "Recreate it with --cap-drop ALL --security-opt no-new-privileges and a non-root user.")
+		st, detail, fix := imageStatus(ctx, cfg, "box", box)
+		r.add(gb, "image is current", st, detail, fix)
 		bnets := sortedKeys(box.NetworkSettings.Networks)
 		if len(bnets) == 1 && bnets[0] == insideNet {
 			r.add(gb, "networks", Pass, "only the inside network", "")
@@ -566,4 +580,34 @@ func writableStatus(ctx context.Context, cfg HostConfig, boxName string) (Status
 	owner, mode, _ := strings.Cut(got, " ")
 	return Fail, "/workspace is owned by " + owner + " with mode " + mode + ", so the agent (user 1000) can't change anything",
 		"Docker probably created the folder itself. Fix it with: ezbx admin shell" + flag + " -- chown 1000:1000 /workspace"
+}
+
+// imageStatus checks that a container runs the image the box needs now: the
+// one named after the current inputs, built by ezbx build from them, and the
+// same build that carries that name today (ezbx reset --rebuild makes a new
+// one under the same name). An old image still works, so this only warns.
+func imageStatus(ctx context.Context, cfg HostConfig, kind string, c containerInfo) (Status, string, string) {
+	want, ok := cfg.Images[kind]
+	if !ok {
+		note := cfg.ImagesNote
+		if note == "" {
+			note = "no ezbx.toml for this box to compare with"
+		}
+		return Skip, note, ""
+	}
+	const fix = "Run ezbx build, then ezbx down and ezbx up. The workspace, the agent's home and snapshots are kept."
+	if c.Config.Image != want.Tag {
+		return Warn, fmt.Sprintf("runs %s, but the current files and ezbx.toml make %s", joinOr([]string{c.Config.Image}, "an unnamed image"), want.Tag), fix
+	}
+	if got := c.Config.Labels[images.InputsLabel]; got != want.Inputs {
+		return Warn, fmt.Sprintf("%s wasn't built by ezbx build from the current files", want.Tag), fix
+	}
+	out, err := cfg.Docker(ctx, "image", "inspect", "--format", "{{.Id}}", want.Tag)
+	if err != nil {
+		return Warn, want.Tag + " is no longer on this computer", fix
+	}
+	if id := strings.TrimSpace(string(out)); id != c.Image {
+		return Warn, want.Tag + " was built again after this container started", fix
+	}
+	return Pass, want.Tag, ""
 }

@@ -62,3 +62,22 @@ func TestInitRefusesBadFlags(t *testing.T) {
 type devNull struct{}
 
 func (devNull) Write(p []byte) (int, error) { return len(p), nil }
+
+// Two places on one Windows drive are measured once, and both are named.
+func TestDiskChecks(t *testing.T) {
+	dir := t.TempDir()
+	got := diskChecks(filepath.Join(dir, "state"), filepath.Join(dir, "docker"))
+	if runtime.GOOS == "windows" {
+		if len(got) != 1 || got[0].What != "the state folder (snapshots) and Docker's images" {
+			t.Fatalf("one drive: %+v", got)
+		}
+	} else if len(got) != 2 {
+		t.Fatalf("two places: %+v", got)
+	}
+	if got[0].Err != nil || got[0].Free == 0 {
+		t.Errorf("free space: %+v", got[0])
+	}
+	if only := diskChecks(dir, ""); len(only) != 1 || only[0].What != "the state folder (snapshots)" {
+		t.Errorf("without Docker's folder: %+v", only)
+	}
+}

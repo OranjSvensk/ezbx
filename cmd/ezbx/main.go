@@ -42,7 +42,8 @@ const usage = `ezbx - boxed-up local AI agents
 Usage:
   ezbx [--version] [help]
   ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--engine ID|auto|later]
-            [--url ADDRESS] [--key-env NAME] [--reasoning] [--harness pi]
+            [--url ADDRESS] [--key-env NAME] [--reasoning]
+            [--harness pi,opencode,omp,codex,claude,hermes,openclaw]
             [--tools pack:coding,ffmpeg|none] [--workspace PATH]
             [--network off|allow|on] [--memory 8g]
   ezbx build [--config FILE] [--prune [--yes]]
@@ -68,7 +69,7 @@ Usage:
   ezbx gateway health [--addr 127.0.0.1:PORT]
   ezbx harness render ID --out FOLDER [--url ADDRESS] [--default MODEL]
                      [--context N] [--max-tokens N] [--reasoning]
-  ezbx doctor [--box NAME] [--json]
+  ezbx doctor [--config FILE] [--box NAME] [--json]
 
 Commands:
   init            Guided setup: finds the engine, asks the questions, shows
