@@ -80,16 +80,31 @@ func TestDefaults(t *testing.T) {
 	}
 }
 
-// The shipped example must stay loadable, apart from the read-only folder,
-// which is refused until masking is built.
+// The shipped example must stay loadable. (ezbx up still refuses its
+// read-only folder until mounting with masks is built.)
 func TestExampleFile(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "ezbx.toml.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = Parse(string(data))
-	if err == nil || !strings.Contains(err.Error(), "readonly folders are not supported yet") {
+	c, err := Parse(string(data))
+	if err != nil {
 		t.Fatalf("example: %v", err)
+	}
+	if _, b := c.Only(); len(b.ReadOnly) != 1 || b.ReadOnly[0].Path != "~/projects" {
+		t.Fatalf("example's read-only folder: %+v", b.ReadOnly)
+	}
+}
+
+func TestReadOnlyEntries(t *testing.T) {
+	base := "version = 1\n[box.main]\nworkspace = '/w'\nharnesses = [\"pi\"]\n"
+	c, err := Parse(base + "[[box.main.readonly]]\npath = '~/a'\nname = 'docs'\nmask = ['private/']\nunmask = ['.npmrc']\n[[box.main.readonly]]\npath = '/b'\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, b := c.Only()
+	if len(b.ReadOnly) != 2 || b.ReadOnly[0].Name != "docs" || b.ReadOnly[0].Mask[0] != "private/" || b.ReadOnly[0].Unmask[0] != ".npmrc" || b.ReadOnly[1].Path != "/b" {
+		t.Fatalf("%+v", b.ReadOnly)
 	}
 }
 
@@ -111,7 +126,12 @@ func TestRefused(t *testing.T) {
 		"bad allow host":   {strings.Replace(base, "workspace", "allow = ['192.0.2.1:80']\nworkspace", 1), "allow"},
 		"allow address":    {strings.Replace(base, "workspace", "allow = ['192.0.2.1']\nworkspace", 1), "allow"},
 		"no harness":       {strings.Replace(base, `harnesses = ["pi"]`, "harnesses = []", 1), "harnesses is empty"},
-		"readonly":         {base + "[[box.main.readonly]]\npath = '/p'\n", "readonly folders are not supported yet"},
+		"readonly no path": {base + "[[box.main.readonly]]\nmask = ['x']\n", "readonly[0].path is required"},
+		"readonly name":    {base + "[[box.main.readonly]]\npath = '/p'\nname = 'My Docs'\n", "readonly[0].name"},
+		"readonly twice":   {base + "[[box.main.readonly]]\npath = '/p'\nname = 'd'\n[[box.main.readonly]]\npath = '/q'\nname = 'd'\n", "readonly[1].name \"d\" is used twice"},
+		"readonly mask":    {base + "[[box.main.readonly]]\npath = '/p'\nmask = ['../up']\n", "readonly[0].mask"},
+		"readonly unmask":  {base + "[[box.main.readonly]]\npath = '/p'\nunmask = ['.ENV']\n", "isn't one of the default masks"},
+		"readonly typo":    {base + "[[box.main.readonly]]\npath = '/p'\nmasks = ['x']\n", "unknown setting"},
 		"key not env name": {base + "[engine.strata]\nkey_env = 'sk-abc def'\n", "NAME of an environment variable"},
 		"key without url":  {base + "[engine.strata]\nkey_env = 'K'\n", "key_env needs url too"},
 		"url without http": {base + "[engine.strata]\nurl = '127.0.0.1:18080'\n", "must start with http"},

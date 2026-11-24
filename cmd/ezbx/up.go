@@ -120,6 +120,14 @@ func makePlan(ctx context.Context, cfg *config.Config, dirs paths.Dirs, stdout i
 	if err := box.CheckWorkspace(ws, home, []string{dirs.Config, dirs.State}, systemDirs()); err != nil {
 		return box.Plan{}, err
 	}
+	if len(b.ReadOnly) > 0 {
+		// Checked first, so a mistake is reported, then refused: mounting
+		// with masks isn't built yet (docs/readonly.md).
+		if _, err := box.ResolveReadOnly(readOnlyEntries(b), ws, home, []string{dirs.Config, dirs.State}, systemDirs()); err != nil {
+			return box.Plan{}, err
+		}
+		return box.Plan{}, errors.New("read-only folders aren't built yet: hiding secret files in them is still being written. Remove the readonly entries from ezbx.toml for now")
+	}
 
 	chosen, err := boxHarnesses(b)
 	if err != nil {
@@ -372,4 +380,13 @@ func dockerIn(ctx context.Context, stdin []byte, args ...string) ([]byte, error)
 		return out.Bytes(), errors.New(msg)
 	}
 	return out.Bytes(), nil
+}
+
+// readOnlyEntries hands the config's read-only folders to the box package.
+func readOnlyEntries(b *config.Box) []box.ReadOnlyEntry {
+	var out []box.ReadOnlyEntry
+	for _, r := range b.ReadOnly {
+		out = append(out, box.ReadOnlyEntry{Path: r.Path, Name: r.Name, Mask: r.Mask, Unmask: r.Unmask})
+	}
+	return out
 }

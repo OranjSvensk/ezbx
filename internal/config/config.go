@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/OranjSvensk/ezbx/internal/readonly"
 )
 
 // Config is the whole file.
@@ -49,10 +51,14 @@ type Snapshots struct {
 	Keep    int      `toml:"keep"`     // automatic snapshots kept
 }
 
-// ReadOnly is a folder the agent may read but not change. Not built yet.
+// ReadOnly is a folder the agent may read but not change, shown in the box
+// as /readonly/<name>. See docs/readonly.md. ezbx up doesn't start a box
+// with one yet.
 type ReadOnly struct {
-	Path string   `toml:"path"`
-	Mask []string `toml:"mask"`
+	Path   string   `toml:"path"`
+	Name   string   `toml:"name"`   // under /readonly; the folder's own name, lowercased, if empty
+	Mask   []string `toml:"mask"`   // masked on top of readonly.Defaults
+	Unmask []string `toml:"unmask"` // defaults to show after all, written exactly
 }
 
 // Engine chooses the inference engine.
@@ -287,8 +293,31 @@ func (b *Box) check(name string) error {
 	if b.Snapshots.Keep < 0 {
 		return errors.New(p + "snapshots.keep can't be negative")
 	}
-	if len(b.ReadOnly) > 0 {
-		return errors.New(p + "readonly folders are not supported yet, because hiding secret files in them isn't built. Remove the readonly entries for now")
+	names := map[string]bool{}
+	for i, r := range b.ReadOnly {
+		q := fmt.Sprintf("%sreadonly[%d].", p, i)
+		if strings.TrimSpace(r.Path) == "" {
+			return errors.New(q + "path is required: the folder the agent may read")
+		}
+		if r.Name != "" {
+			if err := readonly.CheckName(r.Name); err != nil {
+				return errors.New(q + err.Error())
+			}
+			if names[r.Name] {
+				return fmt.Errorf("%sname %q is used twice; give each read-only folder its own name", q, r.Name)
+			}
+			names[r.Name] = true
+		}
+		for _, m := range r.Mask {
+			if err := readonly.CheckPattern(m); err != nil {
+				return fmt.Errorf("%smask %q %v", q, m, err)
+			}
+		}
+		for _, u := range r.Unmask {
+			if !readonly.IsDefault(u) {
+				return fmt.Errorf("%sunmask %q isn't one of the default masks; write it exactly as listed in docs/readonly.md", q, u)
+			}
+		}
 	}
 	return nil
 }

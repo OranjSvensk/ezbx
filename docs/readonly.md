@@ -1,6 +1,6 @@
 # Read-only folders and secret masking (design, not built yet)
 
-A read-only folder is a host folder the agent may read but never change, such as other projects it should learn from or a reference checkout. Common secret files inside it are hidden from the box. This page is the design; until it is built, `ezbx up` refuses a config with `[[box.<name>.readonly]]` entries. The risks it does and doesn't cover are in [threat-model.md](threat-model.md).
+A read-only folder is a host folder the agent may read but never change, such as other projects it should learn from or a reference checkout. Common secret files inside it are hidden from the box. This page is the design. Built so far (`internal/readonly`, `internal/box/readonly.go`): the config keys and their checks, the folder refusals (R6), the mask patterns and defaults, the walk with its limits, and the content check. Not built yet: the mounts, the check at `ezbx shell`, the doctor check and the `init` questions. Until they are, `ezbx up` checks `[[box.<name>.readonly]]` entries and then refuses to start. The risks it does and doesn't cover are in [threat-model.md](threat-model.md).
 
 ```toml
 [[box.main.readonly]]
