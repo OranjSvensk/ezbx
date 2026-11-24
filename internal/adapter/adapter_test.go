@@ -17,8 +17,11 @@ func TestEmbeddedAdaptersLoad(t *testing.T) {
 	var ids []string
 	for _, a := range adapters {
 		ids = append(ids, a.ID)
+		if want := a.ID == "anthropic"; a.IsAnthropicAuth() != want {
+			t.Errorf("%s: IsAnthropicAuth() = %v, want %v", a.ID, a.IsAnthropicAuth(), want)
+		}
 	}
-	if got := strings.Join(ids, ","); got != "lmstudio,openai" {
+	if got := strings.Join(ids, ","); got != "anthropic,lmstudio,openai" {
 		t.Fatalf("unexpected adapters: %s", got)
 	}
 }
@@ -66,11 +69,15 @@ func TestValidation(t *testing.T) {
 		"skip outside the list":    strings.Replace(good, `"loaded": null`, `"loaded": null, "skip": "other[].type == embedding"`, 1),
 		"skip without a field":     strings.Replace(good, `"loaded": null`, `"loaded": null, "skip": "data[]. == embedding"`, 1),
 		"skip without a value":     strings.Replace(good, `"loaded": null`, `"loaded": null, "skip": "data[].type == "`, 1),
+		"unknown auth mode":        strings.Replace(good, `"mode": "none"`, `"mode": "magic"`, 1),
 	}
 	for name, body := range bad {
 		if err := load(t, "demo", body); err == nil {
 			t.Errorf("%s: expected an error, got none", name)
 		}
+	}
+	if err := load(t, "demo", strings.Replace(good, `"mode": "none"`, `"mode": "optional-anthropic"`, 1)); err != nil {
+		t.Errorf("optional-anthropic auth mode must load: %v", err)
 	}
 }
 

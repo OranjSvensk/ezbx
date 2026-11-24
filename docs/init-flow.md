@@ -33,7 +33,7 @@ ezbx init --yes           accept detected defaults without prompting
 ezbx init --config FILE   take every answer from a config file
 ```
 
-Useful flags: `--url ADDRESS`, `--api auto|openai|lmstudio`, `--key-env NAME`, `--later`, `--harness a,b`, `--workspace PATH`, `--network off|allow|on`, `--no-start`, `--here` (write config next to the current folder, for developers).
+Useful flags: `--url ADDRESS`, `--api auto|openai|lmstudio|anthropic`, `--key-env NAME`, `--later`, `--harness a,b`, `--workspace PATH`, `--network off|allow|on`, `--no-start`, `--here` (write config next to the current folder, for developers).
 
 Prompts are plain text questions in version 0.1. Arrow-key menus can come later without changing the flow.
 
@@ -55,7 +55,7 @@ If the Docker engine isn't running, `init` says so and offers to wait while you 
 1. Look at the common local ports, the configured `url` and any `--url`, and show each server found with the API it speaks (see [engine-adapters.md](engine-adapters.md)):
 
    ```text
-   Model servers found on this computer (any server with an OpenAI-compatible API works)
+   Model servers found on this computer (any OpenAI- or Anthropic-compatible API works)
      1. LM Studio API            http://127.0.0.1:1234, 3 model(s)
      2. OpenAI-compatible API    http://127.0.0.1:8080, 1 model(s)
      L. I'll start one later

@@ -97,7 +97,7 @@ func ConfigText(a Answers, now time.Time) string {
 	if e.API == "" {
 		e.API = config.DefaultAPI
 	}
-	w("# The model server on this computer. Any server with an OpenAI-compatible\n")
+	w("# The model server on this computer. Any OpenAI- or Anthropic-compatible\n")
 	w("# API works; api says which kind (auto picks the most specific one it answers).\n")
 	w("[engine]\n")
 	if e.URL != "" {
@@ -105,7 +105,7 @@ func ConfigText(a Answers, now time.Time) string {
 	} else {
 		w("# url   = \"http://127.0.0.1:PORT\"   # needed before ezbx up; see ezbx engine detect\n")
 	}
-	w("api     = %s   # auto | openai | lmstudio\n", quote(e.API))
+	w("api     = %s   # auto | openai | lmstudio | anthropic\n", quote(e.API))
 	if e.KeyEnv != "" {
 		w("key_env = %s   # the NAME of an environment variable, never the key\n", quote(e.KeyEnv))
 	}

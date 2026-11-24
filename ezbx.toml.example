@@ -39,12 +39,12 @@ tools     = ["pack:coding"]       # built into the box: packs (pack:coding, pack
 # unmask = [".npmrc"]             # a default to show after all, written exactly
 
 # The model server on this computer. Any program that serves an
-# OpenAI-compatible API works; ezbx up contacts only this address.
+# OpenAI- or Anthropic-compatible API works; ezbx up contacts only this address.
 # "ezbx engine detect" lists the servers it finds on the common ports.
 [engine]
 url     = "http://127.0.0.1:1234"
-api     = "auto"                  # auto | openai | lmstudio (auto: the most
-                                  # specific kind the server answers)
+api     = "auto"                  # auto | openai | lmstudio | anthropic (auto:
+                                  # the most specific kind the server answers)
 # key_env = "ENGINE_API_KEY"      # NAME of an environment variable holding the key,
 #                                 # never the key itself (it is only sent to url)
 # host    = "localhost:PORT"      # Host header to send, for servers that check it

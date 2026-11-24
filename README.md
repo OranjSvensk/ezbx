@@ -27,7 +27,7 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 
 ## The idea
 
-- **The model stays on your machine.** Whatever program serves your model keeps full access to your GPU and models. ezbx works with any server that offers an OpenAI-compatible API (with better model facts from LM Studio's own API), so there is no list of supported engines.
+- **The model stays on your machine.** Whatever program serves your model keeps full access to your GPU and models. ezbx works with any server that offers an OpenAI- or Anthropic-compatible API (with better model facts from LM Studio's own API), so there is no list of supported engines.
 - **The work stays in the box.** Agents run in a container and can only write to folders you choose.
 - **One stable address between them.** A small gateway lets the box talk to your model server, so moving to another server or port doesn't mean reconfiguring every tool.
 - **You choose the harnesses.** Pick from Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw, in any combination. Each one's install method is verified and pinned in `ezbx.lock`.

@@ -31,6 +31,7 @@ const (
 	defaultHeaderTimeout = 30 * time.Minute
 	defaultIdleTimeout   = 10 * time.Minute
 	bodyReadTimeout      = 2 * time.Minute
+	anthropicVersion     = "2023-06-01"
 )
 
 // Config holds the gateway's settings.
@@ -75,6 +76,10 @@ type target struct {
 	url    *url.URL
 	engine string
 	host   string // Host header for the engine; "" means the url's host
+}
+
+func (t *target) isAnthropic() bool {
+	return t.engine == "anthropic"
 }
 
 // Gateway implements http.Handler for the model route.
@@ -304,16 +309,30 @@ func (g *Gateway) forward(w http.ResponseWriter, r *http.Request) {
 
 	ctx = context.WithValue(ctx, ctxKey{}, info)
 	if r.Method == http.MethodPost {
-		switch r.URL.Path {
-		case "/v1/messages/count_tokens":
-			g.serveCountTokens(rec, r.WithContext(ctx), info)
-			return
-		case "/v1/messages":
-			g.serveMessages(rec, r.WithContext(ctx), info)
-			return
-		case "/v1/responses":
-			g.serveResponses(rec, r.WithContext(ctx), info)
-			return
+		if info.t.isAnthropic() {
+			switch r.URL.Path {
+			case "/v1/messages/count_tokens":
+				g.serveAnthropicCountTokens(rec, r.WithContext(ctx), info)
+				return
+			case "/v1/chat/completions":
+				g.serveChatViaAnthropic(rec, r.WithContext(ctx), info)
+				return
+			case "/v1/responses":
+				g.serveResponsesViaAnthropic(rec, r.WithContext(ctx), info)
+				return
+			}
+		} else {
+			switch r.URL.Path {
+			case "/v1/messages/count_tokens":
+				g.serveCountTokens(rec, r.WithContext(ctx), info)
+				return
+			case "/v1/messages":
+				g.serveMessages(rec, r.WithContext(ctx), info)
+				return
+			case "/v1/responses":
+				g.serveResponses(rec, r.WithContext(ctx), info)
+				return
+			}
 		}
 	}
 	g.proxy.ServeHTTP(rec, r.WithContext(ctx))
@@ -371,6 +390,25 @@ func (g *Gateway) readModel(w http.ResponseWriter, r *http.Request, info *reqInf
 	return held, nil
 }
 
+// setUpstreamAuth drops any placeholder credential headers from the box and
+// sets the gateway's key and required headers for the upstream API kind.
+func (g *Gateway) setUpstreamAuth(h http.Header, t *target) {
+	h.Del("Authorization")
+	h.Del("X-Api-Key")
+	if t.isAnthropic() {
+		if h.Get("Anthropic-Version") == "" {
+			h.Set("Anthropic-Version", anthropicVersion)
+		}
+		if g.key != "" {
+			h.Set("X-Api-Key", g.key)
+		}
+		return
+	}
+	if g.key != "" {
+		h.Set("Authorization", "Bearer "+g.key)
+	}
+}
+
 // rewrite builds the request that goes to the engine.
 func (g *Gateway) rewrite(pr *httputil.ProxyRequest) {
 	info := pr.In.Context().Value(ctxKey{}).(*reqInfo)
@@ -380,11 +418,7 @@ func (g *Gateway) rewrite(pr *httputil.ProxyRequest) {
 	}
 
 	// The box's own key is a placeholder and must never reach the engine.
-	pr.Out.Header.Del("Authorization")
-	pr.Out.Header.Del("X-Api-Key")
-	if g.key != "" {
-		pr.Out.Header.Set("Authorization", "Bearer "+g.key)
-	}
+	g.setUpstreamAuth(pr.Out.Header, info.t)
 	// Rewrite (unlike the older Director) adds no X-Forwarded-For and removes
 	// any Forwarded or X-Forwarded-* headers the box sent.
 }
@@ -438,11 +472,11 @@ func (g *Gateway) ready(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.url.String()+"/v1/models", nil)
-	if err == nil && g.key != "" {
-		req.Header.Set("Authorization", "Bearer "+g.key)
-	}
-	if err == nil && t.host != "" {
-		req.Host = t.host
+	if err == nil {
+		g.setUpstreamAuth(req.Header, t)
+		if t.host != "" {
+			req.Host = t.host
+		}
 	}
 	var resp *http.Response
 	if err == nil {
@@ -541,6 +575,10 @@ type statusRecorder struct {
 func (s *statusRecorder) WriteHeader(code int) {
 	s.status = code
 	s.ResponseWriter.WriteHeader(code)
+}
+
+func (s *statusRecorder) Flush() {
+	_ = http.NewResponseController(s.ResponseWriter).Flush()
 }
 
 func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }

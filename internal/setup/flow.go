@@ -187,7 +187,7 @@ func chooseEngine(f Facts, o Options, a *Answers, p *Prompter) (*detect.Engine, 
 			offered = append(offered, e)
 		}
 	}
-	fmt.Fprintln(p.Out, "Model servers found on this computer (any server with an OpenAI-compatible API works)")
+	fmt.Fprintln(p.Out, "Model servers found on this computer (any OpenAI- or Anthropic-compatible API works)")
 	if len(offered) == 0 {
 		fmt.Fprintln(p.Out, "  none. Start your model server and load a model, then run ezbx init again,")
 		fmt.Fprintln(p.Out, "  or carry on: the config is written, and ezbx up works once the server runs.")

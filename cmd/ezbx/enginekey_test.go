@@ -126,7 +126,7 @@ func TestChooseEngineByAPI(t *testing.T) {
 	}
 	// An unknown kind lists the real ones.
 	_, err = chooseEngine(ctx, engineConfig(t, "[engine]\napi = 'demo'\nurl = '"+srv.URL+"'\n"))
-	if err == nil || !strings.Contains(err.Error(), `engine.api "demo": use auto or one of lmstudio, openai`) {
+	if err == nil || !strings.Contains(err.Error(), `engine.api "demo": use auto or one of anthropic, lmstudio, openai`) {
 		t.Errorf("unknown kind: %v", err)
 	}
 	// Without a url nothing is scanned: ezbx up says what to set.
@@ -137,8 +137,38 @@ func TestChooseEngineByAPI(t *testing.T) {
 	// Nothing answering at the url says how to fix it.
 	srv.Close()
 	_, err = chooseEngine(ctx, engineConfig(t, "[engine]\nurl = '"+srv.URL+"'\n"))
-	if err == nil || !strings.Contains(err.Error(), "Nothing answered at "+srv.URL+" with an OpenAI-compatible API") {
+	if err == nil || !strings.Contains(err.Error(), "Nothing answered at "+srv.URL+" with an OpenAI- or Anthropic-compatible API") {
 		t.Errorf("closed server: %v", err)
+	}
+}
+
+func TestChooseEngineAnthropicWithKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Api-Key") != testKey || r.Header.Get("Anthropic-Version") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":[{"id":"big-model","type":"model"}],"has_more":false}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	t.Setenv("EZBX_TEST_KEY", testKey)
+	eng, err := chooseEngine(context.Background(), engineConfig(t, "[engine]\napi = 'auto'\nurl = '"+srv.URL+"'\nkey_env = 'EZBX_TEST_KEY'\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eng.ID != "anthropic" || len(eng.Models) != 1 || eng.Models[0].ID != "big-model" {
+		t.Errorf("got %+v", eng)
+	}
+
+	t.Setenv("EZBX_TEST_KEY", "kv-docs-wrong")
+	_, err = chooseEngine(context.Background(), engineConfig(t, "[engine]\napi = 'anthropic'\nurl = '"+srv.URL+"'\nkey_env = 'EZBX_TEST_KEY'\n"))
+	if err == nil || !strings.Contains(err.Error(), "refused the key in EZBX_TEST_KEY") || !strings.Contains(err.Error(), "Anthropic-compatible API") {
+		t.Errorf("wrong key: %v", err)
 	}
 }
 

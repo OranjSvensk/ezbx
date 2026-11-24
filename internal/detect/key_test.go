@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/OranjSvensk/ezbx/internal/adapter"
+	"github.com/OranjSvensk/ezbx/providers"
 )
 
 const testKey = "kv-docs-example-1"
@@ -146,5 +147,113 @@ func TestOtherErrorsAreNotRefusals(t *testing.T) {
 	t.Cleanup(srv.Close)
 	if res := newDetector(t).Detect(context.Background(), []string{srv.URL}); len(res.Refused) != 0 {
 		t.Errorf("%+v", res.Refused)
+	}
+}
+
+// An Anthropic-compatible server expects X-Api-Key + Anthropic-Version (and
+// rejects Authorization: Bearer with 401). The key still goes only to its
+// own address, and the Bearer 401 never hides the X-Api-Key match.
+func TestAnthropicKeyUsesXApiKeyOnlyOnOwnAddress(t *testing.T) {
+	var mu sync.Mutex
+	type reqHeaders struct{ version, xKey, auth string }
+	var gotKeyed []reqHeaders
+	var gotOther []string
+
+	keyed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		gotKeyed = append(gotKeyed, reqHeaders{
+			version: r.Header.Get("Anthropic-Version"),
+			xKey:    r.Header.Get("X-Api-Key"),
+			auth:    r.Header.Get("Authorization"),
+		})
+		mu.Unlock()
+		if r.Header.Get("X-Api-Key") != testKey || r.Header.Get("Anthropic-Version") != anthropicVersion {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(anthropicModels))
+	}))
+	t.Cleanup(keyed.Close)
+
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		gotOther = append(gotOther, r.Header.Get("X-Api-Key")+r.Header.Get("Authorization"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(anthropicModels))
+	}))
+	t.Cleanup(other.Close)
+
+	// Without a key, keyed reports a refusal with KeySent=false.
+	res := newDetector(t).Detect(context.Background(), []string{keyed.URL})
+	if len(res.Engines) != 0 || len(res.Refused) != 1 || res.Refused[0].URL != keyed.URL || res.Refused[0].KeySent {
+		t.Fatalf("without key: engines=%+v refused=%+v", res.Engines, res.Refused)
+	}
+
+	// With the wrong key, keyed reports a refusal with KeySent=true.
+	d := newDetector(t)
+	d.Keys = map[string]string{keyed.URL: "kv-docs-wrong"}
+	res = d.Detect(context.Background(), []string{keyed.URL})
+	if len(res.Engines) != 0 || len(res.Refused) != 1 || !res.Refused[0].KeySent {
+		t.Fatalf("wrong key: engines=%+v refused=%+v", res.Engines, res.Refused)
+	}
+
+	// With the right key, keyed is found as anthropic, refused is empty, and
+	// the key never reaches other or leaks into an Authorization header.
+	mu.Lock()
+	gotKeyed = nil
+	mu.Unlock()
+	d = newDetector(t)
+	d.Keys = map[string]string{keyed.URL: testKey}
+	res = d.Detect(context.Background(), []string{keyed.URL, other.URL})
+	if len(res.Engines) != 2 || len(res.Refused) != 0 {
+		t.Fatalf("with key: engines=%+v refused=%+v", res.Engines, res.Refused)
+	}
+	foundAnthropic := false
+	for _, e := range res.Engines {
+		if e.URL == keyed.URL && e.ID == "anthropic" {
+			foundAnthropic = true
+		}
+	}
+	if !foundAnthropic {
+		t.Fatalf("keyed server not found as anthropic: %+v", res.Engines)
+	}
+	for _, h := range gotKeyed {
+		if h.xKey == testKey && h.auth != "" {
+			t.Errorf("Anthropic request also carried Authorization: %+v", h)
+		}
+		if h.auth == "Bearer "+testKey && h.xKey != "" {
+			t.Errorf("OpenAI request also carried X-Api-Key: %+v", h)
+		}
+	}
+	for _, s := range gotOther {
+		if s != "" {
+			t.Errorf("other server received a key: %q", s)
+		}
+	}
+
+	// Even when an OpenAI Bearer adapter probes /v1/models first and gets 401,
+	// the Anthropic X-Api-Key probe still runs and finds the server.
+	all, err := adapter.LoadFS(providers.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var byID = map[string]adapter.Adapter{}
+	for _, a := range all {
+		byID[a.ID] = a
+	}
+	dOrdered := &Detector{
+		Adapters:      []adapter.Adapter{byID["openai"], byID["anthropic"]},
+		SkipHintPorts: true,
+		Timeout:       2 * time.Second,
+		Keys:          map[string]string{keyed.URL: testKey},
+	}
+	if res := dOrdered.Detect(context.Background(), []string{keyed.URL}); len(res.Engines) != 1 || res.Engines[0].ID != "anthropic" {
+		t.Fatalf("openai 401 poisoned anthropic probe: engines=%+v refused=%+v", res.Engines, res.Refused)
 	}
 }

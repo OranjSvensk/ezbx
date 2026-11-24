@@ -12,7 +12,7 @@ You need three things on your computer:
 
 1. **Docker Desktop** (with Docker Engine 28 or later), running. ezbx never installs or starts Docker for you.
 2. **Go 1.27 or later**, to build `ezbx` from source.
-3. **A local model server** running on your computer with at least one model loaded. Any program that serves an OpenAI-compatible API works ([engine-adapters.md](engine-adapters.md)). You can still run setup without one and start the model later.
+3. **A local model server** running on your computer with at least one model loaded. Any program that serves an OpenAI- or Anthropic-compatible API works ([engine-adapters.md](engine-adapters.md)). You can still run setup without one and start the model later.
 
 ---
 
@@ -72,7 +72,7 @@ To preview what `ezbx init` will ask and create without changing anything on dis
    ```text
    ezbx init --url http://127.0.0.1:PORT --key-env ENGINE_API_KEY
    ```
-   The key itself is never written into `ezbx.toml` or container images — ezbx only reads the named environment variable when starting the gateway. `--api openai` (or `lmstudio`) picks the API kind; the default, `auto`, uses the most specific one the server answers.
+   The key itself is never written into `ezbx.toml` or container images — ezbx only reads the named environment variable when starting the gateway. `--api openai` (or `lmstudio`, `anthropic`) picks the API kind; the default, `auto`, uses the most specific one the server answers.
 2. **Reasoning models:** Servers don't report whether a model thinks before answering, so `init` asks per model (`Is <model> a reasoning model?`). Answer `y` for reasoning models so their output isn't cut off mid-thought.
 3. **Harnesses:** Choose one or more harnesses by number (coding tools first, assistant tools after):
 

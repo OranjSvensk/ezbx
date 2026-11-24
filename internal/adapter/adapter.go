@@ -92,6 +92,12 @@ type Auth struct {
 	Note   string  `json:"note"`
 }
 
+// IsAnthropicAuth reports whether the API expects Anthropic authentication
+// headers (x-api-key and anthropic-version) rather than Authorization: Bearer.
+func (a Adapter) IsAnthropicAuth() bool {
+	return a.Auth.Mode == "optional-anthropic"
+}
+
 // Verified records what has actually been tested.
 type Verified struct {
 	Status string  `json:"status"`
@@ -146,6 +152,12 @@ func (a Adapter) validate(folder string) error {
 		return fmt.Errorf("openai.modelsPath must start with /")
 	case a.Models.ID == "":
 		return fmt.Errorf("models.id is required")
+	}
+
+	switch a.Auth.Mode {
+	case "none", "optional-bearer", "optional-anthropic":
+	default:
+		return fmt.Errorf("unsupported auth.mode %q", a.Auth.Mode)
 	}
 
 	if err := a.Models.validate(); err != nil {

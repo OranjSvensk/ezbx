@@ -6,17 +6,18 @@ ezbx doesn't care which program runs your model. It works with any model server 
 |---|---|---|
 | OpenAI-compatible | `openai` | `GET /v1/models` with a `data` list, and `POST /v1/chat/completions` |
 | LM Studio | `lmstudio` | the OpenAI-compatible routes, plus LM Studio's own model list, `GET /api/v1/models` |
+| Anthropic-compatible | `anthropic` | `GET /v1/models` with a `data` list and `has_more`, and `POST /v1/messages` (`x-api-key` + `anthropic-version`) |
 
 The LM Studio kind is the OpenAI-compatible one with better model facts: its own list gives each model's context size and says which models are embedding models, which can't chat and are left out. Chat still goes to `/v1/chat/completions`. A server that answers both is treated as `lmstudio`, because that kind checks more; `api = "openai"` uses it as a plain one.
 
-Harnesses in the box don't see any of this. The gateway gives them one OpenAI-compatible address, and translates the OpenAI Responses and Anthropic Messages APIs to chat completions for harnesses that speak those ([gateway.md](gateway.md)).
+An Anthropic-compatible server answers `GET /v1/models` with `has_more`, beating `openai` on specificity. Harnesses in the box don't see any of this: against an OpenAI-compatible server, the gateway translates `/v1/responses` and `/v1/messages` to `/v1/chat/completions`; against an `anthropic` server, it passes `/v1/messages` and `/v1/messages/count_tokens` straight through (falling back to the local token estimate on 404) and translates `/v1/chat/completions` and `/v1/responses` to `/v1/messages` ([gateway.md](gateway.md)).
 
 ## The config
 
 ```toml
 [engine]
 url     = "http://127.0.0.1:1234"   # the server's address
-api     = "auto"                    # auto | openai | lmstudio
+api     = "auto"                    # auto | openai | lmstudio | anthropic
 key_env = "ENGINE_API_KEY"          # only if the server wants a key
 host    = "localhost:1234"          # only if the server checks the Host header
 ```
@@ -45,7 +46,7 @@ Each kind is a data file, `providers/<id>/adapter.json`, so a new kind needs no 
 | `detect` | `hintPorts` (the common ports above, looked at only by `init` and `engine detect`) and `probes`. |
 | `openai` | Paths for the model list and chat. |
 | `models` | Where to read each model fact from the server's replies (id, context size, image input, loaded state). A `null` means the kind doesn't report it, so a configured default is used. |
-| `auth` | Whether the kind uses a key. The key's value is never stored here. |
+| `auth` | Key style (`none`, `optional-bearer`, or `optional-anthropic` for `x-api-key` and `anthropic-version`). The key's value is never stored here. |
 | `capabilities` | What the kind can do, as far as we know. |
 | `verified` | What has actually been checked, and when. |
 
@@ -88,9 +89,10 @@ Servers normally listen on the loopback address only, which is the safe default.
 
 ## What has been checked
 
-Before the API kinds replaced per-engine adapters (decision 22), four servers were checked live through `ezbx gateway serve` on the host on 2026-11-20 and 2026-11-22: the model list, chat (plain and streamed), `/v1/messages` and `/v1/responses` ([isolation-test.md](isolation-test.md)). One of them, with all seven harnesses, also through a real box. All four answer the `openai` kind's probes; the one with LM Studio's own model list answers the `lmstudio` kind's too.
+Before the API kinds replaced per-engine adapters (decision 22), four servers were checked live through `ezbx gateway serve` on the host on 2026-11-20 and 2026-11-22: the model list, chat (plain and streamed), `/v1/messages` and `/v1/responses` ([isolation-test.md](isolation-test.md)). One of them, with all seven harnesses, also through a real box. All four answer the `openai` kind's probes; the one with LM Studio's own model list answers the `lmstudio` kind's too. The `anthropic` kind was checked through `ezbx engine detect` and `ezbx gateway serve` against the fake engine in Anthropic mode (`tools/fakeengine --api anthropic`).
 
 ## Sources
 
+- [Anthropic API: list models](https://docs.anthropic.com/en/api/models-list) (official)
 - [LM Studio REST API: list models](https://lmstudio.ai/docs/developer/rest/list) (official)
 - [OpenAI API: list models](https://platform.openai.com/docs/api-reference/models/list) (official)

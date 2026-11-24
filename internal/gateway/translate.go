@@ -38,23 +38,21 @@ func (g *Gateway) stampHeaders(h http.Header, info *reqInfo) {
 	}
 }
 
-// callChat sends a translated /v1/chat/completions request to the upstream
-// engine using the gateway's transport, key, host header and idle timer.
-func (g *Gateway) callChat(w http.ResponseWriter, r *http.Request, info *reqInfo, chatReq map[string]any) (*http.Response, error) {
-	payload, err := json.Marshal(chatReq)
+// postUpstreamJSON sends a JSON POST request to path on the upstream engine
+// using the gateway's transport, upstream auth, host header and idle timer.
+func (g *Gateway) postUpstreamJSON(w http.ResponseWriter, r *http.Request, info *reqInfo, path string, body any) (*http.Response, error) {
+	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	u := *info.t.url
-	u.Path = "/v1/chat/completions"
+	u.Path = path
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, u.String(), bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if g.key != "" {
-		req.Header.Set("Authorization", "Bearer "+g.key)
-	}
+	g.setUpstreamAuth(req.Header, info.t)
 	if info.t.host != "" {
 		req.Host = info.t.host
 	}
@@ -69,6 +67,12 @@ func (g *Gateway) callChat(w http.ResponseWriter, r *http.Request, info *reqInfo
 		info.cancel()
 	})
 	return resp, nil
+}
+
+// callChat sends a translated /v1/chat/completions request to the upstream
+// engine using the gateway's transport, key, host header and idle timer.
+func (g *Gateway) callChat(w http.ResponseWriter, r *http.Request, info *reqInfo, chatReq map[string]any) (*http.Response, error) {
+	return g.postUpstreamJSON(w, r, info, "/v1/chat/completions", chatReq)
 }
 
 // ---- Anthropic /v1/messages <-> OpenAI /v1/chat/completions ----

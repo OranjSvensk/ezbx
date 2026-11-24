@@ -41,8 +41,9 @@ func newDetector(t *testing.T) *Detector {
 }
 
 const (
-	plainModels    = `{"object":"list","data":[{"id":"some-model","object":"model"}]}`
-	lmstudioNative = `{"models":[{"type":"llm","key":"some-model","max_context_length":32768,"loaded_instances":[]}]}`
+	plainModels     = `{"object":"list","data":[{"id":"some-model","object":"model"}]}`
+	lmstudioNative  = `{"models":[{"type":"llm","key":"some-model","max_context_length":32768,"loaded_instances":[]}]}`
+	anthropicModels = `{"data":[{"id":"big-model","type":"model","display_name":"Big Model","created_at":"2026-01-01T00:00:00Z"}],"first_id":"big-model","last_id":"big-model","has_more":false}`
 )
 
 func TestAPlainOpenAIServerIsTheOpenAIKind(t *testing.T) {
@@ -101,8 +102,9 @@ func TestTheLMStudioAPINeedsTheOpenAIRoutesToo(t *testing.T) {
 func TestServersWithNoModelsAreStillFound(t *testing.T) {
 	empty := `{"object":"list","data":[]}`
 	cases := map[string]map[string]string{
-		"lmstudio": {"/v1/models": empty, "/api/v1/models": `{"models":[]}`},
-		"openai":   {"/v1/models": empty},
+		"anthropic": {"/v1/models": `{"data":[],"has_more":false}`},
+		"lmstudio":  {"/v1/models": empty, "/api/v1/models": `{"models":[]}`},
+		"openai":    {"/v1/models": empty},
 	}
 	for want, routes := range cases {
 		srv := fakeEngine(t, routes)
@@ -336,6 +338,33 @@ func TestFileNamedModels(t *testing.T) {
 	}
 	if w := FileNamedWarning(Engine{Models: []Model{{ID: "big-model"}}}); w != "" {
 		t.Errorf("no file-named models, but warned: %q", w)
+	}
+}
+
+// An Anthropic-compatible server requires Anthropic-Version and returns
+// has_more on /v1/models, beating openai by specificity.
+func TestAnthropicServerIsDetected(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Header.Get("Anthropic-Version") != anthropicVersion {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"type":"invalid_request_error","message":"missing anthropic-version"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(anthropicModels))
+	}))
+	t.Cleanup(srv.Close)
+
+	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
+	if len(res.Engines) != 1 || res.Engines[0].ID != "anthropic" || res.Engines[0].Name != "Anthropic-compatible API" {
+		t.Fatalf("want anthropic, got %+v", res.Engines)
+	}
+	if m := res.Engines[0].Models; len(m) != 1 || m[0].ID != "big-model" {
+		t.Errorf("unexpected models: %+v", m)
 	}
 }
 

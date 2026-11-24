@@ -33,7 +33,8 @@ The code refuses an admin address that isn't a loopback address, so a typo can't
 
 ### Forwarding
 
-- Paths are passed straight through: `/v1/models`, `/v1/chat/completions`, `/v1/embeddings` and any other `/v1/...` path. For harnesses that speak OpenAI's Responses API (`POST /v1/responses`, used by Codex CLI) or Anthropic's Messages API (`POST /v1/messages` and `/v1/messages/count_tokens`, used by Claude Code), the gateway translates requests and replies (including streaming SSE and tool calls) to and from the engine's `/v1/chat/completions`, so those harnesses work with any OpenAI-compatible engine. How a reply ended is kept: an engine's `finish_reason: length` (the reply hit the token limit) becomes `stop_reason: max_tokens` for Messages, and `status: incomplete` with `incomplete_details.reason: max_output_tokens` for Responses (`content_filter` becomes `incomplete` too), ending a stream with `response.incomplete` instead of `response.completed`. The gateway doesn't log request or reply content.
+- Paths are passed straight through: `/v1/models`, `/v1/chat/completions`, `/v1/embeddings` and any other `/v1/...` path. Against an OpenAI-compatible server, harnesses that speak OpenAI's Responses API (`POST /v1/responses`, used by Codex CLI) or Anthropic's Messages API (`POST /v1/messages` and `/v1/messages/count_tokens`, used by Claude Code) have their requests and replies (including streaming SSE and tool calls) translated to and from `/v1/chat/completions`. How a reply ended is kept: an engine's `finish_reason: length` (the reply hit the token limit) becomes `stop_reason: max_tokens` for Messages, and `status: incomplete` with `incomplete_details.reason: max_output_tokens` for Responses (`content_filter` becomes `incomplete` too), ending a stream with `response.incomplete` instead of `response.completed`.
+- Against an Anthropic-compatible server (`anthropic`), `POST /v1/messages` passes straight through, `POST /v1/messages/count_tokens` passes through and falls back to the local estimate if the server answers 404, and `POST /v1/chat/completions` and `POST /v1/responses` translate to `/v1/messages` and back (plain and streamed SSE, tools included, defaulting `max_tokens` to 4096 when omitted; `stop_reason: max_tokens` and `refusal` map to `length`/`content_filter` and `incomplete`). The gateway doesn't log request or reply content.
 - Paths that an engine might resolve to somewhere outside `/v1/` are refused with 400: `.` or `..` segments (also when encoded, such as `%2e%2e`), `//`, backslashes and control characters. An encoded slash inside a name, such as `/v1/models/org%2Fmodel`, is allowed.
 - Only `GET`, `HEAD` and `POST` are forwarded (others get 405), and protocol upgrades such as WebSocket are refused.
 - The upstream address is fixed by configuration, so the route can't be turned into a general-purpose relay.
@@ -49,7 +50,7 @@ Responses that stream (server-sent events) are forwarded as they arrive, with no
 ### Authentication
 
 - **Box to gateway:** a placeholder key. It is not a real credential and exists because some harnesses insist on one.
-- **Gateway to engine:** if the engine needs a key, the gateway adds it. You name an environment variable holding it with `key_env` in `ezbx.toml` (environment variables only in 0.1, decided in `init-flow.md`). The key is never written into an image, a config the box can read, or a log.
+- **Gateway to engine:** if the engine needs a key, the gateway adds it (`Authorization: Bearer` for OpenAI-compatible servers, `x-api-key` for `anthropic`; `anthropic-version: 2023-06-01` is also sent on Anthropic requests if unset). You name an environment variable holding it with `key_env` in `ezbx.toml` (environment variables only in 0.1, decided in `init-flow.md`). The key is never written into an image, a config the box can read, or a log.
 - **How the key reaches the gateway** (design decision 18). `ezbx up` reads the variable and writes the key to `engine-key` in the box's state folder, readable only by you, and mounts that one file read-only into the gateway at `/run/ezbx/engine-key` (never into the box). The gateway reads it once at start with `--key-file`. The gateway's environment and command line hold no key, so `docker inspect`, which people tend to paste into bug reports, doesn't show it; an earlier version passed it as an environment variable, which did. `ezbx down` removes the file with the containers, so the key is on disk only while the box exists, and a restart of Docker Desktop still finds it. A key that is empty, over 4 KB, or holds a line break (one trailing line break is dropped) stops `up` before anything is made, and the gateway refuses such a file too. `ezbx gateway serve --key-env NAME` still works for running the gateway by hand. `ezbx engine use` still refuses a server with a key: set it under `[engine]` in `ezbx.toml`, then `ezbx down` and `ezbx up`. `ezbx doctor` warns if the gateway has a key in its environment (a box started by an older version).
 
 ### Model list
@@ -60,7 +61,7 @@ Responses that stream (server-sent events) are forwarded as they arrive, with no
 
 Every reply that comes from the engine carries:
 
-- `X-Ezbx-Engine`: the server's API kind (for example `openai`).
+- `X-Ezbx-Engine`: the server's API kind (for example `openai` or `anthropic`).
 - `X-Ezbx-Request-Id`: the id of the matching log line.
 - `X-Ezbx-Model`: the model name from the request, only when the request named one.
 

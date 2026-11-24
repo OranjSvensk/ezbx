@@ -42,7 +42,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	noStart := fs.Bool("no-start", false, "write the config, but don't start the box")
 	var o setup.Options
 	fs.StringVar(&o.URL, "url", "", "the model server's address, such as http://127.0.0.1:1234, if it isn't found")
-	fs.StringVar(&o.API, "api", "", "the server's API kind: auto, openai or lmstudio")
+	fs.StringVar(&o.API, "api", "", "the server's API kind: auto, openai, lmstudio or anthropic")
 	fs.BoolVar(&o.Later, "later", false, "no model server yet: write the config without one")
 	fs.StringVar(&o.KeyEnv, "key-env", "", "NAME of an environment variable holding the server's key")
 	fs.BoolVar(&o.Reasoning, "reasoning", false, "mark the server's models as reasoning models")
@@ -64,7 +64,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--url ADDRESS] [--api auto|openai|lmstudio] [--key-env NAME] [--later] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--readonly PATH]... [--network off|allow|on] [--memory 8g]")
+		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--url ADDRESS] [--api auto|openai|lmstudio|anthropic] [--key-env NAME] [--later] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--readonly PATH]... [--network off|allow|on] [--memory 8g]")
 		return 2
 	}
 	if *harnessList != "" {

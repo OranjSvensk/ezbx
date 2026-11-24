@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "id": "anthropic",
+  "name": "Anthropic-compatible API",
+
+  "detect": {
+    "hintPorts": [],
+    "probes": [
+      {
+        "path": "/v1/models",
+        "expect": {
+          "hasLists": ["data"],
+          "hasFields": ["has_more"]
+        }
+      }
+    ]
+  },
+
+  "openai": {
+    "basePath": "/v1",
+    "modelsPath": "/v1/models",
+    "chatPath": "/v1/messages"
+  },
+
+  "models": {
+    "id": "data[].id",
+    "contextWindow": null,
+    "input": null,
+    "loaded": null
+  },
+
+  "auth": {
+    "mode": "optional-anthropic",
+    "keyEnv": null,
+    "note": "If the server needs a key, name an environment variable in key_env under [engine]; sent as x-api-key with anthropic-version."
+  },
+
+  "capabilities": ["chat"],
+
+  "verified": {
+    "status": "verified",
+    "on": "2026-11-24",
+    "notes": "Any server with Anthropic's model list (GET /v1/models answering with a data list and has_more) and POST /v1/messages. The gateway passes /v1/messages (and /v1/messages/count_tokens, falling back locally on 404) straight through, and translates /v1/chat/completions and /v1/responses to /v1/messages and back. Exercised through ezbx gateway serve with the fake engine in Anthropic mode."
+  }
+}

@@ -23,13 +23,13 @@ func runEngineUse(args []string, stdout, stderr io.Writer) int {
 	cfgFlag := fs.String("config", "", "config file, used to find the box")
 	boxFlag := fs.String("box", "", "box name; default the one in the config, else main")
 	url := fs.String("url", "", "the server's address on this computer")
-	api := fs.String("api", "", "the API kind: auto, openai or lmstudio")
+	api := fs.String("api", "", "the API kind: auto, openai, lmstudio or anthropic")
 	words, rest, err := parseInterleaved(fs, args)
 	if err != nil {
 		return 2
 	}
 	if len(words) > 0 || len(rest) > 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx engine use [--url http://127.0.0.1:PORT] [--api auto|openai|lmstudio] [--box NAME]")
+		fmt.Fprintln(stderr, "Usage: ezbx engine use [--url http://127.0.0.1:PORT] [--api auto|openai|lmstudio|anthropic] [--box NAME]")
 		return 2
 	}
 	t, err := resolveBox(*cfgFlag, *boxFlag)

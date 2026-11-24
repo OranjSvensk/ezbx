@@ -24,6 +24,16 @@ import (
 // maxBody stops a misbehaving server from making us read forever.
 const maxBody = 1 << 20 // 1 MiB
 
+// anthropicVersion is sent to Anthropic-compatible servers on every request.
+const anthropicVersion = "2023-06-01"
+
+// fetchKey separates cached replies by whether Anthropic auth headers were
+// sent, so a refusal on an OpenAI Bearer probe never hides an Anthropic reply.
+type fetchKey struct {
+	path      string
+	anthropic bool
+}
+
 // Detector holds everything detection needs. Detect doesn't change it, so
 // one Detector can be used by several callers at once.
 type Detector struct {
@@ -175,7 +185,7 @@ type match struct {
 
 // check decides which API kind, if any, answers at base.
 func (s *scan) check(ctx context.Context, base string) (Engine, bool) {
-	cache := map[string]any{} // answers already fetched from this address
+	cache := map[fetchKey]any{} // answers already fetched from this address
 
 	var matches []match
 	for _, a := range s.d.Adapters {
@@ -207,19 +217,19 @@ func (s *scan) check(ctx context.Context, base string) (Engine, bool) {
 	for _, m := range matches[1:] {
 		eng.AlsoMatched = append(eng.AlsoMatched, m.adapter.ID)
 	}
-	if doc, ok := s.fetch(ctx, base, best.adapter.ListPath(), cache); ok {
+	if doc, ok := s.fetch(ctx, base, best.adapter.ListPath(), best.adapter.IsAnthropicAuth(), cache); ok {
 		eng.Models = readModels(doc, best.adapter.Models)
-		s.markLoaded(ctx, base, best.adapter.Models, eng.Models, cache)
+		s.markLoaded(ctx, base, best.adapter.Models, best.adapter.IsAnthropicAuth(), eng.Models, cache)
 	}
 	return eng, true
 }
 
 // matches runs one adapter's probes against base. Every required probe must
 // answer with all of its expected fields and lists. The score counts them.
-func (s *scan) matches(ctx context.Context, base string, a adapter.Adapter, cache map[string]any) (int, bool) {
+func (s *scan) matches(ctx context.Context, base string, a adapter.Adapter, cache map[fetchKey]any) (int, bool) {
 	score := 0
 	for _, p := range a.Detect.Probes {
-		doc, ok := s.fetch(ctx, base, p.Path, cache)
+		doc, ok := s.fetch(ctx, base, p.Path, a.IsAnthropicAuth(), cache)
 		if ok {
 			for _, field := range p.Expect.HasFields {
 				if !jsonpath.Has(doc, field) {
@@ -249,11 +259,12 @@ func (s *scan) matches(ctx context.Context, base string, a adapter.Adapter, cach
 
 // fetch does a plain GET and decodes the JSON answer. It sends no
 // information about the user, and a key only to the address it belongs to.
-func (s *scan) fetch(ctx context.Context, base, path string, cache map[string]any) (any, bool) {
-	if doc, seen := cache[path]; seen {
+func (s *scan) fetch(ctx context.Context, base, path string, anthropic bool, cache map[fetchKey]any) (any, bool) {
+	ck := fetchKey{path: path, anthropic: anthropic}
+	if doc, seen := cache[ck]; seen {
 		return doc, doc != nil
 	}
-	cache[path] = nil
+	cache[ck] = nil
 
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
@@ -263,7 +274,12 @@ func (s *scan) fetch(ctx context.Context, base, path string, cache map[string]an
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "ezbx-detect")
-	if k := s.keys[base]; k != "" {
+	if anthropic {
+		req.Header.Set("Anthropic-Version", anthropicVersion)
+		if k := s.keys[base]; k != "" {
+			req.Header.Set("X-Api-Key", k)
+		}
+	} else if k := s.keys[base]; k != "" {
 		req.Header.Set("Authorization", "Bearer "+k)
 	}
 
@@ -285,19 +301,19 @@ func (s *scan) fetch(ctx context.Context, base, path string, cache map[string]an
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&doc); err != nil {
 		return nil, false
 	}
-	cache[path] = doc
+	cache[ck] = doc
 	return doc, true
 }
 
 // markLoaded handles the "/route list[].field" form of models.loaded: a model
 // is loaded when another route lists its id. If that route doesn't answer,
 // loaded stays unknown rather than being reported as false.
-func (s *scan) markLoaded(ctx context.Context, base string, spec adapter.Models, models []Model, cache map[string]any) {
+func (s *scan) markLoaded(ctx context.Context, base string, spec adapter.Models, anthropic bool, models []Model, cache map[fetchKey]any) {
 	route, path, ok := spec.LoadedIn()
 	if !ok {
 		return
 	}
-	doc, ok := s.fetch(ctx, base, route, cache)
+	doc, ok := s.fetch(ctx, base, route, anthropic, cache)
 	if !ok {
 		return
 	}

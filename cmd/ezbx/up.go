@@ -303,7 +303,7 @@ func chooseEngine(ctx context.Context, cfg *config.Config) (detect.Engine, error
 	if len(res.Engines) == 1 {
 		return res.Engines[0], nil
 	}
-	what := "Nothing answered at " + e.URL + " with an OpenAI-compatible API"
+	what := "Nothing answered at " + e.URL + " with an OpenAI- or Anthropic-compatible API"
 	if e.API != config.DefaultAPI {
 		what = "Nothing answered at " + e.URL + " with the " + kinds[0].Name
 	}

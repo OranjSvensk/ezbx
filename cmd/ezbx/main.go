@@ -40,7 +40,7 @@ const usage = `ezbx - boxed-up local AI agents
 Usage:
   ezbx [--version] [help]
   ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--url ADDRESS | --later]
-            [--api auto|openai|lmstudio] [--key-env NAME] [--reasoning]
+            [--api auto|openai|lmstudio|anthropic] [--key-env NAME] [--reasoning]
             [--harness pi,opencode,omp,codex,claude,hermes,openclaw]
             [--tools pack:coding,ffmpeg|none] [--workspace PATH]
             [--network off|allow|on] [--memory 8g]
@@ -57,7 +57,7 @@ Usage:
   ezbx net [off|allow|on] [--box NAME]
   ezbx net allow|remove HOST... [--box NAME]
   ezbx engine detect [--json] [--timeout 500ms] [--url ADDRESS]...
-  ezbx engine use [--url ADDRESS] [--api auto|openai|lmstudio] [--box NAME]
+  ezbx engine use [--url ADDRESS] [--api auto|openai|lmstudio|anthropic] [--box NAME]
   ezbx gateway serve [--upstream ADDRESS] [--engine KIND] [--listen ADDRESS]
                      [--key-env NAME | --key-file FILE] [--log FILE]
                      [--proxy ADDRESS] [--network off|allow|on] [--allow HOST]...
@@ -110,7 +110,8 @@ Commands:
                   stays approved; net remove HOST forgets it.
   engine detect   Find model servers on this computer's common ports (and
                   at --url), and the API each one speaks. Any server with
-                  an OpenAI-compatible API works, whatever program runs it.
+                  an OpenAI- or Anthropic-compatible API works, whatever
+                  program runs it.
   engine use      Point the running gateway at the server in ezbx.toml (or
                   at --url), checked again now, and refresh the harness
                   config in the box. Lasts until the next up.
@@ -254,7 +255,7 @@ func runDetect(args []string, stdout, stderr io.Writer) int {
 func printTable(w io.Writer, res detect.Result) {
 	if len(res.Engines) == 0 {
 		fmt.Fprintln(w, "No model server found on the common ports.")
-		fmt.Fprintln(w, "Start one, or point at it with --url http://127.0.0.1:PORT. Any server with an OpenAI-compatible API works.")
+		fmt.Fprintln(w, "Start one, or point at it with --url http://127.0.0.1:PORT. Any server with an OpenAI- or Anthropic-compatible API works.")
 	} else {
 		fmt.Fprintln(w, "Model servers found (by the API they speak)")
 		for _, e := range res.Engines {
