@@ -183,7 +183,20 @@ func (p Plan) Review() string {
 		ws += "   (will be created)"
 	}
 	row("Workspace", ws)
-	row("Read-only", "none (not supported yet)")
+	if len(p.Result.ReadOnly) == 0 {
+		row("Read-only", "none")
+	}
+	for i, r := range p.Result.ReadOnly {
+		k := ""
+		if i == 0 {
+			k = "Read-only"
+		}
+		line := fmt.Sprintf("%s at %s, %d hidden", r.Path, r.Inside, r.Masked)
+		if len(r.Unmask) > 0 {
+			line += ", shown after all: " + strings.Join(r.Unmask, ", ")
+		}
+		row(k, line)
+	}
 	net := a.Network
 	if a.Network == "allow" {
 		allow := append([]string(nil), a.Allow...)
@@ -191,6 +204,9 @@ func (p Plan) Review() string {
 		net += ": " + strings.Join(append(allow, "(and the harnesses' own hosts)"), ", ")
 	}
 	row("Network", net)
+	if w := ReadOnlyNetWarning(a.Network, len(p.Result.ReadOnly)); w != "" {
+		row("", "warning: "+w)
+	}
 	row("Memory", a.Memory)
 	for i, d := range p.Disks {
 		k := ""

@@ -84,6 +84,9 @@ type Plan struct {
 	HomeFiles []harness.File    // rendered harness configs, relative to the agent's home
 	Env       map[string]string // the harnesses' environment, from their manifests
 
+	// Read-only folders and what is masked in them (docs/readonly.md).
+	ReadOnly []ReadOnlyMount
+
 	// The images, named after a hash of their inputs (see internal/images).
 	// Inputs is that full hash, which the image must carry as a label.
 	GatewayImage, BoxImage Image
@@ -167,7 +170,8 @@ func (p Plan) ConnectInsideArgs() []string {
 }
 
 // BoxArgs creates the box container: only on the inside network, no
-// capabilities, the workspace and its own home, and nothing else.
+// capabilities, the workspace, its own home and any read-only folders, and
+// nothing else.
 func (p Plan) BoxArgs() []string {
 	a := append([]string{"create"}, labels(p.Box)...)
 	a = append(a, "--name", p.Names.Box, "--network", p.Names.Inside,
@@ -192,8 +196,9 @@ func (p Plan) BoxArgs() []string {
 	}
 	a = append(a,
 		"-v", p.Workspace+":/workspace",
-		"-v", p.Names.Home+":"+agentHome,
-		p.BoxImage.Tag, "sleep", "infinity")
+		"-v", p.Names.Home+":"+agentHome)
+	a = append(a, p.readOnlyArgs()...)
+	a = append(a, p.BoxImage.Tag, "sleep", "infinity")
 	return a
 }
 

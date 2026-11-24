@@ -147,6 +147,7 @@ func setMode(ctx context.Context, r *box.Runner, t target, mode string, w io.Wri
 	if got == "allow" && len(s.Network.Allow) == 0 {
 		fmt.Fprintln(w, "No hosts are allowed yet. Approve one with: ezbx net allow HOST")
 	}
+	readOnlyNetWarning(t, got, w)
 	return nil
 }
 
@@ -185,6 +186,7 @@ func allowHosts(ctx context.Context, r *box.Runner, t target, file string, hosts
 	switch s.Network.Mode {
 	case "allow":
 		fmt.Fprintln(w, ", so these hosts can be reached.")
+		readOnlyNetWarning(t, "allow", w)
 	case "off":
 		fmt.Fprintln(w, ", so nothing can be reached until: ezbx net allow")
 	default:

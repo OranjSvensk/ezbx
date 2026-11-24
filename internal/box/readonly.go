@@ -17,9 +17,10 @@ type ReadOnlyEntry struct {
 // ReadOnlyFolder is a read-only folder after its checks: a clean full path,
 // its name under /readonly, and what to mask in it.
 type ReadOnlyFolder struct {
-	Path    string
-	Name    string
-	Matcher readonly.Matcher
+	Path         string
+	Name         string
+	Mask, Unmask []string
+	Matcher      readonly.Matcher
 }
 
 // ResolveReadOnly expands and checks each folder (docs/readonly.md, R2, R3,
@@ -56,7 +57,7 @@ func ResolveReadOnly(entries []ReadOnlyEntry, ws, home string, own, system []str
 		if err != nil {
 			return nil, fmt.Errorf("read-only folder %s: %v", p, err)
 		}
-		out = append(out, ReadOnlyFolder{Path: p, Name: name, Matcher: m})
+		out = append(out, ReadOnlyFolder{Path: p, Name: name, Mask: e.Mask, Unmask: e.Unmask, Matcher: m})
 	}
 	return out, nil
 }

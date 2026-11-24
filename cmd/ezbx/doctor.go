@@ -52,6 +52,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 		LocalAddrs: localAddrs,
 	}
 	cfg.Images, cfg.ImagesNote = expectedImages(t)
+	cfg.ReadOnly, cfg.ReadOnlyNote = doctorReadOnly(t.dirs.Box(t.name))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	rep := doctor.Run(ctx, cfg)

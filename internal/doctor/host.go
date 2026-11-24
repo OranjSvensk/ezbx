@@ -30,6 +30,10 @@ type HostConfig struct {
 	// Nil skips the image checks, with ImagesNote (or a default) as the reason.
 	Images     map[string]Image
 	ImagesNote string
+	// ReadOnly are the read-only folders ezbx up recorded for this box;
+	// ReadOnlyNote says why they couldn't be read.
+	ReadOnly     []ReadOnlyFolder
+	ReadOnlyNote string
 }
 
 // Image is one image the box should run: its name and the hash of its inputs.
@@ -323,6 +327,7 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 			st, detail, fix := writableStatus(ctx, cfg, boxName)
 			r.add(gb, "agent can write the workspace", st, detail, fix)
 		}
+		readOnlyChecks(ctx, &r, cfg, boxName, box)
 	}
 
 	// From inside, seeing what the box sees.

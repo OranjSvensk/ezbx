@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -131,5 +132,44 @@ func TestNetShowNeedsTheBox(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("missing %q in:\n%s", want, out.String())
 		}
+	}
+}
+
+// Opening the network warns about the running box's read-only folders.
+func TestNetWarnsAboutReadOnly(t *testing.T) {
+	g := &fakeGateway{up: true, mode: "off"}
+	tg, file := netTarget(t)
+	var out strings.Builder
+	if err := setMode(context.Background(), &box.Runner{Docker: g.docker}, tg, "on", &out); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "read-only") {
+		t.Errorf("a warning without read-only folders: %s", out.String())
+	}
+	state := tg.dirs.Box("t")
+	if err := os.MkdirAll(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := box.WriteMasks(state, []box.ReadOnlyMount{{Name: "docs", Path: t.TempDir()}}); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := setMode(context.Background(), &box.Runner{Docker: g.docker}, tg, "on", &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "warning: with the network on, the agent could send what it reads in the read-only folders to the public internet (/readonly/docs).") {
+		t.Errorf("on: %s", out.String())
+	}
+	out.Reset()
+	if err := setMode(context.Background(), &box.Runner{Docker: g.docker}, tg, "off", &out); err != nil || strings.Contains(out.String(), "warning") {
+		t.Errorf("off: %v %s", err, out.String())
+	}
+	g.mode = "allow"
+	out.Reset()
+	if err := allowHosts(context.Background(), &box.Runner{Docker: g.docker}, tg, file, []string{"pypi.org"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "to an allowed host (/readonly/docs)") {
+		t.Errorf("allow HOST: %s", out.String())
 	}
 }

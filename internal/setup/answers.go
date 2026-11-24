@@ -27,6 +27,7 @@ type Answers struct {
 	Allow     []string
 	Harnesses []string
 	Tools     []string                    // tool ids and "pack:" names; nil when not set
+	ReadOnly  []config.ReadOnly           // read-only folders, as in ezbx.toml
 	Engine    string                      // an adapter id, or "auto"
 	Overrides map[string]config.EngineURL // per engine: url, key_env, host
 	Models    map[string]config.Model
@@ -40,7 +41,7 @@ func FromConfig(c *config.Config) Answers {
 	a := Answers{
 		Box: name, Workspace: b.Workspace, Memory: b.Memory, CPUs: b.CPUs, PIDs: b.PIDs,
 		Network: b.Network, Allow: append([]string(nil), b.Allow...), Harnesses: append([]string(nil), b.Harnesses...),
-		Tools:  slices.Clone(b.Tools),
+		Tools: slices.Clone(b.Tools), ReadOnly: cloneReadOnly(b.ReadOnly),
 		Engine: c.Engine.Use, Overrides: maps.Clone(c.Engine.Overrides), Models: maps.Clone(c.Models), Log: c.Gateway.Log,
 	}
 	if a.PIDs == config.DefaultPIDs {
@@ -90,6 +91,7 @@ func ConfigText(a Answers, now time.Time) string {
 	if a.Tools != nil {
 		w("tools     = %s   # tool packs (pack:NAME) and single tools; after a change, ezbx build\n", list(a.Tools))
 	}
+	b.WriteString(readOnlyText(a.Box, a.ReadOnly))
 	w("\n")
 
 	w("[engine]\nuse = %s\n", quote(a.Engine))

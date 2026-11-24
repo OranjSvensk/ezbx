@@ -186,6 +186,15 @@ func (r *Runner) Up(ctx context.Context, p Plan) error {
 		return fmt.Errorf("%w. Fix or remove that line, then run ezbx up again", err)
 	}
 
+	// What the read-only folders mask, for ezbx shell to check again.
+	if len(p.ReadOnly) > 0 {
+		if err := WriteMasks(p.StateDir, p.ReadOnly); err != nil {
+			return err
+		}
+	} else if err := RemoveMasks(p.StateDir); err != nil {
+		return err
+	}
+
 	// The gateway, then the box.
 	if _, err := r.run(ctx, p.GatewayArgs()...); err != nil {
 		return fmt.Errorf("creating the gateway: %w%s", err, cleanupHint)
@@ -341,6 +350,10 @@ func (r *Runner) Down(ctx context.Context, box, stateDir string) error {
 		}
 		removed++
 		r.say("removed %s %s", item.kind, item.name)
+	}
+	// The box is gone, so the record of its masks goes too.
+	if err := RemoveMasks(stateDir); err != nil {
+		return err
 	}
 	// The gateway is gone (or was never ezbx's), so its key goes too.
 	if had, err := RemoveKeyFile(stateDir); err != nil {

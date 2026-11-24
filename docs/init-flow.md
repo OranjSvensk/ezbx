@@ -11,7 +11,7 @@
 - For each model, `init` asks whether it is a reasoning model, because engines don't say and a reasoning model's answers can be cut off without it (`--reasoning` answers yes for all).
 - After the harnesses, `init` asks which tool packs and tools go into the box image ([build.md](build.md)). A new config starts with `pack:coding`. An existing config keeps its `tools` setting, and one written before tools existed keeps none, so taking every default still changes nothing. `--tools pack:coding,ffmpeg` or `--tools none` answers it.
 - Images are built by `ezbx build` right before `ezbx up`, only if they aren't built yet; the plan says which. `ezbx.lock` is part of the repository, not written by `init` (see [build.md](build.md)). With `--no-start`, nothing is built.
-- Not yet: read-only folders (designed in [readonly.md](readonly.md), refused until built) and `--here`.
+- Not yet: `--here`.
 - The disk space check is a warning on the review screen, not a refusal. It measures the drive of the state folder (snapshots) and of Docker's data folder in its usual place (`%LOCALAPPDATA%\Docker` on Windows, `~/Library/Containers/com.docker.docker` on macOS, `/var/lib/docker` on Linux), once per drive. When images must be built it asks for twice the estimated box image (about 750 MB for the first harness and 600 MB for each more, from the sizes in [isolation-test.md](isolation-test.md), doubled for Docker's build cache) plus 1 GB for snapshots; otherwise 1 GB. Docker Desktop can keep its disk elsewhere, and tool packs such as Chromium add more, so the number is a guide.
 - On a box that is already up, `init` writes a changed config but doesn't restart the box. It says to run `ezbx down`, then `ezbx up`.
 
@@ -76,7 +76,7 @@ A checklist grouped by kind (coding tools first, assistant-style tools after).
 ### 3. Folders
 
 1. **Writable workspace.** Default is a folder inside the user's home, shown with the exact path. It is created if missing. These are refused with a clear reason: a drive root, the home folder itself, a system folder, or a folder that already contains ezbx's own config or state.
-2. **Read-only folders (optional, none by default; not built yet).** If you add some, `init` refuses the same folders as for the workspace, plus any overlap with the workspace or another read-only folder. It applies the default masks, lists files whose contents look like secrets and offers to mask each one, and warns that what the agent can read could be sent out if the network is `allow` or `on`. See [readonly.md](readonly.md).
+2. **Read-only folders (optional, none by default; `--readonly PATH`).** Existing ones are kept or dropped one by one. For each one added, `init` refuses the same folders as for the workspace, plus any overlap with the workspace or another read-only folder. It applies the default masks, lists files whose contents look like secrets and offers to mask each one, and warns that what the agent can read could be sent out if the network is `allow` or `on`. See [readonly.md](readonly.md).
 
 ### 4. Network mode
 

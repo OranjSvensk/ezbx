@@ -91,7 +91,19 @@ func TestExampleFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("example: %v", err)
 	}
-	if _, b := c.Only(); len(b.ReadOnly) != 1 || b.ReadOnly[0].Path != "~/projects" {
+	if _, b := c.Only(); len(b.ReadOnly) != 0 {
+		t.Fatalf("the example's read-only folder must stay commented out: %+v", b.ReadOnly)
+	}
+	// The commented read-only folder is valid once its lines are uncommented.
+	text := string(data)
+	for _, k := range []string{"[[box.main.readonly]]", "path   =", "name   =", "mask   =", "unmask ="} {
+		text = strings.Replace(text, "# "+k, k, 1)
+	}
+	c, err = Parse(text)
+	if err != nil {
+		t.Fatalf("example with its read-only folder: %v", err)
+	}
+	if _, b := c.Only(); len(b.ReadOnly) != 1 || b.ReadOnly[0].Name != "projects" || len(b.ReadOnly[0].Mask) != 2 || b.ReadOnly[0].Unmask[0] != ".npmrc" {
 		t.Fatalf("example's read-only folder: %+v", b.ReadOnly)
 	}
 }

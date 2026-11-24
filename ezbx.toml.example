@@ -29,13 +29,14 @@ tools     = ["pack:coding"]       # built into the box: packs (pack:coding, pack
 # max_file = "100m"               # larger files are left out
 # keep     = 20                   # automatic snapshots kept; ones taken by hand stay
 
-# Optional, NOT SUPPORTED YET: folders the agent may READ but never change.
-# ezbx refuses to start while these are set, until hiding secret files in
-# them is built. Design: docs/readonly.md (planned keys: path, name, mask,
-# unmask; common secret files are masked by default).
-[[box.main.readonly]]
-path = "~/projects"
-mask = [".env", "*.pem"]          # these will stay unreadable inside the box
+# Optional: folders the agent may READ but never change, at /readonly/<name>.
+# Common secret files (.env, keys, .ssh/ and more) are hidden by default;
+# see docs/readonly.md. Give one [[box.main.readonly]] per folder.
+# [[box.main.readonly]]
+# path   = "~/projects"
+# name   = "projects"             # the default: the folder's own name, lowercased
+# mask   = ["secrets.yml", "private/"]   # hidden too, on top of the defaults
+# unmask = [".npmrc"]             # a default to show after all, written exactly
 
 [engine]
 use = "auto"                      # auto | strata | lmstudio | ollama | llamacpp | openai

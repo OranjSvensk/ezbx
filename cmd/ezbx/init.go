@@ -50,13 +50,22 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	harnessList := fs.String("harness", "", "harnesses, separated by commas: pi, opencode, omp, codex, claude, hermes, openclaw")
 	toolList := fs.String("tools", "", "tool packs and tools, separated by commas, such as pack:coding,ffmpeg, or none")
 	fs.StringVar(&o.Workspace, "workspace", "", "the workspace folder")
+	fs.Func("readonly", "a read-only folder (give it again for more; --readonly none for none)", func(s string) error {
+		if o.ReadOnly == nil {
+			o.ReadOnly = []string{}
+		}
+		if !strings.EqualFold(s, "none") {
+			o.ReadOnly = append(o.ReadOnly, s)
+		}
+		return nil
+	})
 	fs.StringVar(&o.Network, "network", "", "off, allow or on")
 	fs.StringVar(&o.Memory, "memory", "", "memory limit, such as 8g")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--engine ID] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--network off|allow|on] [--memory 8g]")
+		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--engine ID] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--readonly PATH]... [--network off|allow|on] [--memory 8g]")
 		return 2
 	}
 	if *harnessList != "" {

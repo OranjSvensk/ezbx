@@ -185,7 +185,7 @@ func TestGatherToolsOfExistingConfig(t *testing.T) {
 			}
 			f.Existing = c
 			// Answers in order: engine, reasoning, harness, tools, then the rest default.
-			p, out := prompter("\n\n\n" + tc.typed + "\n\n\n\n")
+			p, out := prompter("\n\n\n" + tc.typed + "\n\n\n\n\n")
 			res, err := Gather(f, tc.o, p)
 			if err != nil {
 				t.Fatalf("%v\n%s", err, out)
@@ -206,7 +206,7 @@ func TestGatherTyped(t *testing.T) {
 	ws := filepath.Join(t.TempDir(), "ws")
 	// engine 2; reasoning: bad answer then y; harnesses 1,2; a bad workspace
 	// (the home folder) then a good one; allow with hosts; memory.
-	input := strings.Join([]string{"2", "maybe", "y", "1,2,1", "pack:nope", "wip", "pack:coding, jq, jq", f.Home, ws, "allow", "pypi.org, GitHub.com", "6G"}, "\n") + "\n"
+	input := strings.Join([]string{"2", "maybe", "y", "1,2,1", "pack:nope", "wip", "pack:coding, jq, jq", f.Home, ws, "", "allow", "pypi.org, GitHub.com", "6G"}, "\n") + "\n"
 	p, out := prompter(input)
 	res, err := Gather(f, Options{}, p)
 	if err != nil {
@@ -430,7 +430,7 @@ func TestGatherNamedEngineNotRunning(t *testing.T) {
 func TestGatherAllowHostsAreChecked(t *testing.T) {
 	f := facts(t)
 	ws := filepath.Join(t.TempDir(), "ws")
-	input := strings.Join([]string{"1", "n", "1", "none", ws, "allow", "10.0.0.1, pypi.org", "pypi.org", "4g"}, "\n") + "\n"
+	input := strings.Join([]string{"1", "n", "1", "none", ws, "", "allow", "10.0.0.1, pypi.org", "pypi.org", "4g"}, "\n") + "\n"
 	p, out := prompter(input)
 	res, err := Gather(f, Options{}, p)
 	if err != nil {

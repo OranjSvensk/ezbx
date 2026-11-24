@@ -93,6 +93,8 @@ To preview what `ezbx init` will ask and create without changing anything on dis
    - `pack:media`: `ffmpeg`, `imagemagick`
    - Or list single tools (`pack:coding,ffmpeg`) or `none`.
 5. **Workspace folder:** Choose the folder that will be mounted at `/workspace` inside the container. This is the **only** host folder the agent can edit. ezbx refuses system folders, drive roots, your home folder itself, and its own config/state folders.
+
+   **Read-only folders (optional, none by default):** folders the agent may read but never change, such as other projects to learn from. They appear at `/readonly/<name>`. Common secret files in them (`.env` files, keys, `.ssh/` and more) are hidden, and `init` asks about any other file that looks like it holds a secret. Pass `--readonly PATH` (more than once for more). If a secret file appears in one later, `ezbx shell` refuses to start until you run `ezbx down` and `ezbx up`. See [readonly.md](readonly.md).
 6. **Network mode and memory limit:**
    - `off` (default): no internet access; only the model route through the gateway works.
    - `allow`: only approved hostnames (such as `registry.npmjs.org`) are reachable.

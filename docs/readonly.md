@@ -1,6 +1,6 @@
-# Read-only folders and secret masking (design, not built yet)
+# Read-only folders and secret masking
 
-A read-only folder is a host folder the agent may read but never change, such as other projects it should learn from or a reference checkout. Common secret files inside it are hidden from the box. This page is the design. Built so far (`internal/readonly`, `internal/box/readonly.go`): the config keys and their checks, the folder refusals (R6), the mask patterns and defaults, the walk with its limits, and the content check. Not built yet: the mounts, the check at `ezbx shell`, the doctor check and the `init` questions. Until they are, `ezbx up` checks `[[box.<name>.readonly]]` entries and then refuses to start. The risks it does and doesn't cover are in [threat-model.md](threat-model.md).
+A read-only folder is a host folder the agent may read but never change, such as other projects it should learn from or a reference checkout. Common secret files inside it are hidden from the box. This page is the design, and all of it is built (`internal/readonly`, `internal/box/readonly.go` and `masks.go`, `internal/doctor/readonly.go`, `internal/setup/readonly.go`). The end-to-end run through `ezbx up`, `shell` and `doctor` against a real box is still to do (see the end of this page). The risks it does and doesn't cover are in [threat-model.md](threat-model.md).
 
 ```toml
 [[box.main.readonly]]
@@ -41,7 +41,7 @@ Matched against each file or folder name at any depth, ignoring case (Windows do
 
 ### At `ezbx up`
 
-1. **Check the folders** (R6), then walk each one on the host. The walk never follows links or Windows junctions (a link is masked or shown as the link itself) and doesn't descend into masked folders. A walk past 200,000 entries stops `up` and suggests a narrower folder, so a mistaken large folder can't stall it.
+1. **Check the folders** (R6), then walk each one on the host. The walk never follows links or Windows junctions and doesn't descend into masked folders. A walk past 200,000 entries stops `up` and suggests a narrower folder, so a mistaken large folder can't stall it.
 2. **Build the mask list.** Every match becomes one mount. More than 256 mounts stops `up` and names the pattern with the most matches, so you can mask its parent folder instead. The list is saved as `masks.json` in the box's state folder (never mounted into the box) for the check in R5.
 3. **Look for secret-looking contents** (R4) in files up to 1 MB that aren't masked: private key headers, well-known token shapes (cloud, code host and API keys), and credentials written into a URL in `.git/config`. Warnings name the file and the kind of secret, never the text that matched.
 4. **Start the box** with, for each folder, `--mount type=bind,src=<folder>,dst=/readonly/<name>,readonly`, then one mount per mask:
@@ -49,6 +49,8 @@ Matched against each file or folder name at any depth, ignoring case (Windows do
    - a folder: `--mount type=tmpfs,dst=<path>,tmpfs-size=4k,tmpfs-mode=0555,readonly`, an empty read-only folder owned by root. Without `readonly`, Docker mounts it writable and only the folder's mode keeps the agent out.
 
 Mounts are applied parent first, so each mask lands on top of the read-only folder. Read-only is enforced by the mount itself, not file permissions; the agent has no capabilities, so it can't remount anything.
+
+**Links are left as they are.** A link or junction whose name matches a mask is listed in `masks.json` and noted by `up`, but nothing is mounted over it. In the box, a link points inside the box, never to the host (Docker Desktop shows a link to an absolute host path as one into a folder the box doesn't have), and whatever it points to inside the folder is masked by its own name. Mounting over a link would instead make Docker follow it inside the container. This replaces the first plan to mask the link itself; to be confirmed in the end-to-end run.
 
 ### At `ezbx shell`
 
@@ -59,12 +61,13 @@ Before the session (and its snapshot), the names are walked again (R5). A newly 
 - **Snapshots** cover the workspace only; the agent can't change a read-only folder.
 - **`ezbx admin shell`** doesn't mount read-only folders. It's for fixing the workspace and the agent's home.
 - **`reset`, `destroy`, `down`** never touch the folders.
-- **`ezbx doctor`** gains a "read-only folders" check from inside the box: writing to each folder fails, each masked file reads as empty (writing to one isn't a useful check, since `/dev/null` accepts and discards it), each masked folder lists nothing and refuses writes. It also compares `docker inspect` (every read-only source mounted read-only) with the config, and warns about unmasked defaults (R3) and secret-looking contents (R4).
-- **`ezbx init`** asks for read-only folders after the workspace (none by default), runs the same checks, lists what it found, and offers to mask each finding (R4). The review screen shows each folder, its mask count and any `unmask`.
+- **`ezbx doctor`** has a "Read-only folders" group. From `docker inspect`: each recorded folder is mounted, and read-only, and nothing under `/readonly` is writable. From inside the box, as the agent: writing to each folder fails, each masked file is a character device (`/dev/null`; writing to one isn't a useful check, since it accepts and discards), and each masked folder is an empty tmpfs that refuses writes. The paths reach the box in an environment variable, never in the script, so a file name can't run as a command. On the host, it walks each folder again: new files that match a mask fail (R5), and unmasked defaults (R3) and secret-looking contents (R4) warn.
+- **`ezbx init`** asks for read-only folders after the workspace (none by default; `--readonly PATH`, given again for more, or `--readonly none`), keeps or drops each existing one, runs the same checks as `up`, and asks about each file that looks like a secret (yes by default, so `--yes` hides them; the answer is written as a `./path` mask). The review screen shows each folder, how many files are hidden and any `unmask`, and the network warning (R7). Rerunning `init` keeps a folder's `name`, `mask` and `unmask`.
+- **`ezbx net on`, `ezbx net allow` and `ezbx net allow HOST`** print the network warning (R7) when the running box has read-only folders.
 
 ## Proven live, and still to prove
 
-On Docker Desktop for Windows, a host folder reaches the container through Docker's VM. A hand-run test (2026-11-23, [isolation-test.md](isolation-test.md), "Read-only folder masks") confirmed that `/dev/null` and tmpfs masks land on top of paths inside a read-only bind mount of a Windows folder, that every write, delete, rename, unmount and remount was refused for both the agent and a root user without capabilities, and that names in the box keep their host case. Still to prove once it's built: how long a walk of a large folder takes, and links and junctions inside a read-only folder.
+On Docker Desktop for Windows, a host folder reaches the container through Docker's VM. A hand-run test (2026-11-23, [isolation-test.md](isolation-test.md), "Read-only folder masks") confirmed that `/dev/null` and tmpfs masks land on top of paths inside a read-only bind mount of a Windows folder, that every write, delete, rename, unmount and remount was refused for both the agent and a root user without capabilities, and that names in the box keep their host case. Still to prove with the real box: the end-to-end run (`up` with masks, `ezbx shell` refusing a new secret file, `doctor` from inside the box), how long a walk of a large folder takes, and links and junctions inside a read-only folder (Linux CI covers links in the walk; Windows tests cover junctions).
 
 ## Limits
 

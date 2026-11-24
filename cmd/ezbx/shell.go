@@ -56,16 +56,8 @@ func runShell(args []string, stdout, stderr io.Writer) int {
 		return report(stderr, box.ErrNotUp{Box: t.name, What: "the box container isn't running"})
 	}
 
-	// An undo point before every session. If it fails, the session doesn't
-	// start, because the agent's changes couldn't be undone.
-	if !*noSnap {
-		sb, err := openSnapshots(t)
-		if err == nil {
-			err = takeAuto(sb, stderr)
-		}
-		if err != nil {
-			return report(stderr, fmt.Errorf("the snapshot before the session failed, so the session wasn't started: %w\nTo start without one: ezbx shell --no-snapshot", err))
-		}
+	if err := beforeSession(t, *noSnap, stderr); err != nil {
+		return report(stderr, err)
 	}
 
 	// The session is interactive: docker takes over this terminal.
@@ -132,4 +124,25 @@ func shellArgs(t target, id string, extra []string, tty bool) ([]string, error) 
 	a = append(a, name)
 	a = append(a, m.Launch.Command...)
 	return append(a, extra...), nil
+}
+
+// beforeSession runs the checks that can stop a session from starting: a
+// secret file added to a read-only folder since ezbx up, which isn't masked
+// (docs/readonly.md, R5), then the undo point. If the snapshot fails, the
+// session doesn't start, because the agent's changes couldn't be undone.
+func beforeSession(t target, noSnap bool, stderr io.Writer) error {
+	if err := checkMasks(t.dirs.Box(t.name)); err != nil {
+		return err
+	}
+	if noSnap {
+		return nil
+	}
+	sb, err := openSnapshots(t)
+	if err == nil {
+		err = takeAuto(sb, stderr)
+	}
+	if err != nil {
+		return fmt.Errorf("the snapshot before the session failed, so the session wasn't started: %w\nTo start without one: ezbx shell --no-snapshot", err)
+	}
+	return nil
 }

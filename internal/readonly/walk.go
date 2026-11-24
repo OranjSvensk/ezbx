@@ -20,10 +20,10 @@ const MaxScanSize = 1 << 20
 
 // Mask is one name the box will cover.
 type Mask struct {
-	Rel     string // inside the folder, with / between parts
-	Dir     bool   // a folder (covered by an empty folder), else a file
-	Link    bool   // a link or Windows junction, masked as the link itself
-	Pattern string // the pattern that matched
+	Rel     string `json:"rel"`            // inside the folder, with / between parts
+	Dir     bool   `json:"dir,omitempty"`  // a folder (covered by an empty folder), else a file
+	Link    bool   `json:"link,omitempty"` // a link or Windows junction, left as it is
+	Pattern string `json:"pattern"`        // the pattern that matched
 }
 
 // Walked is what a walk of one folder found.

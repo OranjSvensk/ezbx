@@ -1,6 +1,6 @@
 # Threat model
 
-What ezbx protects, against whom, how, and what it leaves to you. It covers ezbx `v0.2.0` on Windows 11 with Docker Desktop, the only verified setup. Each claim points to where it is tested; [isolation-test.md](isolation-test.md) holds the live results. Read-only folders are designed but not built yet ([readonly.md](readonly.md)); the rows about them say so.
+What ezbx protects, against whom, how, and what it leaves to you. It covers ezbx `v0.2.0` on Windows 11 with Docker Desktop, the only verified setup. Each claim points to where it is tested; [isolation-test.md](isolation-test.md) holds the live results. Read-only folders ([readonly.md](readonly.md)) are built on `main` after `v0.2.0` and tested by unit tests and a hand-run mount test; their end-to-end run is still to do.
 
 The short version: ezbx assumes the agent may misbehave, through a bad model, a prompt injection or a hostile file it reads, and limits what it can reach. It doesn't protect against a container escape, against malware already on your PC, or against you running, outside the box, something the agent wrote.
 
@@ -8,8 +8,8 @@ The short version: ezbx assumes the agent may misbehave, through a bad model, a 
 
 | Asset | Where it lives |
 |---|---|
-| Your files outside the workspace | The host. The box sees only the workspace and its own home volume (and, once built, read-only folders). |
-| Secrets on your PC (SSH keys, cloud logins, `.env` files, browser profiles) | The host, never mounted. In read-only folders, masked by name (planned). |
+| Your files outside the workspace | The host. The box sees only the workspace and its own home volume and any read-only folders you add (which it can read, never change). |
+| Secrets on your PC (SSH keys, cloud logins, `.env` files, browser profiles) | The host, never mounted. In read-only folders, masked by name. |
 | The engine's key | `engine-key` in the box's state folder while the box is up; mounted read-only into the gateway only. |
 | The admin token | `admin-token` in the state folder; mounted read-only into the gateway only. |
 | Your network: LAN, the host's own services, cloud metadata | Reachable only through the gateway, which refuses local addresses in every mode. |
@@ -29,9 +29,9 @@ Trusted: you, your inference engine, Docker Desktop and its VM, Windows, and oth
 
 ### Box to host files
 
-- **Control:** only `/workspace` and the agent's home volume are writable. The box runs as user `agent` (uid 1000) with every capability dropped, `no-new-privileges`, no Docker socket, and no host folders except the workspace. `up` refuses a workspace that is a drive root, your home folder, a system folder, or overlaps ezbx's own folders. Snapshots live outside the box, so the agent can't rewrite its own history.
+- **Control:** only `/workspace` and the agent's home volume are writable. The box runs as user `agent` (uid 1000) with every capability dropped, `no-new-privileges`, no Docker socket, and no host folders except the workspace and any read-only folders, which are mounted read-only. `up` refuses a workspace that is a drive root, your home folder, a system folder, or overlaps ezbx's own folders. Snapshots live outside the box, so the agent can't rewrite its own history.
 - **Proven by:** [isolation-test.md](isolation-test.md) ("The box image", "`ezbx up` and `ezbx down`", "A workspace the agent can't write"), `ezbx doctor`'s box lock-down and no-socket checks, `CheckWorkspace` tests.
-- **Read-only folders (planned):** mounted read-only, secrets masked by name, secret-looking contents warned about ([readonly.md](readonly.md)).
+- **Read-only folders:** mounted read-only, secrets masked by name, secret-looking contents warned about, and a session refused when a new secret file appears ([readonly.md](readonly.md)). Proven by unit tests, the mask test in [isolation-test.md](isolation-test.md) ("Read-only folder masks") and `ezbx doctor`'s "Read-only folders" checks.
 
 ### Box to network
 
@@ -66,7 +66,7 @@ These are real and not solved by ezbx. Most have a habit that helps.
 |---|---|---|
 | **The workspace runs on your PC later.** The agent can leave git hooks, editor tasks (`.vscode/tasks.json`), `package.json` scripts, build files or plain malicious code in the workspace, which run with your full rights when you open or build the project outside the box. | The workspace is meant to be written. | `ezbx review --diff` before you use the agent's work outside the box; build and test inside the box; look at `.git/hooks` and tool configs. |
 | **The agent reads everything you give it** (the workspace, its home, read-only folders) and, with `allow` or `on`, can send it to any allowed host. `allow` filters by host name only, and common hosts such as code hosts and package registries accept uploads. | HTTPS isn't decrypted; filtering is by domain. | Keep secrets out of the workspace; use `off` when you can; approve hosts narrowly. |
-| **Read-only masks are by name** (planned). A secret in an ordinary file is readable; one created during a session is readable until the next `ezbx shell`. | Mounts are fixed while the box runs. | Keep secrets out of shared folders; heed the content warnings. |
+| **Read-only masks are by name.** A secret in an ordinary file is readable; one created during a session is readable until the next `ezbx shell`. | Mounts are fixed while the box runs. | Keep secrets out of shared folders; heed the content warnings. |
 | **A container escape** through a Linux kernel, runc or Docker Desktop bug. | Containers share the VM's kernel. | Keep Docker Desktop updated; run `ezbx doctor` after upgrades. |
 | **A harness or its dependencies are malicious.** Pinning stops a silent change, not a bad version that was pinned. | ezbx trusts the versions in `ezbx.lock`. | The box contains it like a misled agent; review lockfile changes. |
 | **The engine's own `/v1` API.** The agent can call any `/v1` route the engine offers, and can keep the GPU busy. | The gateway doesn't filter by route inside `/v1` or queue requests (an open question in [gateway.md](gateway.md)). | Use an engine whose `/v1` API holds nothing you'd mind the agent using. |

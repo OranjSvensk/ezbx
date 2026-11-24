@@ -40,14 +40,16 @@ type Options struct {
 	Harnesses []string
 	Tools     []string // nil: ask; empty: none
 	Workspace string
+	ReadOnly  []string // read-only folders; nil: ask
 	Network   string
 	Memory    string
 }
 
 // Result is what Gather decided.
 type Result struct {
-	Answers Answers
-	Engine  *detect.Engine // nil when no engine was chosen ("later")
+	Answers  Answers
+	Engine   *detect.Engine // nil when no engine was chosen ("later")
+	ReadOnly []ReadOnlySummary
 }
 
 // Gather asks every question in order, using flags first, then the
@@ -102,6 +104,11 @@ func Gather(f Facts, o Options, p *Prompter) (Result, error) {
 		return res, err
 	}
 	a.Workspace, _ = cleanWorkspace(ws, f)
+
+	// 3b. Read-only folders, checked against the workspace.
+	if err := askReadOnly(f, o, &a, p, &res); err != nil {
+		return res, err
+	}
 
 	// 4. Network.
 	if err := askNetwork(f, o, &a, p); err != nil {
@@ -506,6 +513,7 @@ func Changes(old, new Answers) []string {
 	add("harnesses", strings.Join(old.Harnesses, ","), strings.Join(new.Harnesses, ","))
 	add("tools", toolsSetting(old.Tools), toolsSetting(new.Tools))
 	add("workspace", old.Workspace, new.Workspace)
+	add("readonly", readOnlySetting(old.ReadOnly), readOnlySetting(new.ReadOnly))
 	add("network", old.Network, new.Network)
 	add("allow", strings.Join(old.Allow, ","), strings.Join(new.Allow, ","))
 	add("memory", old.Memory, new.Memory)
