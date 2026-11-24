@@ -68,7 +68,7 @@ func readOnlyPlan(b *config.Box, ws, home string, own []string, stdout io.Writer
 		for _, fd := range readonly.Scan(f.Path, w.Scan) {
 			fmt.Fprintf(stdout, "warning: %s looks like it holds %s, and the agent can read it. Add it to mask for this folder in ezbx.toml, or move it\n", path.Join(inside, fd.Rel), fd.Kind)
 		}
-		fmt.Fprintf(stdout, "read-only: %s at %s, %d masked\n", f.Path, inside, len(w.Masks))
+		fmt.Fprintf(stdout, "read-only: %s at %s, %d masked\n", f.Path, inside, readonly.Covered(w.Masks))
 	}
 	if err := readonly.CheckMaskCount(all...); err != nil {
 		return nil, err

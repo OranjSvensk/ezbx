@@ -9,7 +9,7 @@
 
 ezbx is a planned one-click setup for running AI coding and agent tools inside a sandboxed container, while the model itself keeps running on your own machine.
 
-> **Status: early release (`v0.2.0`).** All seven harnesses — Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw — are built, pinned in `ezbx.lock`, and verified end to end on Windows 11 with Docker Desktop and Strata (including file tools in `/workspace` with `network = "off"`). Every command on the road to 0.1 below is built. LM Studio, llama.cpp and Ollama have been checked live through the gateway too. Linux, macOS and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), and designs are in [docs/](docs/).
+> **Status: early release (`v0.2.0`).** All seven harnesses — Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw — are built, pinned in `ezbx.lock`, and verified end to end on Windows 11 with Docker Desktop and Strata (including file tools in `/workspace` with `network = "off"`). Every command on the road to 0.1 below is built. LM Studio, llama.cpp and Ollama have been checked live through the gateway too. Since `v0.2.0`, `main` also has read-only folders with secret masking ([docs/readonly.md](docs/readonly.md)), tested end to end. Linux, macOS and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), and designs are in [docs/](docs/).
 
 ```text
 # Scoop (Windows):

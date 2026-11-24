@@ -111,3 +111,15 @@ func CheckMaskCount(all ...[]Mask) error {
 	}
 	return fmt.Errorf("the read-only folders need %d masks, more than %d; %q matches %d of them, so mask the folder that holds those files instead", n, MaxMasks, top, most)
 }
+
+// Covered counts the masks that hide something: links are left as they are
+// (docs/readonly.md, "Links are left as they are").
+func Covered(ms []Mask) int {
+	n := 0
+	for _, m := range ms {
+		if !m.Link {
+			n++
+		}
+	}
+	return n
+}

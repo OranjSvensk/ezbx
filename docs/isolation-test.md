@@ -250,6 +250,20 @@ A hand-run check of the mounts planned in [readonly.md](readonly.md), so the des
 
 Not covered: links and junctions inside a read-only folder, a large folder's walk time, and the masks as `ezbx up` will build them (they were typed by hand here). The test image and folder were removed afterwards.
 
+### Read-only folders end to end (same day, after the code)
+
+Box `vt` with Pi, built by `ezbx build` from `0778277` (with `tools` left out), on the fake engine. Its read-only folder held `app.txt`, `.env`, `sub/.env.local`, `.ssh/id_ed25519`, `keys/server.pem`, a `notes.txt` with a fake AWS key, and two Windows junctions to a folder outside it: `.aws` (a default folder mask) and `plainlink`.
+
+- **`ezbx up`** noted `.aws` as a link it leaves alone, warned that `notes.txt` looks like it holds an AWS access key (without printing it), wrote `masks.json`, and started the box. `docker inspect` showed the folder at `/readonly/ref` and four masks, every one `RW=false`: three files bound to `/dev/null` and `.ssh` as a tmpfs.
+- **From inside, as the agent:** `app.txt` read normally; every masked file read as empty; `.ssh` listed nothing. Writing a new file, overwriting `app.txt`, deleting `.env`, writing into `.ssh`, `umount` of a mask and `mount -o remount,rw` were all refused. `notes.txt` was readable, as the warning said.
+- **Junctions:** both showed in the box as links to a path under `/mnt/host/` (how Docker Desktop shows a link to a host path), which doesn't exist in the box. Listing them and reading the outside file through them failed with "No such file or directory". This confirms leaving links alone ([readonly.md](readonly.md)). **Found:** the link's target, a host path, is visible to the agent with `readlink`. Not a secret, but a personal path; now listed under Limits in readonly.md.
+- **`ezbx doctor --box vt`:** 26 passed, 1 warning (the AWS-shaped key in `notes.txt`). The read-only group passed: "mounted read-only, 4 masked" and "the agent can't write the folders, and every mask hides its file or folder".
+- **New secret files:** after `ezbx shell` ran a session normally, `.env.prod` and `sub/id_rsa` were added on the host. `ezbx shell` (also with `--no-snapshot`) then refused to start, naming both, and `ezbx doctor` failed "new files" naming both. After `ezbx down` and `ezbx up`, 7 were masked, both read as empty, and the session started.
+- **`ezbx net on`** printed the read-only warning naming `/readonly/ref`. **`ezbx down`** removed `masks.json`.
+- **Found:** `up` said "5 masked" while 4 masks were mounted, counting the link. Fixed the same day: links are no longer counted.
+
+Not covered: a link (not a junction) made on Windows, which needs rights this account doesn't have (Linux CI covers links in the walk); a large folder's walk time; `ezbx init` asking about the folder (covered by unit tests). Everything made was removed afterwards: box `vt`, its volume, the images and build cache (Docker was empty before), the fake engine and the scratch folders.
+
 ## Limits of this result
 
 - On the test machine, public DNS servers didn't answer even from the outside network, so the "public DNS blocked" checks prove less than they appear to. The checks against Docker Desktop's own DNS server, which did answer from the outside, are the meaningful ones.

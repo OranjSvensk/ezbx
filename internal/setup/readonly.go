@@ -70,7 +70,7 @@ func askReadOnly(f Facts, o Options, a *Answers, p *Prompter, res *Result) error
 		if err != nil {
 			return fmt.Errorf("read-only folder %s: %w", fo.Path, err)
 		}
-		masked := len(w.Masks)
+		masked := readonly.Covered(w.Masks)
 		// A file masked already isn't scanned, so nothing is asked twice.
 		for _, fd := range readonly.Scan(fo.Path, w.Scan) {
 			pat := "./" + fd.Rel

@@ -1,6 +1,6 @@
 # Read-only folders and secret masking
 
-A read-only folder is a host folder the agent may read but never change, such as other projects it should learn from or a reference checkout. Common secret files inside it are hidden from the box. This page is the design, and all of it is built (`internal/readonly`, `internal/box/readonly.go` and `masks.go`, `internal/doctor/readonly.go`, `internal/setup/readonly.go`). The end-to-end run through `ezbx up`, `shell` and `doctor` against a real box is still to do (see the end of this page). The risks it does and doesn't cover are in [threat-model.md](threat-model.md).
+A read-only folder is a host folder the agent may read but never change, such as other projects it should learn from or a reference checkout. Common secret files inside it are hidden from the box. This page is the design, and all of it is built (`internal/readonly`, `internal/box/readonly.go` and `masks.go`, `internal/doctor/readonly.go`, `internal/setup/readonly.go`). It has been run end to end against a real box ([isolation-test.md](isolation-test.md), "Read-only folders end to end"). The risks it does and doesn't cover are in [threat-model.md](threat-model.md).
 
 ```toml
 [[box.main.readonly]]
@@ -50,7 +50,7 @@ Matched against each file or folder name at any depth, ignoring case (Windows do
 
 Mounts are applied parent first, so each mask lands on top of the read-only folder. Read-only is enforced by the mount itself, not file permissions; the agent has no capabilities, so it can't remount anything.
 
-**Links are left as they are.** A link or junction whose name matches a mask is listed in `masks.json` and noted by `up`, but nothing is mounted over it. In the box, a link points inside the box, never to the host (Docker Desktop shows a link to an absolute host path as one into a folder the box doesn't have), and whatever it points to inside the folder is masked by its own name. Mounting over a link would instead make Docker follow it inside the container. This replaces the first plan to mask the link itself; to be confirmed in the end-to-end run.
+**Links are left as they are.** A link or junction whose name matches a mask is listed in `masks.json` and noted by `up`, but nothing is mounted over it. In the box, a link points inside the box, never to the host (Docker Desktop shows a link to an absolute host path as one into a folder the box doesn't have), and whatever it points to inside the folder is masked by its own name. Mounting over a link would instead make Docker follow it inside the container. This replaces the first plan to mask the link itself; the end-to-end run confirmed it with Windows junctions.
 
 ### At `ezbx shell`
 
@@ -67,7 +67,7 @@ Before the session (and its snapshot), the names are walked again (R5). A newly 
 
 ## Proven live, and still to prove
 
-On Docker Desktop for Windows, a host folder reaches the container through Docker's VM. A hand-run test (2026-11-23, [isolation-test.md](isolation-test.md), "Read-only folder masks") confirmed that `/dev/null` and tmpfs masks land on top of paths inside a read-only bind mount of a Windows folder, that every write, delete, rename, unmount and remount was refused for both the agent and a root user without capabilities, and that names in the box keep their host case. Still to prove with the real box: the end-to-end run (`up` with masks, `ezbx shell` refusing a new secret file, `doctor` from inside the box), how long a walk of a large folder takes, and links and junctions inside a read-only folder (Linux CI covers links in the walk; Windows tests cover junctions).
+On Docker Desktop for Windows, a host folder reaches the container through Docker's VM. A hand-run test (2026-11-23, [isolation-test.md](isolation-test.md), "Read-only folder masks") confirmed that `/dev/null` and tmpfs masks land on top of paths inside a read-only bind mount of a Windows folder, that every write, delete, rename, unmount and remount was refused for both the agent and a root user without capabilities, and that names in the box keep their host case. The end-to-end run (same day, "Read-only folders end to end") confirmed the rest with a real box: `up` with its masks, the view from inside as the agent, Windows junctions left alone and unreachable, `ezbx shell` and `ezbx doctor` catching new secret files, and `down` removing the record. Still to prove: a large folder's walk time, and a link (not a junction) made on Windows.
 
 ## Limits
 
@@ -75,3 +75,4 @@ On Docker Desktop for Windows, a host folder reaches the container through Docke
 - A secret file created on the host during a session is readable until that session ends (R5 catches it at the next `ezbx shell`).
 - The folder's other contents are readable by the agent, and with the network `allow` or `on` it could send them to an allowed host (R7).
 - File names, sizes and dates of masked files stay visible; only their contents are hidden.
+- A link's target stays visible with `readlink`. For a link to a host path, that is the host path (on Docker Desktop, under `/mnt/host/`), which may name your user folder. What it points to can't be read from the box.

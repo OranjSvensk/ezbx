@@ -147,3 +147,13 @@ func TestCheckMaskCount(t *testing.T) {
 		t.Fatalf("5 masks: %v", err)
 	}
 }
+
+func TestCovered(t *testing.T) {
+	ms := []Mask{{Rel: "a"}, {Rel: "b", Dir: true}, {Rel: "c", Link: true}}
+	if n := Covered(ms); n != 2 {
+		t.Errorf("covered %d, want 2", n)
+	}
+	if Covered(nil) != 0 {
+		t.Error("nil")
+	}
+}
