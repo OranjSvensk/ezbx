@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "id": "offline",
+  "name": "Offline coding",
+  "description": "Coding tools with no internet access. Safe default for local work.",
+  "harnesses": ["pi"],
+  "tools": ["pack:coding"],
+  "network": "off",
+  "allow": []
+}

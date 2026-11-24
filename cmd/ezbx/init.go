@@ -40,7 +40,9 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	plan := fs.Bool("plan", false, "show what would be done, without asking or changing anything")
 	yes := fs.Bool("yes", false, "take every default without asking")
 	noStart := fs.Bool("no-start", false, "write the config, but don't start the box")
+	listProfiles := fs.Bool("list-profiles", false, "list starter profiles and exit")
 	var o setup.Options
+	fs.StringVar(&o.Profile, "profile", "", "starter profile: offline, python-ml, research or web-dev")
 	fs.StringVar(&o.URL, "url", "", "the model server's address, such as http://127.0.0.1:1234, if it isn't found")
 	fs.StringVar(&o.API, "api", "", "the server's API kind: auto, openai, lmstudio or anthropic")
 	fs.BoolVar(&o.Later, "later", false, "no model server yet: write the config without one")
@@ -64,8 +66,28 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--url ADDRESS] [--api auto|openai|lmstudio|anthropic] [--key-env NAME] [--later] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--readonly PATH]... [--network off|allow|on] [--memory 8g]")
+		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--profile NAME] [--list-profiles] [--url ADDRESS] [--api auto|openai|lmstudio|anthropic] [--key-env NAME] [--later] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--readonly PATH]... [--network off|allow|on] [--memory 8g]")
 		return 2
+	}
+	if *listProfiles {
+		if o.Profile != "" || o.URL != "" || o.Later || *plan || *yes || *noStart {
+			return report(stderr, usageError("--list-profiles cannot be combined with setup flags"))
+		}
+		cat, err := tools.Load(catalog.FS)
+		if err != nil {
+			return report(stderr, fmt.Errorf("internal error loading the tool catalogue: %w", err))
+		}
+		fmt.Fprint(stdout, setup.FormatProfiles(cat))
+		return 0
+	}
+	if o.Profile != "" {
+		cat, err := tools.Load(catalog.FS)
+		if err != nil {
+			return report(stderr, fmt.Errorf("internal error loading the tool catalogue: %w", err))
+		}
+		if _, ok := cat.Profiles[o.Profile]; !ok {
+			return report(stderr, usageError(fmt.Sprintf("unknown profile %q (available: %s)", o.Profile, strings.Join(cat.ProfileIDs(), ", "))))
+		}
 	}
 	if *harnessList != "" {
 		for _, h := range strings.Split(*harnessList, ",") {

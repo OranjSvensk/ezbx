@@ -144,7 +144,7 @@ The full threat model is in [threat-model.md](threat-model.md): what is protecte
 
 1. **0.1 (done, `v0.1.0`):** `init`, engine detection for Strata and one other engine, the gateway with the model route and `off`/`on`, one harness, snapshots.
 2. **0.2 (done, `v0.2.0`):** `allow` mode, more engines and harnesses, `doctor`, `reset` with backup and restore. The remaining harnesses and `review`, first planned for 0.3, came early.
-3. **0.3:** read-only folders with secret masking and the full threat model, model servers by API kind (decision 22), starter profiles (web dev, Python/ML, research, offline).
+3. **0.3:** read-only folders with secret masking and the full threat model, model servers by API kind (decision 22: `openai`, `lmstudio`, `anthropic`), starter profiles (`offline`, `python-ml`, `research`, `web-dev` in [profiles.md](profiles.md)).
 4. **Later:** tray or GUI front end, other container runtimes, a tool-calling self-test for models.
 
 ## 13. Decisions

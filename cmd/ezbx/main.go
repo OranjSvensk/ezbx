@@ -39,7 +39,8 @@ const usage = `ezbx - boxed-up local AI agents
 
 Usage:
   ezbx [--version] [help]
-  ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--url ADDRESS | --later]
+  ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--profile NAME]
+            [--list-profiles] [--url ADDRESS | --later]
             [--api auto|openai|lmstudio|anthropic] [--key-env NAME] [--reasoning]
             [--harness pi,opencode,omp,codex,claude,hermes,openclaw]
             [--tools pack:coding,ffmpeg|none] [--workspace PATH]

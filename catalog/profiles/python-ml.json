@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "python-ml",
+  "name": "Python and ML",
+  "description": "Coding tools (python3 without pip/venv yet), with PyPI, Hugging Face and GitHub allowed.",
+  "harnesses": ["pi"],
+  "tools": ["pack:coding"],
+  "network": "allow",
+  "allow": [
+    "files.pythonhosted.org",
+    "github.com",
+    "huggingface.co",
+    "pypi.org"
+  ]
+}

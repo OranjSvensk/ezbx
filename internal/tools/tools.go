@@ -43,10 +43,11 @@ type Pack struct {
 	Tools       []string `json:"tools"`
 }
 
-// Catalog is every tool and pack.
+// Catalog is every tool, pack and starter profile.
 type Catalog struct {
-	Tools map[string]Tool
-	Packs map[string]Pack
+	Tools    map[string]Tool
+	Packs    map[string]Pack
+	Profiles map[string]Profile
 }
 
 // PackPrefix marks a pack in a box's tools list: "pack:coding".
@@ -61,7 +62,7 @@ var (
 
 // Load reads and checks the whole catalogue. Unknown fields are refused.
 func Load(fsys fs.FS) (*Catalog, error) {
-	c := &Catalog{Tools: map[string]Tool{}, Packs: map[string]Pack{}}
+	c := &Catalog{Tools: map[string]Tool{}, Packs: map[string]Pack{}, Profiles: map[string]Profile{}}
 	toolFiles, err := fs.Glob(fsys, "tools/*.json")
 	if err != nil {
 		return nil, err
@@ -89,6 +90,9 @@ func Load(fsys fs.FS) (*Catalog, error) {
 			return nil, fmt.Errorf("%s: %w", f, err)
 		}
 		c.Packs[p.ID] = p
+	}
+	if err := c.loadProfiles(fsys); err != nil {
+		return nil, err
 	}
 	return c, nil
 }

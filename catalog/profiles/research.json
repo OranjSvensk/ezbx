@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "research",
+  "name": "Research",
+  "description": "Coding tools and headless Chromium, with Wikipedia, arXiv and GitHub allowed.",
+  "harnesses": ["pi"],
+  "tools": ["pack:coding", "pack:web"],
+  "network": "allow",
+  "allow": [
+    "arxiv.org",
+    "en.wikipedia.org",
+    "github.com",
+    "raw.githubusercontent.com"
+  ]
+}

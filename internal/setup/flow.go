@@ -33,6 +33,7 @@ type Facts struct {
 
 // Options are the answers given as flags. Empty means "ask".
 type Options struct {
+	Profile   string // starter profile id; empty prompts for a new config
 	API       string // an API kind or "auto"; "" keeps what the config has
 	URL       string // the server's address, if the scan doesn't find it
 	Later     bool   // no server now: write the config without choosing one
@@ -77,6 +78,12 @@ func Gather(f Facts, o Options, p *Prompter) (Result, error) {
 		}
 	}
 
+	// 1b. Starter profile (new configs, or when --profile is given).
+	fromProfile, err := askProfile(f, o, &a, p)
+	if err != nil {
+		return res, err
+	}
+
 	// 2. Harnesses, then the tools built in beside them.
 	if err := askHarnesses(f, o, &a, p); err != nil {
 		return res, err
@@ -109,7 +116,7 @@ func Gather(f Facts, o Options, p *Prompter) (Result, error) {
 	}
 
 	// 4. Network.
-	if err := askNetwork(f, o, &a, p); err != nil {
+	if err := askNetwork(f, o, &a, p, fromProfile); err != nil {
 		return res, err
 	}
 
@@ -292,6 +299,90 @@ func askReasoning(e detect.Engine, o Options, a *Answers, p *Prompter) error {
 	return nil
 }
 
+// FormatProfiles formats the starter profiles in cat for ezbx init --list-profiles.
+func FormatProfiles(cat *tools.Catalog) string {
+	if cat == nil || len(cat.Profiles) == 0 {
+		return "No starter profiles found.\n"
+	}
+	var b strings.Builder
+	b.WriteString("Starter profiles (sets defaults you can still change during setup):\n")
+	for _, id := range cat.ProfileIDs() {
+		pr := cat.Profiles[id]
+		fmt.Fprintf(&b, "  %-10s %s — %s\n", pr.ID, pr.Name, pr.Description)
+		fmt.Fprintf(&b, "  %-10s harnesses: %s | tools: %s | %s\n", "",
+			strings.Join(pr.Harnesses, ", "), toolsText(pr.Tools), profileNetText(pr))
+	}
+	return b.String()
+}
+
+func profileNetText(pr tools.Profile) string {
+	if pr.Network == "allow" && len(pr.Allow) > 0 {
+		return "network: allow (" + strings.Join(pr.Allow, ", ") + ")"
+	}
+	return "network: " + pr.Network
+}
+
+func askProfile(f Facts, o Options, a *Answers, p *Prompter) (bool, error) {
+	if f.Catalog == nil || len(f.Catalog.Profiles) == 0 {
+		if o.Profile != "" {
+			return false, fmt.Errorf("unknown profile %q (no starter profiles available)", o.Profile)
+		}
+		return false, nil
+	}
+	if o.Profile != "" {
+		pr, ok := f.Catalog.Profiles[o.Profile]
+		if !ok {
+			return false, fmt.Errorf("unknown profile %q (available: %s)", o.Profile, strings.Join(f.Catalog.ProfileIDs(), ", "))
+		}
+		if err := applyProfile(f, pr, a); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	if f.Existing != nil {
+		return false, nil
+	}
+	ids := f.Catalog.ProfileIDs()
+	fmt.Fprintln(p.Out, "\nStarter profiles (sets harnesses, tools and network defaults; each step below can still change them)")
+	for i, id := range ids {
+		pr := f.Catalog.Profiles[id]
+		fmt.Fprintf(p.Out, "  %d. %-10s %s — %s\n", i+1, pr.ID, pr.Name, pr.Description)
+		fmt.Fprintf(p.Out, "     %-10s tools: %s; %s\n", "", toolsText(pr.Tools), profileNetText(pr))
+	}
+	ans, err := p.Ask("Starter profile", "1", func(s string) error {
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 1 || n > len(ids) {
+			return fmt.Errorf("Type a number from 1 to %d.", len(ids))
+		}
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	n, _ := strconv.Atoi(ans)
+	if err := applyProfile(f, f.Catalog.Profiles[ids[n-1]], a); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func applyProfile(f Facts, pr tools.Profile, a *Answers) error {
+	avail := map[string]bool{}
+	for _, m := range f.Harnesses {
+		avail[m.ID] = true
+	}
+	for _, id := range pr.Harnesses {
+		if !avail[id] {
+			return fmt.Errorf("profile %q names harness %q, which is not available", pr.ID, id)
+		}
+	}
+	a.Harnesses = slices.Clone(pr.Harnesses)
+	a.Tools = slices.Clone(pr.Tools)
+	a.Network = pr.Network
+	a.Allow = slices.Clone(pr.Allow)
+	return nil
+}
+
 func askHarnesses(f Facts, o Options, a *Answers, p *Prompter) error {
 	if len(f.Harnesses) == 0 {
 		return errors.New("internal error: no verified harness to offer")
@@ -381,6 +472,8 @@ func askTools(f Facts, o Options, a *Answers, p *Prompter) error {
 	switch {
 	case o.Tools != nil:
 		def = o.Tools
+	case a.Tools != nil:
+		def = a.Tools
 	case f.Existing != nil:
 		def = a.Tools
 	}
@@ -423,7 +516,7 @@ func harnessIDs(list []harness.Manifest) string {
 	return strings.Join(ids, ", ")
 }
 
-func askNetwork(f Facts, o Options, a *Answers, p *Prompter) error {
+func askNetwork(f Facts, o Options, a *Answers, p *Prompter, fromProfile bool) error {
 	fmt.Fprintln(p.Out, "\nNetwork for the agent (the model always works):")
 	fmt.Fprintln(p.Out, "  off    no internet")
 	fmt.Fprintln(p.Out, "  allow  only the hosts you list, such as registry.npmjs.org")
@@ -445,6 +538,9 @@ func askNetwork(f Facts, o Options, a *Answers, p *Prompter) error {
 	}
 	a.Network = mode
 	if mode != "allow" {
+		if fromProfile {
+			a.Allow = nil
+		}
 		return nil
 	}
 	var theirs []string

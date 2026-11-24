@@ -33,7 +33,7 @@ ezbx init --yes           accept detected defaults without prompting
 ezbx init --config FILE   take every answer from a config file
 ```
 
-Useful flags: `--url ADDRESS`, `--api auto|openai|lmstudio|anthropic`, `--key-env NAME`, `--later`, `--harness a,b`, `--workspace PATH`, `--network off|allow|on`, `--no-start`, `--here` (write config next to the current folder, for developers).
+Useful flags: `--profile NAME`, `--list-profiles`, `--url ADDRESS`, `--api auto|openai|lmstudio|anthropic`, `--key-env NAME`, `--later`, `--harness a,b`, `--workspace PATH`, `--network off|allow|on`, `--no-start`, `--here` (write config next to the current folder, for developers).
 
 Prompts are plain text questions in version 0.1. Arrow-key menus can come later without changing the flow.
 
@@ -66,6 +66,10 @@ If the Docker engine isn't running, `init` says so and offers to wait while you 
 2. The configured address, if it answers, is the default, then the first one found. `--api KIND` lists only servers that speak that kind. If none is found, `init` finishes with a note, because the box works without a running model and the gateway just reports "engine not reachable".
 3. The chosen address is written as `url` under `[engine]`, and `api` as the kind it answered (or `auto`, with `--api auto`). `ezbx up` contacts only that address.
 4. If the server requires a key, give the **name of an environment variable** that holds it with `--key-env NAME`. The key is never typed into a file. (The operating system's credential store comes after 0.1; decided below.) The key is only ever sent to `url`. A server that wants the key for its model list answers detection with 401; `init` says so and shows the command to use it: `ezbx init --url ADDRESS --key-env NAME`, which sends the key to that address only.
+
+### 1b. Starter profile (new configs, or `--profile`)
+
+For a new config, `init` offers the starter profiles ([profiles.md](profiles.md)), defaulting to `offline` so `ezbx init --yes` stays offline. Choosing one sets defaults for harnesses, tools, network mode and allowed hosts; every step after it (and flags such as `--harness`, `--tools` and `--network`) can still override them, and explicit fields are written to `ezbx.toml` (no hidden `profile` setting). Re-runs with an existing config skip this step unless `--profile NAME` is passed. `ezbx init --list-profiles` prints all profiles and exits.
 
 ### 2. Harnesses
 

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -49,15 +50,37 @@ func TestEnvName(t *testing.T) {
 func TestInitRefusesBadFlags(t *testing.T) {
 	t.Setenv("EZBX_HOME", t.TempDir())
 	for name, args := range map[string][]string{
-		"url without http": {"--url", "127.0.0.1:1"},
-		"later and url":    {"--later", "--url", "http://127.0.0.1:1"},
-		"key value":        {"--key-env", "sk-abc def"},
-		"extra word":       {"now"},
-		"old engine flag":  {"--engine", "auto"},
+		"url without http":          {"--url", "127.0.0.1:1"},
+		"later and url":             {"--later", "--url", "http://127.0.0.1:1"},
+		"key value":                 {"--key-env", "sk-abc def"},
+		"extra word":                {"now"},
+		"old engine flag":           {"--engine", "auto"},
+		"unknown profile":           {"--profile", "nope"},
+		"list-profiles and profile": {"--list-profiles", "--profile", "offline"},
+		"list-profiles and url":     {"--list-profiles", "--url", "http://127.0.0.1:1"},
+		"list-profiles and plan":    {"--list-profiles", "--plan"},
 	} {
 		if code := run(append([]string{"init"}, args...), devNull{}, devNull{}); code != 2 {
 			t.Errorf("%s: exit %d", name, code)
 		}
+	}
+}
+
+func TestInitListProfilesAndUnknownProfile(t *testing.T) {
+	var out, errOut strings.Builder
+	if code := run([]string{"init", "--list-profiles"}, &out, &errOut); code != 0 || errOut.Len() != 0 {
+		t.Fatalf("exit %d stderr=%q", code, errOut.String())
+	}
+	for _, want := range []string{"offline", "python-ml", "research", "web-dev", "registry.npmjs.org", "pypi.org", "arxiv.org"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("--list-profiles missing %q\n%s", want, out.String())
+		}
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := run([]string{"init", "--profile", "nope"}, &out, &errOut); code != 2 || !strings.Contains(errOut.String(), "offline, python-ml, research, web-dev") {
+		t.Errorf("unknown profile: code=%d stderr=%q", code, errOut.String())
 	}
 }
 
