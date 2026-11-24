@@ -1,19 +1,17 @@
-// Package detect finds inference engines running on this computer.
+// Package detect finds model servers and the API each one speaks.
 //
-// Ports are only hints. An engine counts as found when its server answers the
-// adapter's probes with the fields the adapter expects. See
+// Ports are only hints. A server counts as found when it answers an API
+// kind's probes with the fields that kind expects. See
 // docs/engine-adapters.md.
 package detect
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -26,23 +24,18 @@ import (
 // maxBody stops a misbehaving server from making us read forever.
 const maxBody = 1 << 20 // 1 MiB
 
-// Runner runs a command and returns what it printed. It is a field so tests
-// can replace it without starting real programs.
-type Runner func(ctx context.Context, argv []string) ([]byte, error)
-
 // Detector holds everything detection needs. Detect doesn't change it, so
 // one Detector can be used by several callers at once.
 type Detector struct {
 	Adapters      []adapter.Adapter
-	Run           Runner        // nil means "never run commands"
 	Timeout       time.Duration // per request; 0 means 500ms
 	Hosts         []string      // hosts to probe for hint ports; nil means 127.0.0.1
-	SkipHintPorts bool          // tests use this to probe only given addresses
+	SkipHintPorts bool          // check only the given addresses (ezbx up, doctor)
 
-	// Keys maps an address to the key of the engine configured there. A key
+	// Keys maps an address to the key of the server configured there. A key
 	// is sent only to that exact address (scheme, host, port and path, after
 	// trailing slashes are dropped), never to another candidate, so the port
-	// scan and the status commands never see it. Redirects are never followed.
+	// scan never sees it. Redirects are never followed.
 	Keys map[string]string
 }
 
@@ -54,7 +47,7 @@ type Model struct {
 	Loaded        *bool    `json:"loaded,omitempty"`
 }
 
-// Engine is one engine that was found.
+// Engine is one model server that was found. ID and Name are its API kind.
 type Engine struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
@@ -65,8 +58,8 @@ type Engine struct {
 	Verified    string   `json:"verified"`
 }
 
-// Refusal is an address that answered 401 or 403 and matched no engine:
-// most likely an engine that wants a key.
+// Refusal is an address that answered 401 or 403 and matched no API kind:
+// most likely a server that wants a key.
 type Refusal struct {
 	URL     string `json:"url"`
 	KeySent bool   `json:"keySent"` // true: it refused the key it was given
@@ -76,7 +69,6 @@ type Refusal struct {
 type Result struct {
 	Engines []Engine  `json:"engines"`
 	Refused []Refusal `json:"refused,omitempty"`
-	Notes   []string  `json:"notes,omitempty"`
 }
 
 // scan holds what one Detect call needs, so the Detector itself never changes.
@@ -93,7 +85,7 @@ type scan struct {
 // trim is how addresses are compared: without trailing slashes.
 func trim(raw string) string { return strings.TrimRight(raw, "/") }
 
-// Detect looks for engines. extra holds addresses the user gave explicitly.
+// Detect looks for model servers. extra holds addresses the user gave.
 func (d *Detector) Detect(ctx context.Context, extra []string) Result {
 	s := &scan{d: d, timeout: d.Timeout, keys: map[string]string{}, refused: map[string]bool{}}
 	for u, k := range d.Keys {
@@ -117,21 +109,7 @@ func (d *Detector) Detect(ctx context.Context, extra []string) Result {
 		candidates[trim(raw)] = true
 	}
 
-	// 1. Ask engine programs which servers are running (finds custom ports).
-	for _, a := range d.Adapters {
-		if a.Detect.CLI == nil || d.Run == nil {
-			continue
-		}
-		urls, note := d.askCLI(ctx, a)
-		if note != "" {
-			res.Notes = append(res.Notes, note)
-		}
-		for _, u := range urls {
-			add(u)
-		}
-	}
-
-	// 2. Probe the usual ports on this computer only.
+	// 1. Probe the usual ports on this computer only.
 	if !d.SkipHintPorts {
 		hosts := d.Hosts
 		if len(hosts) == 0 {
@@ -146,12 +124,12 @@ func (d *Detector) Detect(ctx context.Context, extra []string) Result {
 		}
 	}
 
-	// 3. Addresses the user typed are trusted as given.
+	// 2. Addresses the user gave are trusted as given.
 	for _, u := range extra {
 		add(u)
 	}
 
-	// 4. Check every candidate at the same time.
+	// 3. Check every candidate at the same time.
 	var (
 		wg sync.WaitGroup
 		mu sync.Mutex
@@ -169,7 +147,7 @@ func (d *Detector) Detect(ctx context.Context, extra []string) Result {
 	}
 	wg.Wait()
 
-	// 5. Addresses that refused us and matched nothing: say why.
+	// 4. Addresses that refused us and matched nothing: say why.
 	found := map[string]bool{}
 	for _, e := range res.Engines {
 		found[e.URL] = true
@@ -190,60 +168,12 @@ func (d *Detector) Detect(ctx context.Context, extra []string) Result {
 	return res
 }
 
-// askCLI runs an adapter's status command and returns the loopback URLs it
-// lists. Addresses on other computers are skipped, never probed, and the user
-// is told once.
-func (d *Detector) askCLI(ctx context.Context, a adapter.Adapter) ([]string, string) {
-	out, err := d.Run(ctx, a.Detect.CLI.Command)
-	if err != nil {
-		return nil, fmt.Sprintf("%s: its command is not available", a.Name)
-	}
-	// Some commands print extra text after the JSON, so read only the first
-	// JSON value and ignore whatever follows.
-	var doc any
-	if err := json.NewDecoder(bytes.NewReader(out)).Decode(&doc); err != nil {
-		return nil, fmt.Sprintf("%s: its command gave unreadable output", a.Name)
-	}
-
-	var urls []string
-	skipped := 0
-	for _, v := range jsonpath.Collect(doc, a.Detect.CLI.Reads) {
-		raw, ok := v.(string)
-		if !ok {
-			continue
-		}
-		if !isLoopback(raw) {
-			skipped++
-			continue
-		}
-		urls = append(urls, raw)
-	}
-	if skipped > 0 {
-		return urls, fmt.Sprintf("%s: ignored %d server(s) that are not on this computer", a.Name, skipped)
-	}
-	return urls, ""
-}
-
-// isLoopback is true for addresses that point at this same computer.
-func isLoopback(raw string) bool {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return false
-	}
-	host := u.Hostname()
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
-
 type match struct {
 	adapter     adapter.Adapter
 	specificity int
 }
 
-// check decides which engine, if any, lives at base.
+// check decides which API kind, if any, answers at base.
 func (s *scan) check(ctx context.Context, base string) (Engine, bool) {
 	cache := map[string]any{} // answers already fetched from this address
 
@@ -449,10 +379,10 @@ func skipped(item any, arrayPath string, rule *string) bool {
 	return ok && fmt.Sprint(v) == want
 }
 
-// FileNamed lists the models an engine names by a file path on the host,
-// as llama.cpp's server does unless it is started with --alias. ezbx writes
-// model ids into the harness config inside the box, so such a name would
-// show the box a path on the host.
+// FileNamed lists the models a server names by a file path on the host, as
+// some servers do unless the model is given a short name (an alias). ezbx
+// writes model ids into the harness config inside the box, so such a name
+// would show the box a path on the host.
 func FileNamed(e Engine) []string {
 	var out []string
 	for _, m := range e.Models {
@@ -486,11 +416,7 @@ func FileNamedWarning(e Engine) string {
 	if len(names) == 0 {
 		return ""
 	}
-	fix := "start the engine with a short model name"
-	if e.ID == "llamacpp" {
-		fix = "start llama-server with --alias NAME"
-	}
-	return fmt.Sprintf("%s names %d model(s) by a file path on this computer, and that path would be written into the harness config inside the box. To keep it out, %s", e.Name, len(names), fix)
+	return fmt.Sprintf("The server at %s names %d model(s) by a file path on this computer, and that path would be written into the harness config inside the box. To keep it out, give the model a short name (an alias) in the server's settings", e.URL, len(names))
 }
 
 // factAt reads one fact for one list item, when the adapter names a path.

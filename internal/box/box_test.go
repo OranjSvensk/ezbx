@@ -22,7 +22,7 @@ func testPlan(t *testing.T) Plan {
 	return Plan{
 		Box: "t", Names: NamesFor("t"),
 		Workspace: filepath.Join(dir, "workspace"), StateDir: filepath.Join(dir, "state", "t"), LogOn: true,
-		Upstream: "http://host.docker.internal:18080", EngineID: "strata", EngineName: "Strata",
+		Upstream: "http://host.docker.internal:18080", EngineID: "openai", EngineName: "OpenAI-compatible API",
 		Network: "allow", Allow: []string{"registry.npmjs.org"},
 		Memory: "4g", PIDs: 512, Harnesses: []string{"pi"}, Env: map[string]string{"DEMO_QUIET": "1"},
 		HomeFiles: []harness.File{
@@ -93,7 +93,7 @@ func TestGatewayArgs(t *testing.T) {
 		{"-v", p.LogDir() + ":/var/log/ezbx"},
 		{"-v", p.KeyFile() + ":/run/ezbx/engine-key:ro"},
 		{"ezbx-gateway:aaa", "gateway", "serve", "--listen", "0.0.0.0:8000"},
-		{"--upstream", "http://host.docker.internal:18080"}, {"--engine", "strata"},
+		{"--upstream", "http://host.docker.internal:18080"}, {"--engine", "openai"},
 		{"--upstream-host", "localhost:18080"}, {"--key-file", "/run/ezbx/engine-key"},
 		{"--proxy", "0.0.0.0:3128"}, {"--network", "allow"}, {"--allow", "registry.npmjs.org"},
 		{"--admin", "127.0.0.1:8099"}, {"--admin-token-file", "/run/ezbx/admin-token"},

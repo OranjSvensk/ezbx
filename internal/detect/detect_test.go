@@ -2,12 +2,11 @@ package detect
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/OranjSvensk/ezbx/internal/adapter"
@@ -15,7 +14,7 @@ import (
 )
 
 // fakeEngine starts a server that answers the given paths with the given JSON.
-// Any other path gets a 404, like a real engine without that route.
+// Any other path gets a 404, like a real server without that route.
 func fakeEngine(t *testing.T, routes map[string]string) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -42,88 +41,66 @@ func newDetector(t *testing.T) *Detector {
 }
 
 const (
-	strataHealth = `{"status":"ok","max_context":262144,"model":"m1","images":true,"api_key":false}`
-	strataModels = `{"object":"list","data":[{"id":"m1","status":{"value":"loaded"},"meta":{"n_ctx":262144},"architecture":{"input_modalities":["text","image"]}}]}`
-	plainModels  = `{"object":"list","data":[{"id":"some-model","object":"model"}]}`
+	plainModels    = `{"object":"list","data":[{"id":"some-model","object":"model"}]}`
+	lmstudioNative = `{"models":[{"type":"llm","key":"some-model","max_context_length":32768,"loaded_instances":[]}]}`
 )
 
-func TestStrataWinsOverEnginesWithSimilarRoutes(t *testing.T) {
-	srv := fakeEngine(t, map[string]string{"/health": strataHealth, "/v1/models": strataModels})
-
+func TestAPlainOpenAIServerIsTheOpenAIKind(t *testing.T) {
+	srv := fakeEngine(t, map[string]string{"/v1/models": plainModels})
 	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
-	if len(res.Engines) != 1 {
-		t.Fatalf("want 1 engine, got %+v", res.Engines)
+	if len(res.Engines) != 1 || res.Engines[0].ID != "openai" || res.Engines[0].Name != "OpenAI-compatible API" {
+		t.Fatalf("want the openai kind, got %+v", res.Engines)
 	}
 	e := res.Engines[0]
-	if e.ID != "strata" {
-		t.Fatalf("want strata, got %s", e.ID)
+	if len(e.Models) != 1 || e.Models[0].ID != "some-model" || len(e.AlsoMatched) != 0 {
+		t.Errorf("openai server: %+v", e)
 	}
-	if !strings.Contains(strings.Join(e.AlsoMatched, ","), "llamacpp") {
-		t.Errorf("llamacpp should be listed as also matching, got %v", e.AlsoMatched)
-	}
-	if len(e.Models) != 1 {
-		t.Fatalf("want 1 model, got %+v", e.Models)
-	}
-	m := e.Models[0]
-	if m.ID != "m1" || m.ContextWindow != 262144 || strings.Join(m.Input, ",") != "text,image" {
-		t.Errorf("model facts wrong: %+v", m)
-	}
-	if m.Loaded == nil || !*m.Loaded {
-		t.Errorf("model should be marked loaded: %+v", m)
-	}
-}
-
-func TestLlamaCppIsRecognisedByItsHealthRoute(t *testing.T) {
-	srv := fakeEngine(t, map[string]string{"/health": `{"status":"ok"}`, "/v1/models": plainModels})
-	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
-	if len(res.Engines) != 1 || res.Engines[0].ID != "llamacpp" {
-		t.Fatalf("want llamacpp, got %+v", res.Engines)
-	}
-	// This engine doesn't report context size, so it must stay unknown.
-	if res.Engines[0].Models[0].ContextWindow != 0 {
+	// The plain kind doesn't report context size, so it must stay unknown.
+	if e.Models[0].ContextWindow != 0 {
 		t.Errorf("context window should be unknown (0)")
 	}
 }
 
-func TestOllamaNeedsItsOwnRoute(t *testing.T) {
-	srv := fakeEngine(t, map[string]string{"/api/ps": `{"models":[]}`, "/v1/models": plainModels})
-	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
-	if len(res.Engines) != 1 || res.Engines[0].ID != "ollama" {
-		t.Fatalf("want ollama, got %+v", res.Engines)
-	}
-}
-
-func TestAPlainOpenAIServerIsNotCalledLMStudio(t *testing.T) {
-	srv := fakeEngine(t, map[string]string{"/v1/models": plainModels})
-	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
-	if len(res.Engines) != 1 || res.Engines[0].ID != "openai" || res.Engines[0].Name != "OpenAI-compatible server" {
-		t.Fatalf("want the generic openai adapter, got %+v", res.Engines)
-	}
-	if res.Engines[0].Verified != "generic" || len(res.Engines[0].Models) != 1 {
-		t.Errorf("generic engine: %+v", res.Engines[0])
-	}
-}
-
-func TestLMStudioIsRecognisedByItsNativeRoute(t *testing.T) {
+// Servers that add other routes beside the OpenAI ones (a health route, a
+// native list of their own) are still just OpenAI-compatible to ezbx.
+func TestOtherRoutesDontChangeTheKind(t *testing.T) {
 	srv := fakeEngine(t, map[string]string{
-		"/v1/models":     plainModels,
-		"/api/v1/models": `{"models":[{"type":"llm","key":"some-model","max_context_length":32768,"loaded_instances":[]}]}`,
+		"/health":    `{"status":"ok","max_context":262144}`,
+		"/api/ps":    `{"models":[]}`,
+		"/v1/models": plainModels,
 	})
 	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
-	if len(res.Engines) != 1 || res.Engines[0].ID != "lmstudio" {
+	if len(res.Engines) != 1 || res.Engines[0].ID != "openai" {
+		t.Fatalf("want the openai kind, got %+v", res.Engines)
+	}
+}
+
+func TestTheLMStudioAPIWinsOverThePlainOne(t *testing.T) {
+	srv := fakeEngine(t, map[string]string{"/v1/models": plainModels, "/api/v1/models": lmstudioNative})
+	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
+	if len(res.Engines) != 1 || res.Engines[0].ID != "lmstudio" || res.Engines[0].Name != "LM Studio API" {
 		t.Fatalf("want lmstudio, got %+v", res.Engines)
 	}
 	if strings.Join(res.Engines[0].AlsoMatched, ",") != "openai" {
-		t.Errorf("the generic adapter should be listed as also matching: %v", res.Engines[0].AlsoMatched)
+		t.Errorf("the openai kind should be listed as also matching: %v", res.Engines[0].AlsoMatched)
+	}
+	if m := res.Engines[0].Models; len(m) != 1 || m[0].ContextWindow != 32768 {
+		t.Errorf("the native list should give the context size: %+v", m)
 	}
 }
 
-func TestEnginesWithNoModelsAreStillFound(t *testing.T) {
+// Only the LM Studio API's native list is not enough: chat goes through the
+// OpenAI routes, so both must answer.
+func TestTheLMStudioAPINeedsTheOpenAIRoutesToo(t *testing.T) {
+	srv := fakeEngine(t, map[string]string{"/api/v1/models": lmstudioNative})
+	if res := newDetector(t).Detect(context.Background(), []string{srv.URL}); len(res.Engines) != 0 {
+		t.Fatalf("a native list alone must not count: %+v", res.Engines)
+	}
+}
+
+func TestServersWithNoModelsAreStillFound(t *testing.T) {
 	empty := `{"object":"list","data":[]}`
 	cases := map[string]map[string]string{
-		"ollama":   {"/api/ps": `{"models":[]}`, "/v1/models": empty},
-		"llamacpp": {"/health": `{"status":"ok"}`, "/v1/models": empty},
-		"strata":   {"/health": `{"status":"ok","max_context":0,"model":null}`, "/v1/models": empty},
 		"lmstudio": {"/v1/models": empty, "/api/v1/models": `{"models":[]}`},
 		"openai":   {"/v1/models": empty},
 	}
@@ -140,14 +117,56 @@ func TestEnginesWithNoModelsAreStillFound(t *testing.T) {
 	}
 }
 
-func TestOllamaReportsWhichModelsAreLoaded(t *testing.T) {
+// factKind is an API kind made for these tests, using every model fact the
+// schema can read, so the reading code stays tested although the shipped
+// kinds use only some of it.
+const factKind = `{
+  "schema": 1, "id": "facts", "name": "Facts",
+  "detect": {"hintPorts": [], "probes": [{"path": "/v1/models", "expect": {"hasLists": ["data"]}}]},
+  "openai": {"basePath": "/v1", "modelsPath": "/v1/models", "chatPath": "/v1/chat/completions"},
+  "models": {"id": "data[].id", "contextWindow": "data[].meta.n_ctx", "input": "data[].architecture.input_modalities", "loaded": LOADED},
+  "auth": {"mode": "none", "keyEnv": null, "note": ""},
+  "capabilities": [], "verified": {"status": "docs-only", "on": null, "notes": ""}
+}`
+
+func factDetector(t *testing.T, loaded string) *Detector {
+	t.Helper()
+	body := strings.Replace(factKind, "LOADED", loaded, 1)
+	adapters, err := adapter.LoadFS(fstest.MapFS{"facts/adapter.json": {Data: []byte(body)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &Detector{Adapters: adapters, SkipHintPorts: true, Timeout: 2 * time.Second}
+}
+
+func TestModelFactsAndTheLoadedFieldForm(t *testing.T) {
+	srv := fakeEngine(t, map[string]string{"/v1/models": `{"object":"list","data":[
+		{"id":"m1","status":{"value":"loaded"},"meta":{"n_ctx":262144},"architecture":{"input_modalities":["text","image"]}},
+		{"id":"m2","status":{"value":"unloaded"}}]}`})
+	res := factDetector(t, `"data[].status.value == loaded"`).Detect(context.Background(), []string{srv.URL})
+	if len(res.Engines) != 1 || len(res.Engines[0].Models) != 2 {
+		t.Fatalf("got %+v", res.Engines)
+	}
+	m := res.Engines[0].Models[0]
+	if m.ID != "m1" || m.ContextWindow != 262144 || strings.Join(m.Input, ",") != "text,image" {
+		t.Errorf("model facts wrong: %+v", m)
+	}
+	if m.Loaded == nil || !*m.Loaded {
+		t.Errorf("m1 should be marked loaded: %+v", m)
+	}
+	if l := res.Engines[0].Models[1].Loaded; l == nil || *l {
+		t.Errorf("m2 should be marked not loaded: %v", l)
+	}
+}
+
+func TestTheLoadedRouteForm(t *testing.T) {
 	srv := fakeEngine(t, map[string]string{
-		"/api/ps":    `{"models":[{"name":"llama3:latest","model":"llama3:latest"}]}`,
-		"/v1/models": `{"object":"list","data":[{"id":"llama3:latest"},{"id":"qwen3:8b"}]}`,
+		"/api/ps":    `{"models":[{"name":"m1:latest"}]}`,
+		"/v1/models": `{"object":"list","data":[{"id":"m1:latest"},{"id":"m2:8b"}]}`,
 	})
-	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
-	if len(res.Engines) != 1 || res.Engines[0].ID != "ollama" {
-		t.Fatalf("want ollama, got %+v", res.Engines)
+	res := factDetector(t, `"/api/ps models[].name"`).Detect(context.Background(), []string{srv.URL})
+	if len(res.Engines) != 1 {
+		t.Fatalf("got %+v", res.Engines)
 	}
 	got := map[string]bool{}
 	for _, m := range res.Engines[0].Models {
@@ -156,22 +175,28 @@ func TestOllamaReportsWhichModelsAreLoaded(t *testing.T) {
 		}
 		got[m.ID] = *m.Loaded
 	}
-	if !got["llama3:latest"] || got["qwen3:8b"] {
-		t.Errorf("loaded = %v, want only llama3:latest", got)
+	if !got["m1:latest"] || got["m2:8b"] {
+		t.Errorf("loaded = %v, want only m1:latest", got)
+	}
+
+	// If that route doesn't answer, loaded stays unknown.
+	bare := fakeEngine(t, map[string]string{"/v1/models": `{"object":"list","data":[{"id":"m1"}]}`})
+	res = factDetector(t, `"/api/ps models[].name"`).Detect(context.Background(), []string{bare.URL})
+	if len(res.Engines) != 1 || res.Engines[0].Models[0].Loaded != nil {
+		t.Errorf("loaded should stay unknown: %+v", res.Engines)
 	}
 }
 
 func TestDetectCanRunFromSeveralPlacesAtOnce(t *testing.T) {
-	srv := fakeEngine(t, map[string]string{"/health": strataHealth, "/v1/models": strataModels})
+	srv := fakeEngine(t, map[string]string{"/v1/models": plainModels, "/api/v1/models": lmstudioNative})
 	d := newDetector(t)
 	d.Timeout = 0 // "use the default": Detect must not write the default back
-	d.Run = runnerReturning(statusJSON(srv.URL), nil)
 	done := make(chan Result)
 	for i := 0; i < 8; i++ {
 		go func() { done <- d.Detect(context.Background(), []string{srv.URL}) }()
 	}
 	for i := 0; i < 8; i++ {
-		if res := <-done; len(res.Engines) != 1 || res.Engines[0].ID != "strata" {
+		if res := <-done; len(res.Engines) != 1 || res.Engines[0].ID != "lmstudio" {
 			t.Errorf("call %d: %+v", i, res.Engines)
 		}
 	}
@@ -180,11 +205,31 @@ func TestDetectCanRunFromSeveralPlacesAtOnce(t *testing.T) {
 	}
 }
 
-func TestAModelListWithoutAListIsNotAnEngine(t *testing.T) {
+// Hint ports are probed on the hosts given (127.0.0.1 by default), and
+// nowhere when SkipHintPorts is set.
+func TestHintPorts(t *testing.T) {
+	srv := fakeEngine(t, map[string]string{"/v1/models": plainModels})
+	host, port, _ := strings.Cut(strings.TrimPrefix(srv.URL, "http://"), ":")
+	body := strings.Replace(strings.Replace(factKind, "LOADED", "null", 1), `"hintPorts": []`, `"hintPorts": [`+port+`]`, 1)
+	adapters, err := adapter.LoadFS(fstest.MapFS{"facts/adapter.json": {Data: []byte(body)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &Detector{Adapters: adapters, Hosts: []string{host}, Timeout: 2 * time.Second}
+	if res := d.Detect(context.Background(), nil); len(res.Engines) != 1 || res.Engines[0].URL != srv.URL {
+		t.Fatalf("the hint port should be found: %+v", res.Engines)
+	}
+	d.SkipHintPorts = true
+	if res := d.Detect(context.Background(), nil); len(res.Engines) != 0 {
+		t.Fatalf("SkipHintPorts must probe nothing: %+v", res.Engines)
+	}
+}
+
+func TestAModelListWithoutAListIsNotAServer(t *testing.T) {
 	for _, body := range []string{`{"error":"unauthorized"}`, `{"data":"none"}`, `{"data":{"id":"x"}}`, `[]`} {
 		srv := fakeEngine(t, map[string]string{"/v1/models": body})
 		if res := newDetector(t).Detect(context.Background(), []string{srv.URL}); len(res.Engines) != 0 {
-			t.Errorf("/v1/models answering %s must not count as an engine: %+v", body, res.Engines)
+			t.Errorf("/v1/models answering %s must not count as a server: %+v", body, res.Engines)
 		}
 	}
 }
@@ -193,15 +238,15 @@ func TestNothingRunning(t *testing.T) {
 	srv := fakeEngine(t, map[string]string{}) // answers 404 to everything
 	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
 	if len(res.Engines) != 0 {
-		t.Fatalf("want no engines, got %+v", res.Engines)
+		t.Fatalf("want no servers, got %+v", res.Engines)
 	}
 }
 
 func TestAnswersThatAreNotJSONAreIgnored(t *testing.T) {
-	srv := fakeEngine(t, map[string]string{"/v1/models": "<html>not an engine</html>"})
+	srv := fakeEngine(t, map[string]string{"/v1/models": "<html>not a model server</html>"})
 	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
 	if len(res.Engines) != 0 {
-		t.Fatalf("a web page must not count as an engine: %+v", res.Engines)
+		t.Fatalf("a web page must not count as a server: %+v", res.Engines)
 	}
 }
 
@@ -232,104 +277,16 @@ func TestServerThatNeverAnswersTimesOut(t *testing.T) {
 	start := time.Now()
 	res := d.Detect(context.Background(), []string{slow.URL})
 	if len(res.Engines) != 0 {
-		t.Fatalf("want no engines, got %+v", res.Engines)
+		t.Fatalf("want no servers, got %+v", res.Engines)
 	}
 	if time.Since(start) > 2*time.Second {
 		t.Fatalf("detection should give up quickly, took %v", time.Since(start))
 	}
 }
 
-// ---- engine status commands ----
-
-func runnerReturning(out string, err error) Runner {
-	return func(context.Context, []string) ([]byte, error) { return []byte(out), err }
-}
-
-func statusJSON(url string) string {
-	b, _ := json.Marshal(map[string]any{"running": []map[string]any{{"url": url}}})
-	return string(b)
-}
-
-func TestFindsAServerOnACustomPortThroughTheEnginesOwnCommand(t *testing.T) {
-	srv := fakeEngine(t, map[string]string{"/health": strataHealth, "/v1/models": strataModels})
-
-	d := newDetector(t)
-	// Real engines can print extra text after the JSON, so include some.
-	d.Run = runnerReturning(statusJSON(srv.URL)+"\nsome-name: ready at "+srv.URL+"\n", nil)
-
-	res := d.Detect(context.Background(), nil) // no explicit address given
-	if len(res.Engines) != 1 || res.Engines[0].ID != "strata" {
-		t.Fatalf("want strata found via its command, got %+v notes=%v", res.Engines, res.Notes)
-	}
-}
-
-func TestACommandThatPointsAwayFromThisComputerIsIgnored(t *testing.T) {
-	d := newDetector(t)
-	d.Run = runnerReturning(statusJSON("http://203.0.113.9:8080"), nil)
-
-	res := d.Detect(context.Background(), nil)
-	if len(res.Engines) != 0 {
-		t.Fatalf("a remote address from a command must never be probed: %+v", res.Engines)
-	}
-	if len(res.Notes) == 0 {
-		t.Error("the user should be told something was ignored")
-	}
-}
-
-func TestARemoteAddressDoesNotHideTheLocalOnesAfterIt(t *testing.T) {
-	srv := fakeEngine(t, map[string]string{"/health": strataHealth, "/v1/models": strataModels})
-	out, _ := json.Marshal(map[string]any{"running": []map[string]any{
-		{"url": "http://203.0.113.9:8080"},
-		{"url": srv.URL},
-		{"url": "http://192.168.1.20:8080"},
-	}})
-	d := newDetector(t)
-	d.Run = runnerReturning(string(out), nil)
-
-	res := d.Detect(context.Background(), nil)
-	if len(res.Engines) != 1 || res.Engines[0].URL != srv.URL {
-		t.Fatalf("the local server after a remote one must still be found: %+v", res.Engines)
-	}
-	if len(res.Notes) != 1 || !strings.Contains(res.Notes[0], "ignored 2 server(s)") {
-		t.Errorf("notes = %v, want one note about 2 ignored servers", res.Notes)
-	}
-}
-
-func TestACommandThatFailsOrIsGarbageIsReportedNotFatal(t *testing.T) {
-	for name, run := range map[string]Runner{
-		"missing":  runnerReturning("", errors.New("not found")),
-		"garbage":  runnerReturning("this is not json", nil),
-		"no_urls":  runnerReturning(`{"running": []}`, nil),
-		"wrongtyp": runnerReturning(`{"running": [{"url": 5}]}`, nil),
-	} {
-		d := newDetector(t)
-		d.Run = run
-		res := d.Detect(context.Background(), nil)
-		if len(res.Engines) != 0 {
-			t.Errorf("%s: want no engines, got %+v", name, res.Engines)
-		}
-	}
-}
-
-func TestIsLoopback(t *testing.T) {
-	cases := map[string]bool{
-		"http://127.0.0.1:8080": true,
-		"http://localhost:1234": true,
-		"http://[::1]:8080":     true,
-		"http://192.168.1.5:80": false,
-		"http://example.com":    false,
-		"not a url":             false,
-	}
-	for raw, want := range cases {
-		if got := isLoopback(raw); got != want {
-			t.Errorf("isLoopback(%q) = %v, want %v", raw, got, want)
-		}
-	}
-}
-
-// LM Studio's model facts come from its own list, which says which models
-// are embedding models (left out: they can't chat) and how much context
-// each has. Its OpenAI list names every downloaded model, both kinds alike.
+// The LM Studio API's own list says which models are embedding models (left
+// out: they can't chat) and how much context each has. Its OpenAI list names
+// every downloaded model, both kinds alike.
 func TestLMStudioLeavesOutEmbeddingModels(t *testing.T) {
 	srv := fakeEngine(t, map[string]string{
 		"/v1/models":     `{"object":"list","data":[{"id":"chat-model"},{"id":"embed-model"}]}`,
@@ -370,31 +327,25 @@ func TestFileNamedModels(t *testing.T) {
 			t.Errorf("isFilePath(%q) = %v, want %v", id, got, want)
 		}
 	}
-	e := Engine{ID: "llamacpp", Name: "llama.cpp server", Models: []Model{{ID: "/models/big-model.gguf"}, {ID: "big-model"}}}
+	e := Engine{ID: "openai", Name: "OpenAI-compatible API", URL: "http://127.0.0.1:18080", Models: []Model{{ID: "/models/big-model.gguf"}, {ID: "big-model"}}}
 	if got := FileNamed(e); len(got) != 1 || got[0] != "/models/big-model.gguf" {
 		t.Errorf("FileNamed: %v", got)
 	}
-	if w := FileNamedWarning(e); !strings.Contains(w, "1 model(s) by a file path") || !strings.Contains(w, "--alias NAME") {
-		t.Errorf("llama.cpp warning: %q", w)
-	}
-	e.ID, e.Name = "openai", "OpenAI-compatible server"
-	if w := FileNamedWarning(e); strings.Contains(w, "--alias") || !strings.Contains(w, "short model name") {
-		t.Errorf("other engine's warning: %q", w)
+	if w := FileNamedWarning(e); !strings.Contains(w, "http://127.0.0.1:18080 names 1 model(s) by a file path") || !strings.Contains(w, "a short name (an alias)") {
+		t.Errorf("warning: %q", w)
 	}
 	if w := FileNamedWarning(Engine{Models: []Model{{ID: "big-model"}}}); w != "" {
 		t.Errorf("no file-named models, but warned: %q", w)
 	}
 }
 
-// The llama.cpp server names its model by the file it loaded, and detection
-// says so.
-func TestLlamaCppFilePathModelIsFlagged(t *testing.T) {
+// A server that names its model by the file it loaded is flagged.
+func TestFilePathModelIsFlagged(t *testing.T) {
 	srv := fakeEngine(t, map[string]string{
-		"/health":    `{"status":"ok"}`,
 		"/v1/models": `{"object":"list","data":[{"id":"/models/big-model.gguf"}]}`,
 	})
 	res := newDetector(t).Detect(context.Background(), []string{srv.URL})
-	if len(res.Engines) != 1 || res.Engines[0].ID != "llamacpp" || len(FileNamed(res.Engines[0])) != 1 {
-		t.Fatalf("want llamacpp with one file-named model, got %+v", res.Engines)
+	if len(res.Engines) != 1 || len(FileNamed(res.Engines[0])) != 1 {
+		t.Fatalf("want one file-named model, got %+v", res.Engines)
 	}
 }

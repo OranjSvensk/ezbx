@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/OranjSvensk/ezbx/internal/adapter"
+	"github.com/OranjSvensk/ezbx/internal/config"
 	"github.com/OranjSvensk/ezbx/internal/detect"
 	"github.com/OranjSvensk/ezbx/internal/doctor"
-	"github.com/OranjSvensk/ezbx/providers"
 )
 
 // runDoctor checks a box from the host and from inside its network.
@@ -38,17 +38,15 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	adapters, err := adapter.LoadFS(providers.FS)
+	find, err := doctorDetect(t.cfg)
 	if err != nil {
-		fmt.Fprintln(stderr, "internal error loading adapters:", err)
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	cfg := doctor.HostConfig{
-		Box:    t.name,
-		Docker: dockerCLI,
-		Detect: func(ctx context.Context, extra []string) detect.Result {
-			return (&detect.Detector{Adapters: adapters, Run: runCommand}).Detect(ctx, extra)
-		},
+		Box:        t.name,
+		Docker:     dockerCLI,
+		Detect:     find,
 		LocalAddrs: localAddrs,
 	}
 	cfg.Images, cfg.ImagesNote = expectedImages(t)
@@ -66,6 +64,24 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// doctorDetect is how the doctor finds the model server: it checks only the
+// configured address and the one the gateway forwards to (extra). It never
+// scans this computer for others, and sends no key. c may be nil.
+func doctorDetect(c *config.Config) (func(context.Context, []string) detect.Result, error) {
+	kinds, err := apiKinds(config.DefaultAPI)
+	if err != nil {
+		return nil, err
+	}
+	var configured []string
+	if c != nil && c.Engine.URL != "" {
+		configured = append(configured, c.Engine.URL)
+	}
+	return func(ctx context.Context, extra []string) detect.Result {
+		d := &detect.Detector{Adapters: kinds, SkipHintPorts: true}
+		return d.Detect(ctx, append(slices.Clone(configured), extra...))
+	}, nil
 }
 
 // expectedImages works out the images the box's config needs now, the same

@@ -4,8 +4,13 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
+	"testing/fstest"
+	"time"
+
+	"github.com/OranjSvensk/ezbx/internal/adapter"
 )
 
 const testKey = "kv-docs-example-1"
@@ -48,14 +53,19 @@ func (r *recorder) seen() []string {
 }
 
 // The key goes to its own address on every probe, and nowhere else: not to
-// another address given, not to one an engine's command lists.
+// another address given, not to one the port scan finds.
 func TestKeyGoesOnlyToItsOwnAddress(t *testing.T) {
 	keyed := newRecorder(t, testKey, http.StatusUnauthorized)
 	other := newRecorder(t, "", 0)
-	listed := newRecorder(t, "", 0)
+	listed := newRecorder(t, "", 0) // found on a hint port
 
-	d := newDetector(t)
-	d.Run = runnerReturning(statusJSON(listed.URL), nil)
+	host, port, _ := strings.Cut(strings.TrimPrefix(listed.URL, "http://"), ":")
+	body := strings.Replace(strings.Replace(factKind, "LOADED", "null", 1), `"hintPorts": []`, `"hintPorts": [`+port+`]`, 1)
+	adapters, err := adapter.LoadFS(fstest.MapFS{"facts/adapter.json": {Data: []byte(body)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &Detector{Adapters: adapters, Hosts: []string{host}, Timeout: 2 * time.Second}
 	d.Keys = map[string]string{keyed.URL + "/": testKey} // a trailing slash still matches
 	res := d.Detect(context.Background(), []string{keyed.URL, other.URL})
 
@@ -93,7 +103,7 @@ func TestKeyNeedsTheExactAddress(t *testing.T) {
 	}
 }
 
-func TestAnEngineThatAsksForAKeyIsReported(t *testing.T) {
+func TestAServerThatAsksForAKeyIsReported(t *testing.T) {
 	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
 		locked := newRecorder(t, testKey, status)
 
@@ -111,9 +121,9 @@ func TestAnEngineThatAsksForAKeyIsReported(t *testing.T) {
 	}
 }
 
-// An engine that is found isn't also reported as refusing, even when some of
-// the other adapters' routes answer 401.
-func TestAFoundEngineIsNotReportedAsRefusing(t *testing.T) {
+// A server that is found isn't also reported as refusing, even when some of
+// the other kinds' routes answer 401.
+func TestAFoundServerIsNotReportedAsRefusing(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.URL.Path == "/v1/models" {
 			_, _ = w.Write([]byte(plainModels))

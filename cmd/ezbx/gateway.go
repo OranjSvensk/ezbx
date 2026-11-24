@@ -363,22 +363,22 @@ func runHealth(args []string, _, stderr io.Writer) int {
 	return 0
 }
 
-// onlyEngine detects engines and returns the single one found. If there are
-// none or several, it says so and asks the user to choose with --upstream.
+// onlyEngine looks at the common local ports and returns the single model
+// server found. If there are none or several, it says so and asks the user
+// to choose with --upstream.
 func onlyEngine() (detect.Engine, error) {
 	adapters, err := adapter.LoadFS(providers.FS)
 	if err != nil {
-		return detect.Engine{}, fmt.Errorf("internal error loading adapters: %w", err)
+		return detect.Engine{}, fmt.Errorf("internal error loading the API kinds: %w", err)
 	}
-	d := &detect.Detector{Adapters: adapters, Run: runCommand}
-	res := d.Detect(context.Background(), nil)
+	res := (&detect.Detector{Adapters: adapters}).Detect(context.Background(), nil)
 
 	switch len(res.Engines) {
 	case 1:
 		return res.Engines[0], nil
 	case 0:
-		return detect.Engine{}, errors.New("no inference engine found. Start one, or pass --upstream http://127.0.0.1:PORT")
+		return detect.Engine{}, errors.New("no model server found. Start one, or pass --upstream http://127.0.0.1:PORT")
 	default:
-		return detect.Engine{}, errors.New("more than one engine found. Choose one with --upstream (see: ezbx engine detect)")
+		return detect.Engine{}, errors.New("more than one model server found. Choose one with --upstream (see: ezbx engine detect)")
 	}
 }

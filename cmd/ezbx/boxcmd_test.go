@@ -67,24 +67,38 @@ func TestShellArgs(t *testing.T) {
 }
 
 func TestEngineChoice(t *testing.T) {
-	c, err := config.Parse("version = 1\n[box.t]\nworkspace = '/w'\nharnesses = ['pi']\n[engine.strata]\nurl = 'http://127.0.0.1:53000'\nkey_env = 'K'\n")
+	c, err := config.Parse("version = 1\n[box.t]\nworkspace = '/w'\nharnesses = ['pi']\n[engine]\nurl = 'http://127.0.0.1:53000'\nkey_env = 'K'\nhost = 'localhost:53000'\n")
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := engineChoice(c, []string{"strata"}, "http://127.0.0.1:18080")
+	loaded := c.Engine
+
+	// A new address drops the key and Host header of the old one.
+	got, err := engineChoice(c, "http://127.0.0.1:18080", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Engine.Use != "strata" || got.Engine.Overrides["strata"].URL != "http://127.0.0.1:18080" || got.Engine.Overrides["strata"].KeyEnv != "K" {
-		t.Errorf("%+v", got.Engine)
+	if want := (config.Engine{API: "auto", URL: "http://127.0.0.1:18080"}); got.Engine != want {
+		t.Errorf("new url: %+v", got.Engine)
 	}
-	if c.Engine.Use != "auto" || c.Engine.Overrides["strata"].URL != "http://127.0.0.1:53000" {
+	if c.Engine != loaded {
 		t.Error("the loaded config must not change")
 	}
-	if _, err := engineChoice(c, nil, "http://127.0.0.1:18080"); err == nil {
-		t.Error("--url without an id")
+
+	// The same address (a trailing slash aside) keeps them; --api changes only the kind.
+	got, err = engineChoice(c, "http://127.0.0.1:53000/", "lmstudio")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := engineChoice(c, []string{"strata"}, "127.0.0.1:18080"); err == nil {
+	if want := (config.Engine{API: "lmstudio", URL: "http://127.0.0.1:53000", KeyEnv: "K", Host: "localhost:53000"}); got.Engine != want {
+		t.Errorf("same url: %+v", got.Engine)
+	}
+
+	// No flags: the config's server as it is.
+	if got, err = engineChoice(c, "", ""); err != nil || got.Engine != loaded {
+		t.Errorf("no flags: %+v %v", got.Engine, err)
+	}
+	if _, err := engineChoice(c, "127.0.0.1:18080", ""); err == nil {
 		t.Error("--url without http")
 	}
 }

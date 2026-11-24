@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/OranjSvensk/ezbx/internal/config"
 	"github.com/OranjSvensk/ezbx/internal/detect"
 	"github.com/OranjSvensk/ezbx/internal/harness"
 )
@@ -107,9 +108,9 @@ func (p Plan) Start() (bool, string) {
 	case p.NoStart:
 		return false, "--no-start was given"
 	case p.Result.Engine == nil:
-		return false, "no engine was chosen; start it, then run ezbx up"
+		return false, "no model server was chosen; start it, then run ezbx up"
 	case len(p.Result.Engine.Models) == 0:
-		return false, "the engine lists no models; load one, then run ezbx up"
+		return false, "the server lists no models; load one, then run ezbx up"
 	case p.BoxUp && p.Changed():
 		return false, "the box is up; to apply the changes, run ezbx down, then ezbx up"
 	case p.BoxUp:
@@ -124,7 +125,7 @@ func (p Plan) keyEnv() string {
 	if p.Result.Engine == nil {
 		return ""
 	}
-	return p.Result.Answers.Overrides[p.Result.Engine.ID].KeyEnv
+	return p.Result.Answers.Engine.KeyEnv
 }
 
 // Review is the screen shown before anything changes.
@@ -136,8 +137,8 @@ func (p Plan) Review() string {
 
 	if e := p.Result.Engine; e != nil {
 		use := e.Name + " at " + e.URL
-		if a.Engine == "auto" {
-			use += ", found again at every ezbx up"
+		if a.Engine.API == config.DefaultAPI {
+			use += ", API checked again at every ezbx up"
 		}
 		row("Engine", fmt.Sprintf("%s, %d model(s)", use, len(e.Models)))
 		var models []string
@@ -159,7 +160,12 @@ func (p Plan) Review() string {
 			row("Engine key", "from the environment variable "+k+" ("+state+")")
 		}
 	} else {
-		row("Engine", a.Engine+" (not running now)")
+		switch {
+		case a.Engine.URL == "":
+			row("Engine", "none chosen yet (set url under [engine] before ezbx up)")
+		default:
+			row("Engine", a.Engine.URL+", "+a.Engine.API+" API (not answering now)")
+		}
 	}
 	var hs []string
 	for _, id := range a.Harnesses {

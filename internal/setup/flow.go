@@ -20,7 +20,7 @@ import (
 
 // Facts are what the command found before asking anything.
 type Facts struct {
-	Engines      []detect.Engine    // running now
+	Engines      []detect.Engine    // model servers answering now
 	Refused      []detect.Refusal   // addresses that answered 401 or 403
 	Harnesses    []harness.Manifest // verified ones, offered
 	Catalog      *tools.Catalog     // the tool catalogue
@@ -33,8 +33,9 @@ type Facts struct {
 
 // Options are the answers given as flags. Empty means "ask".
 type Options struct {
-	Engine    string // an id, "auto", or "later"
-	URL       string // where the engine is, if detection misses it
+	API       string // an API kind or "auto"; "" keeps what the config has
+	URL       string // the server's address, if the scan doesn't find it
+	Later     bool   // no server now: write the config without choosing one
 	KeyEnv    string
 	Reasoning bool // mark every model of the chosen engine as reasoning
 	Harnesses []string
@@ -48,19 +49,16 @@ type Options struct {
 // Result is what Gather decided.
 type Result struct {
 	Answers  Answers
-	Engine   *detect.Engine // nil when no engine was chosen ("later")
+	Engine   *detect.Engine // nil when no server was chosen ("later")
 	ReadOnly []ReadOnlySummary
 }
 
 // Gather asks every question in order, using flags first, then the
 // existing config, then what was detected, as defaults.
 func Gather(f Facts, o Options, p *Prompter) (Result, error) {
-	a := Answers{Box: "main", Network: "off", Engine: "auto", Overrides: map[string]config.EngineURL{}, Models: map[string]config.Model{}}
+	a := Answers{Box: "main", Network: "off", Engine: config.Engine{API: config.DefaultAPI}, Models: map[string]config.Model{}}
 	if f.Existing != nil {
 		a = FromConfig(f.Existing)
-		if a.Overrides == nil {
-			a.Overrides = map[string]config.EngineURL{}
-		}
 		if a.Models == nil {
 			a.Models = map[string]config.Model{}
 		}
@@ -158,73 +156,95 @@ func cleanWorkspace(s string, f Facts) (string, error) {
 	return ws, nil
 }
 
+// speaks reports whether e answers as the API kind api: its best match, or
+// one it also matched (a server with LM Studio's API also speaks OpenAI's).
+func speaks(e detect.Engine, api string) bool {
+	return api == "" || api == config.DefaultAPI || e.ID == api || slices.Contains(e.AlsoMatched, api)
+}
+
+// sameURL compares addresses the way detection does: without trailing slashes.
+func sameURL(x, y string) bool { return strings.TrimRight(x, "/") == strings.TrimRight(y, "/") }
+
 func chooseEngine(f Facts, o Options, a *Answers, p *Prompter) (*detect.Engine, error) {
-	fmt.Fprintln(p.Out, "Inference engines found on this computer")
-	if len(f.Engines) == 0 {
-		fmt.Fprintln(p.Out, "  none. Start your engine and load a model, then run ezbx init again,")
-		fmt.Fprintln(p.Out, "  or carry on: the config is written, and ezbx up works once the engine runs.")
+	// Flags first: they apply whether or not a server is chosen now.
+	setEngine := func(url string) {
+		if url != "" && !sameURL(url, a.Engine.URL) {
+			// key_env and host belonged to the old address. A key is only
+			// ever sent to its own url, so never carry it to a new one.
+			a.Engine = config.Engine{API: a.Engine.API, URL: url}
+		}
+		if o.API != "" {
+			a.Engine.API = o.API
+		}
+		if o.KeyEnv != "" {
+			a.Engine.KeyEnv = o.KeyEnv
+		}
+	}
+
+	var offered []detect.Engine
+	for _, e := range f.Engines {
+		if speaks(e, o.API) {
+			offered = append(offered, e)
+		}
+	}
+	fmt.Fprintln(p.Out, "Model servers found on this computer (any server with an OpenAI-compatible API works)")
+	if len(offered) == 0 {
+		fmt.Fprintln(p.Out, "  none. Start your model server and load a model, then run ezbx init again,")
+		fmt.Fprintln(p.Out, "  or carry on: the config is written, and ezbx up works once the server runs.")
 	}
 	for _, r := range f.Refused {
 		if r.KeySent {
-			fmt.Fprintf(p.Out, "  (The engine at %s refused the key it was sent. Check the key.)\n", r.URL)
+			fmt.Fprintf(p.Out, "  (The server at %s refused the key it was sent. Check the key.)\n", r.URL)
 		} else {
-			fmt.Fprintf(p.Out, "  (An engine at %s asks for a key. To use it: ezbx init --engine ID --url %s --key-env NAME)\n", r.URL, r.URL)
+			fmt.Fprintf(p.Out, "  (A server at %s asks for a key. To use it: ezbx init --url %s --key-env NAME)\n", r.URL, r.URL)
 		}
 	}
-	for i, e := range f.Engines {
-		fmt.Fprintf(p.Out, "  %d. %-26s %s, %d model(s)\n", i+1, e.Name, e.URL, len(e.Models))
+	for i, e := range offered {
+		fmt.Fprintf(p.Out, "  %d. %-24s %s, %d model(s)\n", i+1, e.Name, e.URL, len(e.Models))
 	}
-	if len(f.Engines) > 0 {
+	if len(offered) > 0 {
 		fmt.Fprintln(p.Out, "  L. I'll start one later")
+		fmt.Fprintln(p.Out, "  Not listed? Run ezbx init --url http://127.0.0.1:PORT")
 	}
 
-	// The default: a flag, then the configured engine if it runs, then the
-	// first one found.
+	// The default: --url, then the configured address if it answers, then
+	// the first server found.
 	def := ""
-	pick := func(id string) {
-		for i, e := range f.Engines {
-			if e.ID == id && def == "" {
+	pick := func(url string) {
+		for i, e := range offered {
+			if def == "" && sameURL(e.URL, url) {
 				def = strconv.Itoa(i + 1)
 			}
 		}
 	}
-	switch o.Engine {
-	case "":
-		if a.Engine != "auto" {
-			pick(a.Engine)
-		}
-		if def == "" && len(f.Engines) > 0 {
-			def = "1"
-		}
-	case "later":
+	switch {
+	case o.Later:
 		def = "L"
-	case "auto":
-		if len(f.Engines) > 0 {
-			def = "1"
-		}
-	default:
-		pick(o.Engine)
+	case o.URL != "":
+		pick(o.URL)
 		if def == "" {
-			// Written anyway, so init can come before the engine starts;
+			// Written anyway, so init can come before the server starts;
 			// the plan then says the box won't be started yet.
-			fmt.Fprintf(p.Out, "  (%s is not running now.)\n", o.Engine)
-			a.Engine = o.Engine
+			fmt.Fprintf(p.Out, "  (Nothing answers at %s now.)\n", o.URL)
+			setEngine(o.URL)
 			return nil, nil
 		}
+	case a.Engine.URL != "":
+		pick(a.Engine.URL)
 	}
-	if def == "" {
-		def = "L"
+	if def == "" && len(offered) > 0 {
+		def = "1"
 	}
-	if len(f.Engines) == 0 {
-		a.Engine = keepOr(o.Engine, a.Engine)
+	if len(offered) == 0 {
+		setEngine(o.URL)
 		return nil, nil
 	}
 	ans, err := p.Ask("Use which?", def, func(s string) error {
 		if strings.EqualFold(s, "l") {
 			return nil
 		}
-		if n, err := strconv.Atoi(s); err != nil || n < 1 || n > len(f.Engines) {
-			return fmt.Errorf("Type a number from 1 to %d, or L.", len(f.Engines))
+		if n, err := strconv.Atoi(s); err != nil || n < 1 || n > len(offered) {
+			return fmt.Errorf("Type a number from 1 to %d, or L.", len(offered))
 		}
 		return nil
 	})
@@ -232,43 +252,17 @@ func chooseEngine(f Facts, o Options, a *Answers, p *Prompter) (*detect.Engine, 
 		return nil, err
 	}
 	if strings.EqualFold(ans, "l") {
-		a.Engine = keepOr(o.Engine, a.Engine)
+		setEngine(o.URL)
 		return nil, nil
 	}
 	n, _ := strconv.Atoi(ans)
-	e := f.Engines[n-1]
-	a.Engine = e.ID
-	if o.Engine == "auto" {
-		a.Engine = "auto" // detect again at every ezbx up
-	}
-	ov := a.Overrides[e.ID]
-	if o.URL != "" {
-		ov.URL = o.URL
-	}
-	if o.KeyEnv != "" {
-		ov.KeyEnv = o.KeyEnv
-	}
-	if ov.KeyEnv != "" && ov.URL == "" {
-		// A key is only ever sent to its engine's url, so pin where the
-		// engine was found.
-		ov.URL = e.URL
-	}
-	if ov != (config.EngineURL{}) {
-		a.Overrides[e.ID] = ov
+	e := offered[n-1]
+	// ezbx up contacts only this address, so it is always written.
+	setEngine(e.URL)
+	if o.API == "" {
+		a.Engine.API = e.ID
 	}
 	return &e, nil
-}
-
-// keepOr is the engine to write when none was picked now: a named one from
-// the flag, else what the config had, else auto.
-func keepOr(flag, had string) string {
-	if flag != "" && flag != "later" {
-		return flag
-	}
-	if had != "" {
-		return had
-	}
-	return "auto"
 }
 
 func askReasoning(e detect.Engine, o Options, a *Answers, p *Prompter) error {
@@ -276,7 +270,7 @@ func askReasoning(e detect.Engine, o Options, a *Answers, p *Prompter) error {
 		fmt.Fprintf(p.Out, "\n%s lists no models yet. Load one before ezbx up.\n", e.Name)
 		return nil
 	}
-	fmt.Fprintln(p.Out, "\nEngines don't say whether a model is a reasoning model (one that thinks before it")
+	fmt.Fprintln(p.Out, "\nServers don't say whether a model is a reasoning model (one that thinks before it")
 	fmt.Fprintln(p.Out, "answers). A reasoning model needs this set, or its answers can be cut off.")
 	for _, m := range e.Models {
 		cur := a.Models[m.ID]
@@ -509,7 +503,10 @@ func Changes(old, new Answers) []string {
 		}
 	}
 	add("box", old.Box, new.Box)
-	add("engine", old.Engine, new.Engine)
+	add("engine", old.Engine.URL, new.Engine.URL)
+	add("api", old.Engine.API, new.Engine.API)
+	add("key_env", old.Engine.KeyEnv, new.Engine.KeyEnv)
+	add("host", old.Engine.Host, new.Engine.Host)
 	add("harnesses", strings.Join(old.Harnesses, ","), strings.Join(new.Harnesses, ","))
 	add("tools", toolsSetting(old.Tools), toolsSetting(new.Tools))
 	add("workspace", old.Workspace, new.Workspace)
@@ -517,9 +514,6 @@ func Changes(old, new Answers) []string {
 	add("network", old.Network, new.Network)
 	add("allow", strings.Join(old.Allow, ","), strings.Join(new.Allow, ","))
 	add("memory", old.Memory, new.Memory)
-	for _, id := range sortedKeys(mergedKeys(old.Overrides, new.Overrides)) {
-		add("engine."+id, fmt.Sprint(old.Overrides[id]), fmt.Sprint(new.Overrides[id]))
-	}
 	for _, id := range sortedKeys(mergedKeys(old.Models, new.Models)) {
 		add(id, modelText(old.Models[id]), modelText(new.Models[id]))
 	}

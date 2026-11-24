@@ -17,7 +17,6 @@ import (
 
 	"github.com/OranjSvensk/ezbx/catalog"
 	"github.com/OranjSvensk/ezbx/harnesses"
-	"github.com/OranjSvensk/ezbx/internal/adapter"
 	"github.com/OranjSvensk/ezbx/internal/box"
 	"github.com/OranjSvensk/ezbx/internal/config"
 	"github.com/OranjSvensk/ezbx/internal/detect"
@@ -27,7 +26,6 @@ import (
 	"github.com/OranjSvensk/ezbx/internal/paths"
 	"github.com/OranjSvensk/ezbx/internal/setup"
 	"github.com/OranjSvensk/ezbx/internal/tools"
-	"github.com/OranjSvensk/ezbx/providers"
 )
 
 // stdin is where init reads answers. Tests replace it.
@@ -43,10 +41,11 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	yes := fs.Bool("yes", false, "take every default without asking")
 	noStart := fs.Bool("no-start", false, "write the config, but don't start the box")
 	var o setup.Options
-	fs.StringVar(&o.Engine, "engine", "", "engine id, auto, or later")
-	fs.StringVar(&o.URL, "url", "", "the engine's address, if detection doesn't find it")
-	fs.StringVar(&o.KeyEnv, "key-env", "", "NAME of an environment variable holding the engine's key")
-	fs.BoolVar(&o.Reasoning, "reasoning", false, "mark the engine's models as reasoning models")
+	fs.StringVar(&o.URL, "url", "", "the model server's address, such as http://127.0.0.1:1234, if it isn't found")
+	fs.StringVar(&o.API, "api", "", "the server's API kind: auto, openai or lmstudio")
+	fs.BoolVar(&o.Later, "later", false, "no model server yet: write the config without one")
+	fs.StringVar(&o.KeyEnv, "key-env", "", "NAME of an environment variable holding the server's key")
+	fs.BoolVar(&o.Reasoning, "reasoning", false, "mark the server's models as reasoning models")
 	harnessList := fs.String("harness", "", "harnesses, separated by commas: pi, opencode, omp, codex, claude, hermes, openclaw")
 	toolList := fs.String("tools", "", "tool packs and tools, separated by commas, such as pack:coding,ffmpeg, or none")
 	fs.StringVar(&o.Workspace, "workspace", "", "the workspace folder")
@@ -65,7 +64,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--engine ID] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--readonly PATH]... [--network off|allow|on] [--memory 8g]")
+		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--url ADDRESS] [--api auto|openai|lmstudio] [--key-env NAME] [--later] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--readonly PATH]... [--network off|allow|on] [--memory 8g]")
 		return 2
 	}
 	if *harnessList != "" {
@@ -83,11 +82,14 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 	}
-	if o.URL != "" && o.Engine == "" {
-		return report(stderr, usageError("--url needs --engine ID too, such as: --engine strata --url http://127.0.0.1:PORT"))
+	if o.URL != "" && !strings.HasPrefix(o.URL, "http://") && !strings.HasPrefix(o.URL, "https://") {
+		return report(stderr, usageError("--url must start with http:// or https://"))
+	}
+	if o.Later && o.URL != "" {
+		return report(stderr, usageError("--later and --url can't go together: --later is for when there is no server yet"))
 	}
 	if o.KeyEnv != "" && !envName(o.KeyEnv) {
-		return report(stderr, usageError("--key-env is the NAME of an environment variable, such as STRATA_API_KEY, never the key itself"))
+		return report(stderr, usageError("--key-env is the NAME of an environment variable, such as ENGINE_API_KEY, never the key itself"))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
@@ -141,7 +143,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	}
 	pl.BoxUp = boxExists(ctx, res.Answers.Box)
 	if res.Engine != nil {
-		if k := res.Answers.Overrides[res.Engine.ID].KeyEnv; k != "" {
+		if k := res.Answers.Engine.KeyEnv; k != "" {
 			pl.KeyEnvSet = os.Getenv(k) != ""
 		}
 	}
@@ -309,42 +311,33 @@ func gatherFacts(ctx context.Context, existing *config.Config, o setup.Options, 
 		return f, fmt.Errorf("internal error loading the tool catalogue: %w", err)
 	}
 
-	adapters, err := adapter.LoadFS(providers.FS)
+	// The scan offers every kind; --api only narrows what is listed.
+	adapters, err := apiKinds(config.DefaultAPI)
 	if err != nil {
-		return f, fmt.Errorf("internal error loading adapters: %w", err)
+		return f, err
 	}
-	known := map[string]bool{"auto": true, "later": true}
-	for _, a := range adapters {
-		known[a.ID] = true
-	}
-	if o.Engine != "" && !known[o.Engine] {
-		var ids []string
-		for id := range known {
-			ids = append(ids, id)
+	if o.API != "" {
+		if _, err := apiKinds(o.API); err != nil {
+			return f, usageError("--api" + strings.TrimPrefix(err.Error(), "engine.api"))
 		}
-		sort.Strings(ids)
-		return f, usageError(fmt.Sprintf("--engine %q: use one of %s", o.Engine, strings.Join(ids, ", ")))
 	}
 	var urls []string
-	keys := map[string]string{} // each key goes only to its engine's url
+	keys := map[string]string{} // each key goes only to its server's url
 	if o.URL != "" {
 		urls = append(urls, o.URL)
 		if o.KeyEnv != "" {
 			keys[o.URL] = os.Getenv(o.KeyEnv)
 		}
 	}
-	if existing != nil {
-		for _, ov := range existing.Engine.Overrides {
-			if ov.URL != "" {
-				urls = append(urls, ov.URL)
-				if _, given := keys[ov.URL]; !given && ov.KeyEnv != "" {
-					keys[ov.URL] = os.Getenv(ov.KeyEnv)
-				}
-			}
+	if existing != nil && existing.Engine.URL != "" {
+		u := existing.Engine.URL
+		urls = append(urls, u)
+		if _, given := keys[u]; !given && existing.Engine.KeyEnv != "" {
+			keys[u] = os.Getenv(existing.Engine.KeyEnv)
 		}
 	}
 	sort.Strings(urls)
-	res := (&detect.Detector{Adapters: adapters, Run: runCommand, Keys: keys}).Detect(ctx, urls)
+	res := (&detect.Detector{Adapters: adapters, Keys: keys}).Detect(ctx, urls)
 	f.Engines = res.Engines
 	f.Refused = res.Refused
 	return f, nil

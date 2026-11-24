@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -134,7 +135,7 @@ func makePlan(ctx context.Context, cfg *config.Config, dirs paths.Dirs, stdout i
 	if err != nil {
 		return box.Plan{}, err
 	}
-	eng, override, err := chooseEngine(ctx, cfg)
+	eng, err := chooseEngine(ctx, cfg)
 	if err != nil {
 		return box.Plan{}, err
 	}
@@ -157,7 +158,7 @@ func makePlan(ctx context.Context, cfg *config.Config, dirs paths.Dirs, stdout i
 
 	return box.Plan{
 		Box: name, Names: box.NamesFor(name), Workspace: ws, StateDir: dirs.Box(name), LogOn: cfg.LogOn(),
-		Upstream: upstream, EngineID: eng.ID, EngineName: eng.Name, UpstreamHost: override.Host, KeyEnv: override.KeyEnv,
+		Upstream: upstream, EngineID: eng.ID, EngineName: eng.Name, UpstreamHost: cfg.Engine.Host, KeyEnv: cfg.Engine.KeyEnv,
 		Network: b.Network, Allow: box.AllowList(b.Allow, chosen),
 		Memory: memoryLimit(ctx, b.Memory), CPUs: b.CPUsFlag(), PIDs: b.PIDs,
 		Harnesses: b.Harnesses, HomeFiles: files, Env: env,
@@ -233,7 +234,7 @@ func renderHome(cfg *config.Config, chosen []harness.Manifest, eng detect.Engine
 	}
 	models := harness.Models(eng.Models, harness.Defaults{}, overrides)
 	if len(models) == 0 {
-		return nil, fmt.Errorf("%s lists no models. Load a model, then try again", eng.Name)
+		return nil, fmt.Errorf("the server at %s lists no models. Load a model, then try again", eng.URL)
 	}
 	var files []harness.File
 	seen := map[string]string{}
@@ -253,95 +254,74 @@ func renderHome(cfg *config.Config, chosen []harness.Manifest, eng detect.Engine
 	return files, nil
 }
 
-// chooseEngine finds the engine the config asks for, with its overrides.
-func chooseEngine(ctx context.Context, cfg *config.Config) (detect.Engine, config.EngineURL, error) {
-	adapters, err := adapter.LoadFS(providers.FS)
+// kindsFS holds the API kind files. Tests replace it.
+var kindsFS fs.FS = providers.FS
+
+// apiKinds loads the API kinds, keeping only the one api names, or all of
+// them for auto.
+func apiKinds(api string) ([]adapter.Adapter, error) {
+	all, err := adapter.LoadFS(kindsFS)
 	if err != nil {
-		return detect.Engine{}, config.EngineURL{}, fmt.Errorf("internal error loading adapters: %w", err)
+		return nil, fmt.Errorf("internal error loading the API kinds: %w", err)
 	}
-	ids := map[string]bool{}
-	var idList []string
-	for _, a := range adapters {
-		ids[a.ID] = true
-		idList = append(idList, a.ID)
+	if api == config.DefaultAPI {
+		return all, nil
 	}
-	sort.Strings(idList)
-	use := cfg.Engine.Use
-	if use != "auto" && !ids[use] {
-		return detect.Engine{}, config.EngineURL{}, fmt.Errorf("engine.use %q: use auto or one of %s", use, strings.Join(idList, ", "))
+	var ids []string
+	for _, a := range all {
+		if a.ID == api {
+			return []adapter.Adapter{a}, nil
+		}
+		ids = append(ids, a.ID)
 	}
-	var urls []string
-	keys := map[string]string{}
-	keyVar := map[string]string{} // trimmed url -> the variable its key came from
-	for id, o := range cfg.Engine.Overrides {
-		if !ids[id] {
-			return detect.Engine{}, config.EngineURL{}, fmt.Errorf("[engine.%s]: no such engine; use one of %s", id, strings.Join(idList, ", "))
-		}
-		if o.URL == "" || (use != "auto" && use != id) {
-			continue
-		}
-		urls = append(urls, o.URL)
-		if o.KeyEnv != "" {
-			// Checked before anything is contacted, so a missing key is
-			// never a confusing "not found".
-			k := os.Getenv(o.KeyEnv)
-			if k == "" {
-				return detect.Engine{}, config.EngineURL{}, fmt.Errorf("engine.%s.key_env names %s, but that environment variable is empty or not set", id, o.KeyEnv)
-			}
-			keys[o.URL] = k
-			keyVar[strings.TrimRight(o.URL, "/")] = o.KeyEnv
-		}
-	}
-	sort.Strings(urls)
-	// Each key goes only to its engine's configured url (see detect.Keys).
-	d := &detect.Detector{Adapters: adapters, Run: runCommand, Keys: keys}
-	if use != "auto" && cfg.Engine.Overrides[use].URL != "" {
-		// The config says exactly where the engine is: check only there, and
-		// leave other engines on this computer alone.
-		d.Run, d.SkipHintPorts = nil, true
-	}
-	res := d.Detect(ctx, urls)
-	var matches []detect.Engine
-	for _, e := range res.Engines {
-		if use == "auto" || e.ID == use {
-			matches = append(matches, e)
-		}
-	}
-	switch len(matches) {
-	case 1:
-		return matches[0], cfg.Engine.Overrides[matches[0].ID], nil
-	case 0:
-		what := "No inference engine found"
-		if use != "auto" {
-			what = "Engine " + use + " not found"
-		}
-		if why := refusedHint(res.Refused, keyVar, use); why != "" {
-			return detect.Engine{}, config.EngineURL{}, errors.New(what + ". " + why)
-		}
-		return detect.Engine{}, config.EngineURL{}, errors.New(what + ". Start it (and load a model), then try again. If it runs on an unusual address, set url under [engine.ID] in ezbx.toml, or use ezbx engine use ID --url ADDRESS on a running box")
-	default:
-		var found []string
-		for _, e := range matches {
-			found = append(found, e.ID+" at "+e.URL)
-		}
-		return detect.Engine{}, config.EngineURL{}, fmt.Errorf("more than one engine found (%s). Choose one with engine.use in the config", strings.Join(found, "; "))
-	}
+	sort.Strings(ids)
+	return nil, fmt.Errorf("engine.api %q: use auto or one of %s", api, strings.Join(ids, ", "))
 }
 
-// refusedHint explains addresses that answered 401 or 403. keyVar names the
-// variable whose key was sent to an address, and use is engine.use. It is ""
-// when nothing refused.
-func refusedHint(refused []detect.Refusal, keyVar map[string]string, use string) string {
-	id := use
-	if id == "auto" {
-		id = "ID"
+// chooseEngine checks the model server the config names. Only engine.url is
+// contacted: ezbx up never scans this computer for other servers.
+func chooseEngine(ctx context.Context, cfg *config.Config) (detect.Engine, error) {
+	e := cfg.Engine
+	kinds, err := apiKinds(e.API)
+	if err != nil {
+		return detect.Engine{}, err
 	}
+	if e.URL == "" {
+		return detect.Engine{}, errors.New("no model server is set: put its address in url under [engine] in ezbx.toml, such as url = 'http://127.0.0.1:1234'. ezbx engine detect lists the servers it finds on this computer")
+	}
+	keys := map[string]string{}
+	if e.KeyEnv != "" {
+		// Checked before anything is contacted, so a missing key is never a
+		// confusing "not found".
+		k := os.Getenv(e.KeyEnv)
+		if k == "" {
+			return detect.Engine{}, fmt.Errorf("engine.key_env names %s, but that environment variable is empty or not set", e.KeyEnv)
+		}
+		keys[e.URL] = k // sent to this address only (see detect.Keys)
+	}
+	res := (&detect.Detector{Adapters: kinds, SkipHintPorts: true, Keys: keys}).Detect(ctx, []string{e.URL})
+	if len(res.Engines) == 1 {
+		return res.Engines[0], nil
+	}
+	what := "Nothing answered at " + e.URL + " with an OpenAI-compatible API"
+	if e.API != config.DefaultAPI {
+		what = "Nothing answered at " + e.URL + " with the " + kinds[0].Name
+	}
+	if why := refusedHint(res.Refused, e.KeyEnv); why != "" {
+		return detect.Engine{}, errors.New(what + ". " + why)
+	}
+	return detect.Engine{}, errors.New(what + ". Start the server (and load a model), then try again. If it moved, change url under [engine] in ezbx.toml, or use ezbx engine use --url ADDRESS on a running box")
+}
+
+// refusedHint explains an address that answered 401 or 403. keyEnv names
+// the variable whose key was sent, if any. It is "" when nothing refused.
+func refusedHint(refused []detect.Refusal, keyEnv string) string {
 	var parts []string
 	for _, r := range refused {
 		if r.KeySent {
-			parts = append(parts, fmt.Sprintf("The engine at %s refused the key in %s: check that it is the right key", r.URL, keyVar[r.URL]))
+			parts = append(parts, fmt.Sprintf("The server at %s refused the key in %s: check that it is the right key", r.URL, keyEnv))
 		} else {
-			parts = append(parts, fmt.Sprintf("An engine at %s asks for a key: put url = '%s' and key_env = 'NAME' under [engine.%s] in ezbx.toml, with the key in that environment variable", r.URL, r.URL, id))
+			parts = append(parts, fmt.Sprintf("The server at %s asks for a key: put key_env = 'NAME' under [engine] in ezbx.toml, with the key in that environment variable", r.URL))
 		}
 	}
 	return strings.Join(parts, ". ")

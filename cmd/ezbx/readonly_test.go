@@ -38,9 +38,9 @@ func TestUpChecksReadOnlyFirst(t *testing.T) {
 	ro := filepath.ToSlash(filepath.Join(root, "ref"))
 	write(t, root, map[string]string{"ref/a.txt": "x", "ref/.ssh/k": "x"})
 	base := "version = 1\n[box.vt]\nworkspace = '" + ws + "'\nharnesses = ['pi']\n" +
-		"[engine]\nuse = 'openai'\n[engine.openai]\nurl = 'http://127.0.0.1:9'\n"
+		"[engine]\napi = 'openai'\nurl = 'http://127.0.0.1:9'\n"
 	cases := map[string]string{
-		"[[box.vt.readonly]]\npath = '" + ro + "'\n":                           "Engine openai not found",
+		"[[box.vt.readonly]]\npath = '" + ro + "'\n":                           "Nothing answered at http://127.0.0.1:9",
 		"[[box.vt.readonly]]\npath = '" + ro + "/gone'\n":                      "doesn't exist",
 		"[[box.vt.readonly]]\npath = '" + ro + "/a.txt'\n":                     "isn't a folder",
 		"[[box.vt.readonly]]\npath = '" + ws + "/sub'\n":                       "overlaps the workspace",

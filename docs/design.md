@@ -1,12 +1,12 @@
 # ezbx design (draft 0.1)
 
-Status: `v0.2.0` early release (verified on Windows 11 with Docker Desktop and Strata across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`). Built: engine detection, the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)). The engine facts once marked **verify** were confirmed against live installs of Strata, LM Studio, Ollama and llama.cpp ([engine-adapters.md](engine-adapters.md)).
+Status: `v0.2.0` early release (verified on Windows 11 with Docker Desktop and a local model server across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`). Built: model server detection by API kind (decision 22), the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)).
 
 ## 1. Goal
 
 Make it easy to run AI agent tools in a sandbox while the model itself keeps running on your own machine.
 
-- **Power on the host.** The inference engine uses your GPU and models directly.
+- **Power on the host.** Your model server, whatever program runs it, uses your GPU and models directly.
 - **Work in the box.** Agents run in a container and write only to folders you choose.
 - **Easy.** One setup flow, a small command-line tool, and a switch for network access.
 
@@ -21,9 +21,9 @@ Make it easy to run AI agent tools in a sandbox while the model itself keeps run
 ```text
   Host (your PC)                           Docker
  ┌─────────────────────────┐   ┌────────────────────────────────────────────┐
- │ Inference engine        │   │  "inside" network  (no internet route)     │
- │  Strata / LM Studio /   │   │  ┌──────────┐        ┌──────────────────┐  │
- │  Ollama / llama.cpp     │◄──┼──┤ gateway  │◄───────┤ box (harnesses)  │  │
+ │ Model server            │   │  "inside" network  (no internet route)     │
+ │  any OpenAI-compatible  │   │  ┌──────────┐        ┌──────────────────┐  │
+ │  API                    │◄──┼──┤ gateway  │◄───────┤ box (harnesses)  │  │
  │                         │   │  └────┬─────┘        └──────────────────┘  │
  └─────────────────────────┘   │       │ "outside" network (internet)       │
                                └───────┼────────────────────────────────────┘
@@ -33,7 +33,7 @@ Make it easy to run AI agent tools in a sandbox while the model itself keeps run
 
 Three parts:
 
-1. **Engine adapters** (host side): find and control the inference engine.
+1. **API kinds** (host side): recognise the model server by the API it speaks and read its models.
 2. **Gateway** (container): the only way out of the box. It carries model traffic and, depending on the network mode, internet traffic.
 3. **Box** (container): where harnesses run, as an unprivileged user.
 
@@ -49,27 +49,25 @@ One small service that does four jobs:
 
 | Job | Detail |
 |---|---|
-| **Model route** | Exposes one stable OpenAI-compatible address inside the box, for example `http://gateway:8000/v1`, and forwards to whichever engine is selected. Switching engines changes one setting and no harness config. |
-| **Key injection** | Keys stay on the host and the agent never sees a real one. Built for the engine's key on the model route. Cloud API keys will use one reverse route per provider on the gateway (decision 8, not built yet), because the egress proxy never decrypts HTTPS and so cannot add a key to a tunnelled request. |
+| **Model route** | Exposes one stable OpenAI-compatible address inside the box, for example `http://gateway:8000/v1`, and forwards to the model server in `ezbx.toml`. Moving to another server changes one setting and no harness config. |
+| **Key injection** | Keys stay on the host and the agent never sees a real one. Built for the model server's key on the model route. Cloud API keys will use one reverse route per provider on the gateway (decision 8, not built yet), because the egress proxy never decrypts HTTPS and so cannot add a key to a tunnelled request. |
 | **Egress control** | A forward proxy that applies the current network mode (section 5). |
 | **Request log** | Records model, latency and how each request ended. Token counts and blocked requests are planned. |
 
 Decided: the gateway is one small Go binary, shipped in a minimal image and sharing code with the CLI. The full design is in [gateway.md](gateway.md).
 
-## 4. Engine adapters
+## 4. Model servers and API kinds
 
-Each engine has a small adapter folder, `providers/<id>/`, with an `adapter.json` file. The format is described in [engine-adapters.md](engine-adapters.md), and `providers/strata/adapter.json` is a complete example.
+ezbx works with any model server by the API it speaks, not by the program that runs it (decision 22). Each API kind is a small data file, `providers/<id>/adapter.json`: `openai` (any OpenAI-compatible server) and `lmstudio` (the same, plus LM Studio's own model list for context sizes and leaving out embedding models). The format is described in [engine-adapters.md](engine-adapters.md).
 
-The adapter does the following:
-- **Detect:** probe known local ports and report what's running. Default ports differ per engine; each was confirmed on a live install (1234 LM Studio, 11434 Ollama, 9931 for current llama.cpp builds).
-- **Discover:** read the model list from `/v1/models`, so no model name is ever hardcoded.
-- **Control (optional):** start the engine, stop it, or unload the model to free the GPU. Engines without a documented control interface are simply "detected, not controlled".
-
-Engines planned for the first set: Strata, LM Studio, Ollama and llama.cpp's server. All four expose an OpenAI-compatible API (confirmed live, 2026-11-22).
+- **Where:** `url` under `[engine]` in `ezbx.toml` is the one address `ezbx up` and `ezbx doctor` contact. `ezbx init` and `ezbx engine detect` look at a few common local ports to offer one.
+- **Which API:** `api = "auto"` uses the most specific kind the server answers; naming a kind makes `up` refuse a server that doesn't speak it.
+- **Discover:** read the model list, so no model name is ever hardcoded.
+- ezbx doesn't start, stop or unload models: that stays with the server and you.
 
 ### Host reachability
 
-Containers reach the host through a host alias. On Docker Desktop this worked for an engine bound to loopback in a private predecessor setup. It has not been tested with ezbx yet. On other setups it may not work. The gateway owns this detail, and `ezbx doctor` tests it.
+Containers reach the host through a host alias. On Docker Desktop this works for a server bound to loopback (tested, [isolation-test.md](isolation-test.md)). On other setups it may not work. The gateway owns this detail, and `ezbx doctor` tests it.
 
 ## 5. Network modes
 
@@ -103,7 +101,7 @@ Each harness is a folder, `harnesses/<id>/`, with a `manifest.json` and an insta
 - **Verified:** nothing ships without a recorded install check.
 - **Pinned:** versions are pinned and recorded in `ezbx.lock`, so a rebuild gives the same box (see [build.md](build.md)).
 - **Tools:** programs such as ripgrep, Chromium or FFmpeg come from a catalogue of verified tools and tool packs, chosen in `ezbx.toml` and built into the image. The agent can't install programs itself.
-- **Config generation:** the harness template is filled from the selected engine adapter's model list (in JSON, TOML or YAML), so each harness points at the gateway automatically.
+- **Config generation:** the harness template is filled from the model server's model list (in JSON, TOML or YAML), so each harness points at the gateway automatically.
 - **Included harnesses:** Pi, OpenCode, oh-my-pi (a separate project from Pi), Codex CLI, Claude Code, Hermes Agent and OpenClaw.
 - **Autonomy flag:** each harness's "skip approvals" mode is set only inside the box and is recorded in its manifest.
 
@@ -146,7 +144,7 @@ The full threat model is in [threat-model.md](threat-model.md): what is protecte
 
 1. **0.1 (done, `v0.1.0`):** `init`, engine detection for Strata and one other engine, the gateway with the model route and `off`/`on`, one harness, snapshots.
 2. **0.2 (done, `v0.2.0`):** `allow` mode, more engines and harnesses, `doctor`, `reset` with backup and restore. The remaining harnesses and `review`, first planned for 0.3, came early.
-3. **0.3:** read-only folders with secret masking and the full threat model, starter profiles (web dev, Python/ML, research, offline).
+3. **0.3:** read-only folders with secret masking and the full threat model, model servers by API kind (decision 22), starter profiles (web dev, Python/ML, research, offline).
 4. **Later:** tray or GUI front end, other container runtimes, a tool-calling self-test for models.
 
 ## 13. Decisions
@@ -174,6 +172,7 @@ The full threat model is in [threat-model.md](threat-model.md): what is protecte
 | 19 | Detection and the engine's key | Detection sends a key only to the exact `url` configured for that engine, never to hint ports, status-command addresses or other engines, and never through a redirect, so `key_env` without `url` is refused. A 401 or 403 from an address that matches no adapter is reported as asking for a key (or refusing the one sent), not as nothing found. The doctor sends no key; the gateway's `engine ready` check covers such an engine. Chosen over sending no key ever (an engine that guards its model list could then never be used) and over sending it to every candidate (any local program on a hint port would get it). |
 | 20 | Which harnesses a box image holds | Only the box's own (`harnesses` in `ezbx.toml`), so each box carries what it uses; the list is part of the image's name. The box Dockerfile has one harness stage that runs the install script of every harness folder in the build files, so a new harness needs no Dockerfile change. A harness's `env` is set on the box container by `ezbx up`. Chosen over building every verified harness into every box (OpenCode alone adds about 250 MB). See [build.md](build.md). |
 | 21 | Read-only folders and secret masking | Built. A read-only bind mount at `/readonly/<name>`, with an empty read-only overlay over each file or folder that matches a mask; a built-in mask list that `mask` adds to and only `unmask` can lift; content warnings rather than refusals; `ezbx shell` refuses a session when a new secret file isn't masked yet; the workspace's folder refusals plus no overlaps; network warnings, not refusals. See [readonly.md](readonly.md). |
+| 22 | Which model servers ezbx supports | Any server, by the API it speaks: an API kind (`openai`, `lmstudio`) is a data file of probes and model-fact paths, with no product names, status commands or start, stop and unload commands. `[engine]` holds `url`, `api` (`auto` by default), `key_env` and `host`; the 0.2 form (`engine.use`, `[engine.<id>]` tables) is refused with a message showing the new one. `ezbx up`, `ezbx engine use` and `ezbx doctor` contact only the configured address and the gateway's upstream; only `ezbx init` and `ezbx engine detect` look at common local ports. A new address drops the old `key_env` and `host`. Chosen over adapters per engine program: ezbx would have to keep verifying each program one by one, while the model server is yours to choose. An Anthropic-compatible kind (the gateway passing `/v1/messages` through, and translating chat completions to it) is the planned next kind. |
 
 ## 14. Open questions
 

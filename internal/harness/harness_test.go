@@ -33,7 +33,7 @@ func TestRenderAllEmbeddedHarnesses(t *testing.T) {
 	vals := Values{
 		GatewayBaseURL: "http://gateway:8000/v1",
 		GatewayKey:     "ezbx-placeholder",
-		Models:         Models(strataModels(), Defaults{Reasoning: true}, nil),
+		Models:         Models(sampleModels(), Defaults{Reasoning: true}, nil),
 		Default:        "small-model",
 	}
 	for _, m := range list {
@@ -108,7 +108,7 @@ func TestRenderOpenCodeConfig(t *testing.T) {
 	files, err := Render(oc, Values{
 		GatewayBaseURL: "http://gateway:8000/v1",
 		GatewayKey:     "ezbx-placeholder",
-		Models:         Models(strataModels(), Defaults{}, nil),
+		Models:         Models(sampleModels(), Defaults{}, nil),
 		Default:        "small-model",
 	})
 	if err != nil {
@@ -211,7 +211,7 @@ func TestManifestValidation(t *testing.T) {
 	}
 }
 
-func strataModels() []detect.Model {
+func sampleModels() []detect.Model {
 	loaded := true
 	return []detect.Model{
 		{ID: "big-model", ContextWindow: 262144, Input: []string{"text", "image"}, Loaded: &loaded},
@@ -221,7 +221,7 @@ func strataModels() []detect.Model {
 
 func TestModelsFillsDefaultsAndOverrides(t *testing.T) {
 	yes := true
-	got := Models(strataModels(), Defaults{MaxTokens: 4096}, map[string]Override{
+	got := Models(sampleModels(), Defaults{MaxTokens: 4096}, map[string]Override{
 		"small-model": {Name: "Small", ContextWindow: 2048, Reasoning: &yes},
 	})
 	big, small := got[0], got[1]
@@ -247,7 +247,7 @@ func TestRenderPiConfig(t *testing.T) {
 	files, err := Render(pi, Values{
 		GatewayBaseURL: "http://gateway:8000/v1",
 		GatewayKey:     "ezbx-placeholder",
-		Models:         Models(strataModels(), Defaults{Reasoning: true}, nil),
+		Models:         Models(sampleModels(), Defaults{Reasoning: true}, nil),
 		Default:        "big-model",
 	})
 	if err != nil {
@@ -298,7 +298,7 @@ func TestRenderPiConfig(t *testing.T) {
 func render(t *testing.T, content string) ([]File, error) {
 	t.Helper()
 	m := Manifest{Name: "Demo", Config: []ConfigFile{{Path: "~/.demo/c.json", Mode: "0600", Content: json.RawMessage(content)}}}
-	return Render(m, Values{GatewayBaseURL: "http://gateway:8000/v1", GatewayKey: "k", Models: Models(strataModels(), Defaults{}, nil)})
+	return Render(m, Values{GatewayBaseURL: "http://gateway:8000/v1", GatewayKey: "k", Models: Models(sampleModels(), Defaults{}, nil)})
 }
 
 func TestRenderTemplateRules(t *testing.T) {
@@ -353,7 +353,7 @@ func TestRenderKeyedEach(t *testing.T) {
 
 	// Two models with the same name would give the same key.
 	twin := Manifest{Name: "Demo", Config: []ConfigFile{{Path: "~/.demo/c.json", Mode: "0600", Content: json.RawMessage(`{"m": {"$each": "models", "key": "${name}", "as": 1}}`)}}}
-	models := Models(strataModels(), Defaults{}, map[string]Override{"small-model": {Name: "big-model"}})
+	models := Models(sampleModels(), Defaults{}, map[string]Override{"small-model": {Name: "big-model"}})
 	if _, err := Render(twin, Values{Models: models}); err == nil || !strings.Contains(err.Error(), "for two models") {
 		t.Errorf("duplicate keys: %v", err)
 	}

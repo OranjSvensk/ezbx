@@ -1,11 +1,10 @@
 {
   "schema": 1,
   "id": "openai",
-  "name": "OpenAI-compatible server",
+  "name": "OpenAI-compatible API",
 
   "detect": {
-    "hintPorts": [],
-    "cli": null,
+    "hintPorts": [1234, 8080, 9931, 11434],
     "probes": [
       { "path": "/v1/models", "expect": { "hasLists": ["data"] } }
     ]
@@ -27,21 +26,14 @@
   "auth": {
     "mode": "optional-bearer",
     "keyEnv": null,
-    "note": "Unknown server. If it needs a key, name an environment variable in your local config."
+    "note": "If the server needs a key, name an environment variable in key_env under [engine]."
   },
 
   "capabilities": ["chat"],
 
-  "control": {
-    "status": null,
-    "start": null,
-    "stop": null,
-    "unload": null
-  },
-
   "verified": {
-    "status": "generic",
-    "on": null,
-    "notes": "The fallback for a server that offers an OpenAI-style model list but matches no specific adapter. It adds no ports of its own, so it only applies to addresses found another way. Any specific adapter that matches wins over it."
+    "status": "verified",
+    "on": "2026-11-22",
+    "notes": "Any server with an OpenAI-style model list (GET /v1/models answering with a data list) and /v1/chat/completions. The hint ports are common local defaults, checked only by ezbx init and ezbx engine detect; ezbx up and ezbx doctor contact only the configured url. Exercised through the gateway with several local servers, plain and streamed, with /v1/messages and /v1/responses translated."
   }
 }

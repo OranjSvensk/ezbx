@@ -40,7 +40,7 @@ func (g *fakeGateway) docker(_ context.Context, _ []byte, args ...string) ([]byt
 			g.allow = append(g.allow, call[1])
 		}
 		out, _ := json.Marshal(map[string]any{
-			"engine": "strata", "upstream": "http://host.docker.internal:53000",
+			"engine": "openai", "upstream": "http://host.docker.internal:53000",
 			"network": map[string]any{"mode": g.mode, "allow": g.allow},
 			"proxy":   map[string]any{"allowed": 1, "blocked": 2},
 			"mode":    g.mode, "allow": g.allow, "closed": 1,

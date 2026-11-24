@@ -61,18 +61,18 @@ type ReadOnly struct {
 	Unmask []string `toml:"unmask"` // defaults to show after all, written exactly
 }
 
-// Engine chooses the inference engine.
+// Engine is the model server on this computer: where it is and which API it
+// speaks. ezbx works with any server that offers one of the API kinds in
+// providers/ (see docs/engine-adapters.md), whatever program runs it.
 type Engine struct {
-	Use       string               `toml:"use"` // auto, or an adapter id
-	Overrides map[string]EngineURL `toml:"-"`   // filled from the other keys
-}
-
-// EngineURL overrides what detection finds for one engine.
-type EngineURL struct {
-	URL    string `toml:"url"`
+	API    string `toml:"api"`     // auto, or an API kind such as openai or lmstudio
+	URL    string `toml:"url"`     // the server's address; the only one ezbx up contacts
 	KeyEnv string `toml:"key_env"` // NAME of an environment variable, never the key
 	Host   string `toml:"host"`    // Host header to send, like --upstream-host
 }
+
+// DefaultAPI means: use the most specific API kind the server answers.
+const DefaultAPI = "auto"
 
 // Model holds facts about one model that engines don't report.
 type Model struct {
@@ -94,17 +94,13 @@ const (
 	DefaultNetwork = "off"
 )
 
-// The engine section is read in two passes: "use" into Engine, and every
-// table under it into Overrides.
-type rawEngine map[string]toml.Primitive
-
-type rawConfig struct {
-	Version int              `toml:"version"`
-	Box     map[string]*Box  `toml:"box"`
-	Engine  rawEngine        `toml:"engine"`
-	Models  map[string]Model `toml:"models"`
-	Gateway Gateway          `toml:"gateway"`
-}
+// oldEngine explains the engine settings of ezbx 0.2 and earlier, which named
+// an engine (engine.use and [engine.<id>] tables) instead of an address.
+const oldEngine = `the [engine] section changed: ezbx now works with any server by the API it speaks. Write it as
+  [engine]
+  url = "http://127.0.0.1:PORT"   # the server's address
+  api = "auto"                    # or openai or lmstudio
+with key_env and host there too if you had them (ezbx engine detect lists the servers it finds)`
 
 // Load reads and checks a config file.
 func Load(path string) (*Config, error) {
@@ -124,8 +120,8 @@ func Load(path string) (*Config, error) {
 
 // Parse reads and checks a config from text.
 func Parse(text string) (*Config, error) {
-	var raw rawConfig
-	md, err := toml.Decode(text, &raw)
+	c := &Config{}
+	md, err := toml.Decode(text, c)
 	if err != nil {
 		var pe toml.ParseError
 		if errors.As(err, &pe) {
@@ -133,24 +129,12 @@ func Parse(text string) (*Config, error) {
 		}
 		return nil, err
 	}
-	c := &Config{Version: raw.Version, Box: raw.Box, Models: raw.Models, Gateway: raw.Gateway}
-	c.Engine.Overrides = map[string]EngineURL{}
-	for k, prim := range raw.Engine {
-		if k == "use" {
-			if err := md.PrimitiveDecode(prim, &c.Engine.Use); err != nil {
-				return nil, fmt.Errorf("engine.use: %w", err)
-			}
-			continue
-		}
-		var o EngineURL
-		if err := md.PrimitiveDecode(prim, &o); err != nil {
-			return nil, fmt.Errorf("engine.%s must be a table with url, key_env or host: %w", k, err)
-		}
-		c.Engine.Overrides[k] = o
-	}
 	if bad := md.Undecoded(); len(bad) > 0 {
 		var keys []string
 		for _, k := range bad {
+			if len(k) >= 2 && k[0] == "engine" && (k[1] == "use" || len(k) > 2) {
+				return nil, errors.New(oldEngine)
+			}
 			keys = append(keys, k.String())
 		}
 		return nil, fmt.Errorf("unknown setting: %s", strings.Join(keys, ", "))
@@ -213,19 +197,19 @@ func (c *Config) check() error {
 	if len(c.names) > 1 {
 		return fmt.Errorf("found %d boxes (%s); this version runs one box", len(c.names), strings.Join(c.names, ", "))
 	}
-	if c.Engine.Use == "" {
-		c.Engine.Use = "auto"
+	e := &c.Engine
+	if e.API == "" {
+		e.API = DefaultAPI
 	}
-	for id, o := range c.Engine.Overrides {
-		if o.URL != "" && !strings.HasPrefix(o.URL, "http://") && !strings.HasPrefix(o.URL, "https://") {
-			return fmt.Errorf("engine.%s.url must start with http:// or https://", id)
-		}
-		if o.KeyEnv != "" && !envNameRE.MatchString(o.KeyEnv) {
-			return fmt.Errorf("engine.%s.key_env is the NAME of an environment variable, such as STRATA_API_KEY, never the key itself", id)
-		}
-		if o.KeyEnv != "" && o.URL == "" {
-			return fmt.Errorf("engine.%s.key_env needs url too, such as url = 'http://127.0.0.1:PORT', so the key is only ever sent to that address", id)
-		}
+	// Which kinds exist is the adapters' business; the command checks api.
+	if e.URL != "" && !strings.HasPrefix(e.URL, "http://") && !strings.HasPrefix(e.URL, "https://") {
+		return errors.New("engine.url must start with http:// or https://")
+	}
+	if e.KeyEnv != "" && !envNameRE.MatchString(e.KeyEnv) {
+		return errors.New("engine.key_env is the NAME of an environment variable, such as ENGINE_API_KEY, never the key itself")
+	}
+	if e.KeyEnv != "" && e.URL == "" {
+		return errors.New("engine.key_env needs url too, such as url = 'http://127.0.0.1:PORT', so the key is only ever sent to that address")
 	}
 	for id, m := range c.Models {
 		if m.ContextWindow < 0 || m.MaxTokens < 0 {

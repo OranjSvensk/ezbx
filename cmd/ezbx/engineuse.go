@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"maps"
 	"strings"
 	"time"
 
@@ -13,21 +12,24 @@ import (
 	"github.com/OranjSvensk/ezbx/internal/config"
 )
 
-// runEngineUse points a running box's gateway at an engine, found again
-// now, and refreshes the harness configs in the box from its model list.
-// The change lasts until the next ezbx up, which uses ezbx.toml.
+// runEngineUse points a running box's gateway at a model server, checked
+// again now, and refreshes the harness configs in the box from its model
+// list. With no flags it uses the server in ezbx.toml (after it moved or
+// loaded new models, say). The change lasts until the next ezbx up, which
+// uses ezbx.toml.
 func runEngineUse(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("engine use", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfgFlag := fs.String("config", "", "config file, used to find the box")
 	boxFlag := fs.String("box", "", "box name; default the one in the config, else main")
-	url := fs.String("url", "", "the engine's address on this computer, if detection doesn't find it")
+	url := fs.String("url", "", "the server's address on this computer")
+	api := fs.String("api", "", "the API kind: auto, openai or lmstudio")
 	words, rest, err := parseInterleaved(fs, args)
 	if err != nil {
 		return 2
 	}
-	if len(words) > 1 || len(rest) > 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx engine use [ID] [--url http://127.0.0.1:PORT] [--box NAME]")
+	if len(words) > 0 || len(rest) > 0 {
+		fmt.Fprintln(stderr, "Usage: ezbx engine use [--url http://127.0.0.1:PORT] [--api auto|openai|lmstudio] [--box NAME]")
 		return 2
 	}
 	t, err := resolveBox(*cfgFlag, *boxFlag)
@@ -37,19 +39,19 @@ func runEngineUse(args []string, stdout, stderr io.Writer) int {
 	if t.cfg == nil {
 		return report(stderr, fmt.Errorf("engine use needs the box's ezbx.toml, for its harnesses and model settings. See: ezbx up"))
 	}
-	cfg, err := engineChoice(t.cfg, words, *url)
+	cfg, err := engineChoice(t.cfg, *url, *api)
 	if err != nil {
 		return report(stderr, err)
+	}
+	if cfg.Engine.KeyEnv != "" {
+		return report(stderr, fmt.Errorf("the server at %s needs a key (key_env %s), which the running gateway can't take on. Set it under [engine] in ezbx.toml, then ezbx down and ezbx up", cfg.Engine.URL, cfg.Engine.KeyEnv))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	eng, override, err := chooseEngine(ctx, cfg)
+	eng, err := chooseEngine(ctx, cfg)
 	if err != nil {
 		return report(stderr, err)
-	}
-	if override.KeyEnv != "" {
-		return report(stderr, fmt.Errorf("%s needs a key (key_env %s), which the running gateway can't take on. Set engine.use in ezbx.toml, then ezbx down and ezbx up", eng.Name, override.KeyEnv))
 	}
 	upstream, err := box.GatewayUpstream(eng.URL)
 	if err != nil {
@@ -75,33 +77,27 @@ func runEngineUse(args []string, stdout, stderr io.Writer) int {
 		return report(stderr, err)
 	}
 	fmt.Fprintf(stdout, "Updated the config of %s in the box. A harness that is already running keeps its old model list until you start it again.\n", strings.Join(b.Harnesses, ", "))
-	if cfg.Engine.Use != t.cfg.Engine.Use || *url != "" {
-		fmt.Fprintln(stdout, "This lasts until the next ezbx up, which uses the engine in ezbx.toml.")
+	if cfg.Engine != t.cfg.Engine {
+		fmt.Fprintln(stdout, "This lasts until the next ezbx up, which uses the server in ezbx.toml.")
 	}
 	return 0
 }
 
-// engineChoice applies the command's ID and --url to a copy of the config,
-// leaving the loaded config unchanged.
-func engineChoice(c *config.Config, words []string, url string) (*config.Config, error) {
+// engineChoice applies --url and --api to a copy of the config, leaving the
+// loaded config unchanged. A new address drops key_env and host, which
+// belonged to the old one: a key is only ever sent to its own url.
+func engineChoice(c *config.Config, url, api string) (*config.Config, error) {
 	cp := *c
-	cp.Engine.Overrides = maps.Clone(c.Engine.Overrides)
-	if cp.Engine.Overrides == nil {
-		cp.Engine.Overrides = map[string]config.EngineURL{}
-	}
-	if len(words) == 1 {
-		cp.Engine.Use = words[0]
-	}
 	if url != "" {
-		if cp.Engine.Use == "auto" {
-			return nil, usageError("--url needs the engine's id too, such as: ezbx engine use strata --url http://127.0.0.1:PORT")
-		}
 		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 			return nil, usageError("--url must start with http:// or https://")
 		}
-		o := cp.Engine.Overrides[cp.Engine.Use]
-		o.URL = url
-		cp.Engine.Overrides[cp.Engine.Use] = o
+		if strings.TrimRight(url, "/") != strings.TrimRight(cp.Engine.URL, "/") {
+			cp.Engine = config.Engine{API: cp.Engine.API, URL: url}
+		}
+	}
+	if api != "" {
+		cp.Engine.API = api
 	}
 	return &cp, nil
 }

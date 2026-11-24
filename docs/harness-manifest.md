@@ -93,7 +93,7 @@ A `key` that isn't text, is empty, gives a number or a list, or gives the same n
 
 `ezbx harness render <id> --out FOLDER` finds the engine (or uses `--url`), fills in the templates and writes the files under `FOLDER`, laid out like the agent's home (for Pi, `FOLDER/.pi/agent/models.json` and `settings.json`). `--default`, `--context`, `--max-tokens` and `--reasoning` set the choices above. `ezbx init` and `ezbx harness sync` will call the same code.
 
-Tested: Pi's rendered config, with no hand edits, worked inside the box against a real model on Strata, including its read and write tools (see [isolation-test.md](isolation-test.md)).
+Tested: Pi's rendered config, with no hand edits, worked inside the box against a real local model, including its read and write tools (see [isolation-test.md](isolation-test.md)).
 
 ### `verified`
 

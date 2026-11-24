@@ -39,7 +39,7 @@ func TestWriteConfigKeepsThePrevious(t *testing.T) {
 }
 
 func TestEnvName(t *testing.T) {
-	for s, want := range map[string]bool{"STRATA_API_KEY": true, "_K": true, "k1": true, "": false, "1K": false, "sk-abc": false, "A B": false} {
+	for s, want := range map[string]bool{"ENGINE_API_KEY": true, "_K": true, "k1": true, "": false, "1K": false, "sk-abc": false, "A B": false} {
 		if envName(s) != want {
 			t.Errorf("%q: want %v", s, want)
 		}
@@ -49,9 +49,11 @@ func TestEnvName(t *testing.T) {
 func TestInitRefusesBadFlags(t *testing.T) {
 	t.Setenv("EZBX_HOME", t.TempDir())
 	for name, args := range map[string][]string{
-		"url without engine": {"--url", "http://127.0.0.1:1"},
-		"key value":          {"--key-env", "sk-abc def"},
-		"extra word":         {"now"},
+		"url without http": {"--url", "127.0.0.1:1"},
+		"later and url":    {"--later", "--url", "http://127.0.0.1:1"},
+		"key value":        {"--key-env", "sk-abc def"},
+		"extra word":       {"now"},
+		"old engine flag":  {"--engine", "auto"},
 	} {
 		if code := run(append([]string{"init"}, args...), devNull{}, devNull{}); code != 2 {
 			t.Errorf("%s: exit %d", name, code)

@@ -1,8 +1,8 @@
 package gateway
 
-// Tests for the Host header sent to the engine. Engines with DNS rebinding
-// protection, such as Strata, refuse a request whose Host isn't local, and
-// on Docker Desktop the gateway reaches them as host.docker.internal.
+// Tests for the Host header sent to the model server. Servers with DNS
+// rebinding protection refuse a request whose Host isn't local, and on
+// Docker Desktop the gateway reaches them as host.docker.internal.
 
 import (
 	"io"

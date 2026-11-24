@@ -27,7 +27,7 @@ func makeFiles(t *testing.T, root string, files map[string]string) {
 var fakeAWS = "AK" + "IA" + strings.Repeat("Q", 16)
 
 func TestReadOnlyRoundTrip(t *testing.T) {
-	a := Answers{Box: "main", Workspace: "/w", Memory: "4g", Network: "off", Harnesses: []string{"pi"}, Engine: "auto",
+	a := Answers{Box: "main", Workspace: "/w", Memory: "4g", Network: "off", Harnesses: []string{"pi"}, Engine: config.Engine{API: "auto"},
 		ReadOnly: []config.ReadOnly{
 			{Path: "/p/one"},
 			{Path: "/p/two", Name: "docs", Mask: []string{"./k.txt", "private/"}, Unmask: []string{".npmrc"}},
@@ -46,7 +46,7 @@ func TestReadOnlyRoundTrip(t *testing.T) {
 	if _, b := c.Only(); b.ReadOnly[1].Mask[0] != "./k.txt" {
 		t.Error("FromConfig shares the config's lists")
 	}
-	if ch := Changes(a, Answers{Box: "main", Workspace: "/w", Memory: "4g", Network: "off", Harnesses: []string{"pi"}, Engine: "auto"}); len(ch) != 1 || !strings.HasPrefix(ch[0], "readonly") {
+	if ch := Changes(a, Answers{Box: "main", Workspace: "/w", Memory: "4g", Network: "off", Harnesses: []string{"pi"}, Engine: config.Engine{API: "auto"}}); len(ch) != 1 || !strings.HasPrefix(ch[0], "readonly") {
 		t.Errorf("changes %v", ch)
 	}
 }

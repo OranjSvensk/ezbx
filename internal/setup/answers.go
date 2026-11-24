@@ -26,10 +26,9 @@ type Answers struct {
 	Network   string
 	Allow     []string
 	Harnesses []string
-	Tools     []string                    // tool ids and "pack:" names; nil when not set
-	ReadOnly  []config.ReadOnly           // read-only folders, as in ezbx.toml
-	Engine    string                      // an adapter id, or "auto"
-	Overrides map[string]config.EngineURL // per engine: url, key_env, host
+	Tools     []string          // tool ids and "pack:" names; nil when not set
+	ReadOnly  []config.ReadOnly // read-only folders, as in ezbx.toml
+	Engine    config.Engine     // api, url, key_env, host
 	Models    map[string]config.Model
 	Log       *bool
 }
@@ -42,7 +41,7 @@ func FromConfig(c *config.Config) Answers {
 		Box: name, Workspace: b.Workspace, Memory: b.Memory, CPUs: b.CPUs, PIDs: b.PIDs,
 		Network: b.Network, Allow: append([]string(nil), b.Allow...), Harnesses: append([]string(nil), b.Harnesses...),
 		Tools: slices.Clone(b.Tools), ReadOnly: cloneReadOnly(b.ReadOnly),
-		Engine: c.Engine.Use, Overrides: maps.Clone(c.Engine.Overrides), Models: maps.Clone(c.Models), Log: c.Gateway.Log,
+		Engine: c.Engine, Models: maps.Clone(c.Models), Log: c.Gateway.Log,
 	}
 	if a.PIDs == config.DefaultPIDs {
 		a.PIDs = 0 // the default, so not written
@@ -94,22 +93,24 @@ func ConfigText(a Answers, now time.Time) string {
 	b.WriteString(readOnlyText(a.Box, a.ReadOnly))
 	w("\n")
 
-	w("[engine]\nuse = %s\n", quote(a.Engine))
-	for _, id := range sortedKeys(a.Overrides) {
-		o := a.Overrides[id]
-		if o == (config.EngineURL{}) {
-			continue
-		}
-		w("\n[engine.%s]\n", id)
-		if o.URL != "" {
-			w("url     = %s\n", quote(o.URL))
-		}
-		if o.KeyEnv != "" {
-			w("key_env = %s   # the NAME of an environment variable, never the key\n", quote(o.KeyEnv))
-		}
-		if o.Host != "" {
-			w("host    = %s\n", quote(o.Host))
-		}
+	e := a.Engine
+	if e.API == "" {
+		e.API = config.DefaultAPI
+	}
+	w("# The model server on this computer. Any server with an OpenAI-compatible\n")
+	w("# API works; api says which kind (auto picks the most specific one it answers).\n")
+	w("[engine]\n")
+	if e.URL != "" {
+		w("url     = %s\n", quote(e.URL))
+	} else {
+		w("# url   = \"http://127.0.0.1:PORT\"   # needed before ezbx up; see ezbx engine detect\n")
+	}
+	w("api     = %s   # auto | openai | lmstudio\n", quote(e.API))
+	if e.KeyEnv != "" {
+		w("key_env = %s   # the NAME of an environment variable, never the key\n", quote(e.KeyEnv))
+	}
+	if e.Host != "" {
+		w("host    = %s\n", quote(e.Host))
 	}
 	for _, id := range sortedKeys(a.Models) {
 		m := a.Models[id]

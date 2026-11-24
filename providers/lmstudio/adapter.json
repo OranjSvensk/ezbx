@@ -1,11 +1,10 @@
 {
   "schema": 1,
   "id": "lmstudio",
-  "name": "LM Studio",
+  "name": "LM Studio API",
 
   "detect": {
-    "hintPorts": [1234],
-    "cli": null,
+    "hintPorts": [],
     "probes": [
       { "path": "/v1/models", "expect": { "hasLists": ["data"] } },
       { "path": "/api/v1/models", "expect": { "hasLists": ["models"] } }
@@ -30,21 +29,14 @@
   "auth": {
     "mode": "none",
     "keyEnv": null,
-    "note": "The server is documented as unauthenticated and listens on localhost by default. Binding it to all interfaces exposes it to the network."
+    "note": "A server with its API token switched on answers 401 to the model list; set key_env and url under [engine]."
   },
 
   "capabilities": ["chat"],
 
-  "control": {
-    "status": null,
-    "start": { "command": ["lms", "server", "start"] },
-    "stop": { "command": ["lms", "server", "stop"] },
-    "unload": { "command": ["lms", "unload", "--all"] }
-  },
-
   "verified": {
     "status": "verified",
     "on": "2026-11-22",
-    "notes": "Exercised on Windows 11 with the lms CLI (commit 43d4b26): lms server start listened on port 1234, GET /api/v1/models answered with a models list and /health with a 404, so detection named LM Studio over the generic adapter. Through ezbx gateway serve on the host: the model list, a chat, a streamed chat ending in [DONE], /v1/messages and /v1/responses all answered; the model loaded on first request. lms unload --all and lms server stop worked as listed. /v1/models lists every downloaded model, embedding models included, so the model facts come from the native list instead: its keys are the ids the chat route accepts (checked the same day), max_context_length is the context size, and type embedding is left out. Its capabilities.vision and loaded_instances are not read yet. A server with its API token switched on shows up as a generic OpenAI-compatible server. Not yet checked from a box through Docker Desktop's host alias."
+    "notes": "The OpenAI-compatible API plus LM Studio's own model list, GET /api/v1/models: its keys are the ids the chat route accepts, max_context_length is the context size, and type embedding is left out. Chat still goes to /v1/chat/completions. Any server that answers both routes this way is treated as this kind, which wins over the plain OpenAI kind because it checks more. Exercised through ezbx gateway serve on the host on the date above."
   }
 }

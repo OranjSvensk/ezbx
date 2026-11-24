@@ -63,7 +63,7 @@ type Config struct {
 
 // hostAliases are the names Docker Desktop gives the host. An engine reached
 // this way is really listening on the host's loopback, and engines with DNS
-// rebinding protection (Strata, for example) refuse any other Host header.
+// rebinding protection refuse any other Host header.
 var hostAliases = map[string]bool{
 	"host.docker.internal":    true,
 	"gateway.docker.internal": true,

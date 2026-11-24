@@ -83,7 +83,7 @@ jobs:
           cat <<EOF > "${notes_file}"
           Early release ${tag}.
 
-          - **Verified platform:** Windows 11 with Docker Desktop (Engine 28+) and Strata across all seven harnesses (\`pi\`, \`opencode\`, \`omp\`, \`codex\`, \`claude\`, \`hermes\`, \`openclaw\`). Linux and macOS archives are included as untested/experimental builds.
+          - **Verified platform:** Windows 11 with Docker Desktop (Engine 28+) and a local OpenAI-compatible model server, across all seven harnesses (\`pi\`, \`opencode\`, \`omp\`, \`codex\`, \`claude\`, \`hermes\`, \`openclaw\`). Linux and macOS archives are included as untested/experimental builds.
           - **Getting started:** Download an archive below (verify against \`checksums.txt\`) or install with \`go install github.com/OranjSvensk/ezbx/cmd/ezbx@${tag}\`, then see [docs/getting-started.md](https://github.com/${GITHUB_REPOSITORY}/blob/${tag}/docs/getting-started.md).
 
           EOF

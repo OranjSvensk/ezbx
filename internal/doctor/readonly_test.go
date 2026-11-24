@@ -40,7 +40,7 @@ func runRO(f *roDocker, folders []ReadOnlyFolder, note string) Report {
 	return Run(context.Background(), HostConfig{
 		Box: "t", Docker: f.run,
 		Detect: func(context.Context, []string) detect.Result {
-			return detect.Result{Engines: []detect.Engine{{ID: "strata", Name: "Strata", URL: "http://127.0.0.1:53000", Models: []detect.Model{{ID: "m"}}}}}
+			return detect.Result{Engines: []detect.Engine{{ID: "openai", Name: "OpenAI-compatible API", URL: "http://127.0.0.1:53000", Models: []detect.Model{{ID: "m"}}}}}
 		},
 		LocalAddrs: func() []string { return []string{"192.0.2.10"} },
 		Images:     goodImages,

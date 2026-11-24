@@ -38,18 +38,18 @@ tools     = ["pack:coding"]       # built into the box: packs (pack:coding, pack
 # mask   = ["secrets.yml", "private/"]   # hidden too, on top of the defaults
 # unmask = [".npmrc"]             # a default to show after all, written exactly
 
+# The model server on this computer. Any program that serves an
+# OpenAI-compatible API works; ezbx up contacts only this address.
+# "ezbx engine detect" lists the servers it finds on the common ports.
 [engine]
-use = "auto"                      # auto | strata | lmstudio | ollama | llamacpp | openai
+url     = "http://127.0.0.1:1234"
+api     = "auto"                  # auto | openai | lmstudio (auto: the most
+                                  # specific kind the server answers)
+# key_env = "ENGINE_API_KEY"      # NAME of an environment variable holding the key,
+#                                 # never the key itself (it is only sent to url)
+# host    = "localhost:PORT"      # Host header to send, for servers that check it
 
-# Only set these if automatic detection fails.
-# [engine.strata]
-# url     = "http://127.0.0.1:PORT"
-# key_env = "STRATA_API_KEY"      # NAME of an environment variable holding the key,
-#                                 # never the key itself
-#                                 # (needs url: the key is only sent there)
-# host    = "localhost:PORT"      # Host header to send, for engines that check it
-
-# Facts about a model that engines don't report. Use the id from
+# Facts about a model that servers don't report. Use the id from
 # "ezbx engine detect".
 # [models."big-model"]
 # reasoning  = true               # a reasoning model needs this...

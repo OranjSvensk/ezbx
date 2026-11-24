@@ -18,18 +18,18 @@ func TestEmbeddedAdaptersLoad(t *testing.T) {
 	for _, a := range adapters {
 		ids = append(ids, a.ID)
 	}
-	if got := strings.Join(ids, ","); got != "llamacpp,lmstudio,ollama,openai,strata" {
+	if got := strings.Join(ids, ","); got != "lmstudio,openai" {
 		t.Fatalf("unexpected adapters: %s", got)
 	}
 }
 
 const good = `{
   "schema": 1, "id": "demo", "name": "Demo",
-  "detect": {"hintPorts": [1], "cli": null, "probes": [{"path": "/v1/models", "expect": {"hasFields": ["data[].id"]}}]},
+  "detect": {"hintPorts": [1], "probes": [{"path": "/v1/models", "expect": {"hasFields": ["data[].id"]}}]},
   "openai": {"basePath": "/v1", "modelsPath": "/v1/models", "chatPath": "/v1/chat/completions"},
   "models": {"id": "data[].id", "contextWindow": null, "input": null, "loaded": null},
   "auth": {"mode": "none", "keyEnv": null, "note": ""},
-  "capabilities": [], "control": {}, "verified": {"status": "docs-only", "on": null, "notes": ""}
+  "capabilities": [], "verified": {"status": "docs-only", "on": null, "notes": ""}
 }`
 
 func load(t *testing.T, folder, body string) error {
@@ -46,6 +46,8 @@ func TestValidation(t *testing.T) {
 	bad := map[string]string{
 		"id does not match folder": strings.Replace(good, `"id": "demo"`, `"id": "other"`, 1),
 		"unknown field (typo)":     strings.Replace(good, `"schema": 1,`, `"schema": 1, "hintports": [1],`, 1),
+		"old status command":       strings.Replace(good, `"probes":`, `"cli": null, "probes":`, 1),
+		"old control commands":     strings.Replace(good, `"capabilities": [],`, `"capabilities": [], "control": {},`, 1),
 		"wrong schema":             strings.Replace(good, `"schema": 1`, `"schema": 2`, 1),
 		"probe path without slash": strings.Replace(good, `"path": "/v1/models"`, `"path": "v1/models"`, 1),
 		"no required probe":        strings.Replace(good, `"expect"`, `"optional": true, "expect"`, 1),

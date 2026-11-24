@@ -34,11 +34,10 @@ func TestConfigTextRoundTrip(t *testing.T) {
 	a := Answers{
 		Box: "main", Workspace: `/home/example\my "work"` + "\tspace", Memory: "8g", CPUs: 2.5, PIDs: 1024,
 		Network: "allow", Allow: []string{"registry.npmjs.org", "*.example.com"}, Harnesses: []string{"pi"},
-		Tools:     []string{"pack:coding", "ffmpeg"},
-		Engine:    "strata",
-		Overrides: map[string]config.EngineURL{"strata": {URL: "http://127.0.0.1:53000", KeyEnv: "STRATA_KEY", Host: "localhost:53000"}, "ollama": {}},
-		Models:    map[string]config.Model{"big-model": {Reasoning: yes(), MaxTokens: 8192, ContextWindow: 32768, Name: "Big"}, "small": {Reasoning: no()}, "empty": {}},
-		Log:       no(),
+		Tools:  []string{"pack:coding", "ffmpeg"},
+		Engine: config.Engine{API: "lmstudio", URL: "http://127.0.0.1:53000", KeyEnv: "ENGINE_KEY", Host: "localhost:53000"},
+		Models: map[string]config.Model{"big-model": {Reasoning: yes(), MaxTokens: 8192, ContextWindow: 32768, Name: "Big"}, "small": {Reasoning: no()}, "empty": {}},
+		Log:    no(),
 	}
 	text := ConfigText(a, time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC))
 	c, err := config.Parse(text)
@@ -47,17 +46,21 @@ func TestConfigTextRoundTrip(t *testing.T) {
 	}
 	back := FromConfig(c)
 	if back.Workspace != a.Workspace || back.Memory != "8g" || back.CPUs != 2.5 || back.PIDs != 1024 || back.Network != "allow" ||
-		strings.Join(back.Allow, ",") != "registry.npmjs.org,*.example.com" || back.Engine != "strata" || back.Log == nil || *back.Log {
+		strings.Join(back.Allow, ",") != "registry.npmjs.org,*.example.com" || back.Engine != a.Engine || back.Log == nil || *back.Log {
 		t.Errorf("box or engine: %+v", back)
 	}
 	if strings.Join(back.Tools, ",") != "pack:coding,ffmpeg" {
 		t.Errorf("tools: %q", back.Tools)
 	}
-	if back.Overrides["strata"] != a.Overrides["strata"] {
-		t.Errorf("override: %+v", back.Overrides)
+	if !strings.Contains(text, `api     = "lmstudio"`) || !strings.Contains(text, `url     = "http://127.0.0.1:53000"`) {
+		t.Errorf("engine section:\n%s", text)
 	}
-	if _, ok := back.Overrides["ollama"]; ok {
-		t.Error("an empty override should be left out")
+	// With no server chosen yet, url is a comment and api reads back as auto.
+	none := a
+	none.Engine = config.Engine{}
+	noneText := ConfigText(none, time.Now())
+	if c, err := config.Parse(noneText); err != nil || c.Engine != (config.Engine{API: "auto"}) || !strings.Contains(noneText, "# url") {
+		t.Errorf("no server: %v\n%s", err, noneText)
 	}
 	m := back.Models["big-model"]
 	if m.Reasoning == nil || !*m.Reasoning || m.MaxTokens != 8192 || m.ContextWindow != 32768 || m.Name != "Big" {
@@ -105,8 +108,8 @@ func facts(t *testing.T) Facts {
 	other := harness.Manifest{ID: "other", Name: "Other", Network: harness.Network{Domains: []string{"api.example.com"}}, Verified: harness.Verified{Status: "verified"}}
 	return Facts{
 		Engines: []detect.Engine{
-			{ID: "strata", Name: "Strata", URL: "http://127.0.0.1:53000", Models: []detect.Model{{ID: "big-model"}}},
-			{ID: "openai", Name: "OpenAI-compatible server", URL: "http://127.0.0.1:18080", Models: []detect.Model{{ID: "fake"}}},
+			{ID: "lmstudio", Name: "LM Studio API", URL: "http://127.0.0.1:53000", Models: []detect.Model{{ID: "big-model"}}, AlsoMatched: []string{"openai"}},
+			{ID: "openai", Name: "OpenAI-compatible API", URL: "http://127.0.0.1:18080", Models: []detect.Model{{ID: "fake"}}},
 		},
 		Harnesses: []harness.Manifest{other, pi}, DockerMemory: 31 * gib, Home: home,
 		Own:     []string{filepath.Join(home, "appdata", "ezbx")},
@@ -147,7 +150,7 @@ func TestGatherDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := res.Answers
-	if res.Engine == nil || res.Engine.ID != "strata" || a.Engine != "strata" || strings.Join(a.Harnesses, ",") != "pi" ||
+	if res.Engine == nil || res.Engine.ID != "lmstudio" || a.Engine != (config.Engine{API: "lmstudio", URL: "http://127.0.0.1:53000"}) || strings.Join(a.Harnesses, ",") != "pi" ||
 		a.Workspace != filepath.Join(f.Home, "ezbx", "workspace") || a.Network != "off" || a.Memory != "8g" || a.Box != "main" {
 		t.Errorf("%+v", a)
 	}
@@ -213,7 +216,7 @@ func TestGatherTyped(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	a := res.Answers
-	if res.Engine.ID != "openai" || a.Engine != "openai" || strings.Join(a.Harnesses, ",") != "other,pi" || a.Workspace != ws ||
+	if res.Engine.ID != "openai" || a.Engine != (config.Engine{API: "openai", URL: "http://127.0.0.1:18080"}) || strings.Join(a.Harnesses, ",") != "other,pi" || a.Workspace != ws ||
 		a.Network != "allow" || strings.Join(a.Allow, ",") != "pypi.org,github.com" || a.Memory != "6g" || strings.Join(a.Tools, ",") != "pack:coding,jq" {
 		t.Errorf("%+v", a)
 	}
@@ -236,24 +239,34 @@ func TestGatherFlags(t *testing.T) {
 	ws := filepath.Join(t.TempDir(), "ws")
 	p, _ := prompter("")
 	p.Auto = true
-	o := Options{Engine: "strata", URL: "http://127.0.0.1:53000", KeyEnv: "K", Reasoning: true, Harnesses: []string{"pi"}, Workspace: ws, Network: "on", Memory: "3g"}
+	// --url picks the server found there (a trailing slash aside).
+	o := Options{URL: "http://127.0.0.1:18080/", KeyEnv: "K", Reasoning: true, Harnesses: []string{"pi"}, Workspace: ws, Network: "on", Memory: "3g"}
 	res, err := Gather(f, o, p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	a := res.Answers
-	if a.Engine != "strata" || a.Overrides["strata"].URL != o.URL || a.Overrides["strata"].KeyEnv != "K" || a.Network != "on" || a.Memory != "3g" || a.Workspace != ws {
+	if res.Engine == nil || res.Engine.ID != "openai" || a.Engine != (config.Engine{API: "openai", URL: "http://127.0.0.1:18080", KeyEnv: "K"}) ||
+		a.Network != "on" || a.Memory != "3g" || a.Workspace != ws {
 		t.Errorf("%+v", a)
 	}
-	if r := a.Models["big-model"].Reasoning; r == nil || !*r {
+	if r := a.Models["fake"].Reasoning; r == nil || !*r {
 		t.Error("--reasoning")
 	}
-	o = Options{Engine: "auto"}
-	if res, _ = Gather(f, o, p); res.Answers.Engine != "auto" || res.Engine == nil {
-		t.Errorf("--engine auto: %+v", res.Answers.Engine)
+	if res, _ = Gather(f, Options{API: "auto"}, p); res.Engine == nil || res.Answers.Engine != (config.Engine{API: "auto", URL: "http://127.0.0.1:53000"}) {
+		t.Errorf("--api auto: %+v", res.Answers.Engine)
 	}
-	if res, _ = Gather(f, Options{Engine: "later"}, p); res.Engine != nil || res.Answers.Engine != "auto" {
-		t.Error("--engine later")
+	// A server with the LM Studio API also speaks OpenAI's, and --api openai
+	// uses it as a plain one.
+	if res, _ = Gather(f, Options{API: "openai"}, p); res.Engine == nil || res.Engine.ID != "lmstudio" || res.Answers.Engine.API != "openai" {
+		t.Errorf("--api openai: %+v", res.Answers.Engine)
+	}
+	// --api lmstudio offers only servers that speak it.
+	if res, _ = Gather(f, Options{API: "lmstudio", URL: "http://127.0.0.1:18080"}, p); res.Engine != nil || res.Answers.Engine != (config.Engine{API: "lmstudio", URL: "http://127.0.0.1:18080"}) {
+		t.Errorf("--api lmstudio at a plain server: %+v %+v", res.Engine, res.Answers.Engine)
+	}
+	if res, _ = Gather(f, Options{Later: true}, p); res.Engine != nil || res.Answers.Engine != (config.Engine{API: "auto"}) {
+		t.Errorf("--later: %+v", res.Answers.Engine)
 	}
 }
 
@@ -283,7 +296,7 @@ func TestGatherKeepsExisting(t *testing.T) {
 	f := facts(t)
 	ws := filepath.Join(t.TempDir(), "ws")
 	c, err := config.Parse("version = 1\n[box.work]\nworkspace = '" + ws + "'\nmemory = '5g'\ncpus = 3\nnetwork = 'allow'\nallow = ['pypi.org']\nharnesses = ['pi']\n" +
-		"[engine]\nuse = 'openai'\n[engine.openai]\nhost = 'localhost:18080'\n[models.fake]\nreasoning = true\nmax_tokens = 4096\n[gateway]\nlog = false\n")
+		"[engine]\napi = 'openai'\nurl = 'http://127.0.0.1:18080'\nhost = 'localhost:18080'\n[models.fake]\nreasoning = true\nmax_tokens = 4096\n[gateway]\nlog = false\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,8 +308,8 @@ func TestGatherKeepsExisting(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := res.Answers
-	if a.Box != "work" || a.Engine != "openai" || a.Workspace != ws || a.Memory != "5g" || a.CPUs != 3 || a.Network != "allow" ||
-		strings.Join(a.Allow, ",") != "pypi.org" || a.Overrides["openai"].Host != "localhost:18080" || a.Log == nil || *a.Log {
+	if a.Box != "work" || a.Engine.API != "openai" || a.Workspace != ws || a.Memory != "5g" || a.CPUs != 3 || a.Network != "allow" ||
+		strings.Join(a.Allow, ",") != "pypi.org" || a.Engine.Host != "localhost:18080" || a.Log == nil || *a.Log {
 		t.Errorf("%+v", a)
 	}
 	if m := a.Models["fake"]; m.Reasoning == nil || !*m.Reasoning || m.MaxTokens != 4096 {
@@ -311,6 +324,16 @@ func TestGatherKeepsExisting(t *testing.T) {
 	if len(ch) != 2 || !strings.Contains(ch[0], "network") || !strings.Contains(ch[1], "reasoning true") {
 		t.Errorf("%v", ch)
 	}
+	// Each engine setting that changes is named on the review screen.
+	b := FromConfig(c)
+	b.Engine = config.Engine{API: "lmstudio", URL: "http://127.0.0.1:53000", KeyEnv: "K"}
+	got := strings.Join(Changes(FromConfig(c), b), "\n")
+	for _, want := range []string{"engine     http://127.0.0.1:18080 -> http://127.0.0.1:53000", "api        openai -> lmstudio",
+		"key_env    (not set) -> K", "host       localhost:18080 -> (not set)"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
 }
 
 func TestGatherNoEngine(t *testing.T) {
@@ -319,14 +342,14 @@ func TestGatherNoEngine(t *testing.T) {
 	p, out := prompter("")
 	p.Auto = true
 	res, err := Gather(f, Options{}, p)
-	if err != nil || res.Engine != nil || res.Answers.Engine != "auto" {
+	if err != nil || res.Engine != nil || res.Answers.Engine != (config.Engine{API: "auto"}) {
 		t.Fatalf("%+v %v", res, err)
 	}
 	if !strings.Contains(out.String(), "none.") {
 		t.Error(out.String())
 	}
-	if res, _ = Gather(f, Options{Engine: "strata"}, p); res.Answers.Engine != "strata" {
-		t.Error("a named engine is written even if it isn't running yet")
+	if res, _ = Gather(f, Options{URL: "http://127.0.0.1:18090", API: "openai"}, p); res.Answers.Engine != (config.Engine{API: "openai", URL: "http://127.0.0.1:18090"}) {
+		t.Errorf("a server given is written even if it isn't answering yet: %+v", res.Answers.Engine)
 	}
 }
 
@@ -334,7 +357,7 @@ func plan(t *testing.T) Plan {
 	f := facts(t)
 	e := f.Engines[0]
 	return Plan{
-		Result:     Result{Engine: &e, Answers: Answers{Box: "main", Engine: "strata", Workspace: filepath.Join(f.Home, "ws"), Network: "off", Memory: "8g", Harnesses: []string{"pi"}}},
+		Result:     Result{Engine: &e, Answers: Answers{Box: "main", Engine: config.Engine{API: "lmstudio", URL: "http://127.0.0.1:53000"}, Workspace: filepath.Join(f.Home, "ws"), Network: "off", Memory: "8g", Harnesses: []string{"pi"}}},
 		ConfigFile: "ezbx.toml", StateDir: "state",
 		Images:    []Image{{Tag: "ezbx-gateway:aaa", Present: true}, {Tag: "ezbx-box:bbb", Present: true}},
 		Tools:     []string{"fd"},
@@ -349,7 +372,7 @@ func TestPlanStart(t *testing.T) {
 	}{
 		"ready":       {func(*Plan) {}, ""},
 		"no-start":    {func(p *Plan) { p.NoStart = true }, "--no-start"},
-		"no engine":   {func(p *Plan) { p.Result.Engine = nil }, "no engine"},
+		"no engine":   {func(p *Plan) { p.Result.Engine = nil }, "no model server"},
 		"no models":   {func(p *Plan) { e := *p.Result.Engine; e.Models = nil; p.Result.Engine = &e }, "no models"},
 		"image":       {func(p *Plan) { p.Images[1].Present = false }, ""}, // apply builds it first
 		"up, changed": {func(p *Plan) { p.BoxUp = true }, "ezbx down, then ezbx up"},
@@ -359,7 +382,7 @@ func TestPlanStart(t *testing.T) {
 			p.Old = &old
 		}, "already up"},
 		"key empty": {func(p *Plan) {
-			p.Result.Answers.Overrides = map[string]config.EngineURL{"strata": {KeyEnv: "K"}}
+			p.Result.Answers.Engine.KeyEnv = "K"
 		}, "K is empty"},
 	}
 	for name, tc := range cases {
@@ -378,7 +401,7 @@ func TestReview(t *testing.T) {
 	p.Result.Answers.Tools = []string{"pack:coding"}
 	p.Tools = []string{"fd", "jq"}
 	text := p.Review()
-	for _, want := range []string{"nothing has been changed yet", "Strata at http://127.0.0.1:53000", "Pi 1.5.0 (verified)", "(will be created)", "(new)",
+	for _, want := range []string{"nothing has been changed yet", "LM Studio API at http://127.0.0.1:53000", "Pi 1.5.0 (verified)", "(will be created)", "(new)",
 		"Tools         fd, jq   (from pack:coding)", "images        ezbx build: ezbx-gateway:aaa (downloads", "then          ezbx up"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in:\n%s", want, text)
@@ -417,13 +440,29 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestGatherNamedEngineNotRunning(t *testing.T) {
+// A --url where nothing answers yet is written anyway. Moving to a new
+// address drops key_env and host: a key is only ever sent to its own url.
+func TestGatherURLNotAnswering(t *testing.T) {
 	f := facts(t)
+	c, err := config.Parse("version = 1\n[box.main]\nworkspace = '" + filepath.Join(t.TempDir(), "ws") + "'\nharnesses = ['pi']\n" +
+		"[engine]\nurl = 'http://127.0.0.1:53000'\nkey_env = 'K'\nhost = 'localhost:53000'\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Existing = c
 	p, out := prompter("")
 	p.Auto = true
-	res, err := Gather(f, Options{Engine: "ollama"}, p)
-	if err != nil || res.Engine != nil || res.Answers.Engine != "ollama" || !strings.Contains(out.String(), "not running now") {
+	res, err := Gather(f, Options{URL: "http://127.0.0.1:18090"}, p)
+	if err != nil || res.Engine != nil || !strings.Contains(out.String(), "Nothing answers at http://127.0.0.1:18090 now") {
 		t.Fatalf("%+v %v\n%s", res, err, out)
+	}
+	if res.Answers.Engine != (config.Engine{API: "auto", URL: "http://127.0.0.1:18090"}) {
+		t.Errorf("the old key_env and host must not follow a new url: %+v", res.Answers.Engine)
+	}
+	// The same address keeps them.
+	res, err = Gather(f, Options{}, p)
+	if err != nil || res.Answers.Engine != (config.Engine{API: "lmstudio", URL: "http://127.0.0.1:53000", KeyEnv: "K", Host: "localhost:53000"}) {
+		t.Errorf("same url: %+v %v", res.Answers.Engine, err)
 	}
 }
 
@@ -442,19 +481,19 @@ func TestGatherAllowHostsAreChecked(t *testing.T) {
 	}
 }
 
-// A key is only sent to its engine's url, so choosing an engine with a key
-// pins the address where it was found.
-func TestGatherPinsTheURLOfAKey(t *testing.T) {
+// ezbx up contacts only the configured address (and a key is only sent
+// there), so choosing a server always writes where it was found.
+func TestGatherPinsTheURL(t *testing.T) {
 	f := facts(t)
 	p, _ := prompter("")
 	p.Auto = true
-	o := Options{Engine: "openai", KeyEnv: "K", Harnesses: []string{"pi"}, Workspace: filepath.Join(t.TempDir(), "ws")}
+	o := Options{KeyEnv: "K", Harnesses: []string{"pi"}, Workspace: filepath.Join(t.TempDir(), "ws")}
 	res, err := Gather(f, o, p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ov := res.Answers.Overrides["openai"]; ov.URL != "http://127.0.0.1:18080" || ov.KeyEnv != "K" {
-		t.Errorf("%+v", ov)
+	if e := res.Answers.Engine; e != (config.Engine{API: "lmstudio", URL: "http://127.0.0.1:53000", KeyEnv: "K"}) {
+		t.Errorf("%+v", e)
 	}
 }
 
@@ -463,7 +502,7 @@ func TestGatherExplainsRefusals(t *testing.T) {
 	f.Refused = []detect.Refusal{{URL: "http://127.0.0.1:18081"}, {URL: "http://127.0.0.1:18082", KeySent: true}}
 	p, out := prompter("")
 	p.Auto = true
-	if _, err := Gather(f, Options{Engine: "later", Harnesses: []string{"pi"}, Workspace: filepath.Join(t.TempDir(), "ws")}, p); err != nil {
+	if _, err := Gather(f, Options{Later: true, Harnesses: []string{"pi"}, Workspace: filepath.Join(t.TempDir(), "ws")}, p); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"18081 asks for a key", "--url http://127.0.0.1:18081 --key-env NAME", "18082 refused the key"} {
@@ -520,16 +559,16 @@ func TestDiskWarning(t *testing.T) {
 }
 
 // A model named by a file path is warned about on the review screen, with
-// the fix for llama.cpp.
+// the fix.
 func TestReviewWarnsAboutFileNamedModels(t *testing.T) {
 	p := plan(t)
 	if strings.Contains(p.Review(), "by a file path") {
 		t.Fatal("warned with no file-named model")
 	}
 	e := *p.Result.Engine
-	e.ID, e.Name, e.Models = "llamacpp", "llama.cpp server", []detect.Model{{ID: "/models/big-model.gguf"}}
+	e.Models = []detect.Model{{ID: "/models/big-model.gguf"}}
 	p.Result.Engine = &e
-	if text := p.Review(); !strings.Contains(text, "Warning: llama.cpp server names 1 model(s) by a file path") || !strings.Contains(text, "--alias NAME, then run ezbx init again") {
+	if text := p.Review(); !strings.Contains(text, "Warning: The server at http://127.0.0.1:53000 names 1 model(s) by a file path") || !strings.Contains(text, "in the server's settings, then run ezbx init again") {
 		t.Errorf("no warning:\n%s", text)
 	}
 }

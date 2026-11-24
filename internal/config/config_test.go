@@ -19,11 +19,9 @@ allow     = ["registry.npmjs.org", "*.example.com"]
 harnesses = ["pi"]
 
 [engine]
-use = "strata"
-
-[engine.strata]
+api     = "lmstudio"
 url     = "http://127.0.0.1:18080"
-key_env = "STRATA_API_KEY"
+key_env = "ENGINE_API_KEY"
 host    = "localhost:18080"
 
 [models."big-model"]
@@ -46,8 +44,7 @@ func TestParseGood(t *testing.T) {
 	if b.Network != "allow" || len(b.Allow) != 2 || b.Harnesses[0] != "pi" {
 		t.Errorf("box: %+v", b)
 	}
-	o := c.Engine.Overrides["strata"]
-	if c.Engine.Use != "strata" || o.URL != "http://127.0.0.1:18080" || o.KeyEnv != "STRATA_API_KEY" || o.Host != "localhost:18080" {
+	if want := (Engine{API: "lmstudio", URL: "http://127.0.0.1:18080", KeyEnv: "ENGINE_API_KEY", Host: "localhost:18080"}); c.Engine != want {
 		t.Errorf("engine: %+v", c.Engine)
 	}
 	m := c.Models["big-model"]
@@ -68,8 +65,8 @@ func TestDefaults(t *testing.T) {
 	if b.Memory != "" || b.PIDs != DefaultPIDs || b.Network != "off" || b.CPUsFlag() != "" {
 		t.Errorf("defaults: %+v", b)
 	}
-	if c.Engine.Use != "auto" || !c.LogOn() {
-		t.Errorf("engine %q, log %v", c.Engine.Use, c.LogOn())
+	if c.Engine != (Engine{API: "auto"}) || !c.LogOn() {
+		t.Errorf("engine %+v, log %v", c.Engine, c.LogOn())
 	}
 	if b.Tools != nil {
 		t.Errorf("no tools key means not set: %#v", b.Tools)
@@ -123,31 +120,34 @@ func TestReadOnlyEntries(t *testing.T) {
 func TestRefused(t *testing.T) {
 	base := "version = 1\n[box.main]\nworkspace = '/w'\nharnesses = [\"pi\"]\n"
 	cases := map[string]struct{ text, want string }{
-		"typo at top":      {"verison = 2\n" + base, "unknown setting: verison"},
-		"typo in box":      {strings.Replace(base, "workspace", "netwrok = 'on'\nworkspace", 1), "unknown setting: box.main.netwrok"},
-		"typo in engine":   {base + "[engine.strata]\nurll = 'http://x'\n", "unknown setting: engine.strata.urll"},
-		"typo in model":    {base + "[models.m]\nreasonin = true\n", "unknown setting: models.m.reasonin"},
-		"typo in gateway":  {base + "[gateway]\nlogs = true\n", "unknown setting: gateway.logs"},
-		"wrong version":    {strings.Replace(base, "version = 1", "version = 2", 1), "version must be 1"},
-		"no box":           {"version = 1\n", "no box"},
-		"two boxes":        {base + "[box.other]\nworkspace = '/x'\nharnesses = ['pi']\n", "this version runs one box"},
-		"bad box name":     {strings.Replace(base, "box.main", "box.Main", 1), "box name"},
-		"no workspace":     {strings.Replace(base, "workspace = '/w'", "", 1), "workspace is required"},
-		"bad memory":       {strings.Replace(base, "workspace", "memory = 'lots'\nworkspace", 1), "memory"},
-		"bad network":      {strings.Replace(base, "workspace", "network = 'open'\nworkspace", 1), "network"},
-		"bad allow host":   {strings.Replace(base, "workspace", "allow = ['192.0.2.1:80']\nworkspace", 1), "allow"},
-		"allow address":    {strings.Replace(base, "workspace", "allow = ['192.0.2.1']\nworkspace", 1), "allow"},
-		"no harness":       {strings.Replace(base, `harnesses = ["pi"]`, "harnesses = []", 1), "harnesses is empty"},
-		"readonly no path": {base + "[[box.main.readonly]]\nmask = ['x']\n", "readonly[0].path is required"},
-		"readonly name":    {base + "[[box.main.readonly]]\npath = '/p'\nname = 'My Docs'\n", "readonly[0].name"},
-		"readonly twice":   {base + "[[box.main.readonly]]\npath = '/p'\nname = 'd'\n[[box.main.readonly]]\npath = '/q'\nname = 'd'\n", "readonly[1].name \"d\" is used twice"},
-		"readonly mask":    {base + "[[box.main.readonly]]\npath = '/p'\nmask = ['../up']\n", "readonly[0].mask"},
-		"readonly unmask":  {base + "[[box.main.readonly]]\npath = '/p'\nunmask = ['.ENV']\n", "isn't one of the default masks"},
-		"readonly typo":    {base + "[[box.main.readonly]]\npath = '/p'\nmasks = ['x']\n", "unknown setting"},
-		"key not env name": {base + "[engine.strata]\nkey_env = 'sk-abc def'\n", "NAME of an environment variable"},
-		"key without url":  {base + "[engine.strata]\nkey_env = 'K'\n", "key_env needs url too"},
-		"url without http": {base + "[engine.strata]\nurl = '127.0.0.1:18080'\n", "must start with http"},
-		"engine not table": {base + "[engine]\nstrata = 'http://x'\n", "must be a table"},
+		"typo at top":       {"verison = 2\n" + base, "unknown setting: verison"},
+		"typo in box":       {strings.Replace(base, "workspace", "netwrok = 'on'\nworkspace", 1), "unknown setting: box.main.netwrok"},
+		"typo in engine":    {base + "[engine]\nurll = 'http://x'\n", "unknown setting: engine.urll"},
+		"typo in model":     {base + "[models.m]\nreasonin = true\n", "unknown setting: models.m.reasonin"},
+		"typo in gateway":   {base + "[gateway]\nlogs = true\n", "unknown setting: gateway.logs"},
+		"wrong version":     {strings.Replace(base, "version = 1", "version = 2", 1), "version must be 1"},
+		"no box":            {"version = 1\n", "no box"},
+		"two boxes":         {base + "[box.other]\nworkspace = '/x'\nharnesses = ['pi']\n", "this version runs one box"},
+		"bad box name":      {strings.Replace(base, "box.main", "box.Main", 1), "box name"},
+		"no workspace":      {strings.Replace(base, "workspace = '/w'", "", 1), "workspace is required"},
+		"bad memory":        {strings.Replace(base, "workspace", "memory = 'lots'\nworkspace", 1), "memory"},
+		"bad network":       {strings.Replace(base, "workspace", "network = 'open'\nworkspace", 1), "network"},
+		"bad allow host":    {strings.Replace(base, "workspace", "allow = ['192.0.2.1:80']\nworkspace", 1), "allow"},
+		"allow address":     {strings.Replace(base, "workspace", "allow = ['192.0.2.1']\nworkspace", 1), "allow"},
+		"no harness":        {strings.Replace(base, `harnesses = ["pi"]`, "harnesses = []", 1), "harnesses is empty"},
+		"readonly no path":  {base + "[[box.main.readonly]]\nmask = ['x']\n", "readonly[0].path is required"},
+		"readonly name":     {base + "[[box.main.readonly]]\npath = '/p'\nname = 'My Docs'\n", "readonly[0].name"},
+		"readonly twice":    {base + "[[box.main.readonly]]\npath = '/p'\nname = 'd'\n[[box.main.readonly]]\npath = '/q'\nname = 'd'\n", "readonly[1].name \"d\" is used twice"},
+		"readonly mask":     {base + "[[box.main.readonly]]\npath = '/p'\nmask = ['../up']\n", "readonly[0].mask"},
+		"readonly unmask":   {base + "[[box.main.readonly]]\npath = '/p'\nunmask = ['.ENV']\n", "isn't one of the default masks"},
+		"readonly typo":     {base + "[[box.main.readonly]]\npath = '/p'\nmasks = ['x']\n", "unknown setting"},
+		"key not env name":  {base + "[engine]\nurl = 'http://x'\nkey_env = 'sk-abc def'\n", "NAME of an environment variable"},
+		"key without url":   {base + "[engine]\nkey_env = 'K'\n", "key_env needs url too"},
+		"url without http":  {base + "[engine]\nurl = '127.0.0.1:18080'\n", "must start with http"},
+		"unknown in engine": {base + "[engine]\ndemo = 'http://x'\n", "unknown setting: engine.demo"},
+		// ezbx 0.2 named an engine; such a config is explained, not just refused.
+		"old engine.use":   {base + "[engine]\nuse = 'auto'\n", "the [engine] section changed"},
+		"old engine table": {base + "[engine.demo]\nurl = 'http://x'\n", "the [engine] section changed"},
 		"few pids":         {strings.Replace(base, "workspace", "pids = 10\nworkspace", 1), "pids"},
 		"bad toml":         {base + "memory = \n", "line"},
 		"negative context": {base + "[models.m]\ncontext = -1\n", "negative"},

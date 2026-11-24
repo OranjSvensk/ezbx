@@ -12,7 +12,7 @@ You need three things on your computer:
 
 1. **Docker Desktop** (with Docker Engine 28 or later), running. ezbx never installs or starts Docker for you.
 2. **Go 1.27 or later**, to build `ezbx` from source.
-3. **A local inference engine** (such as Strata, LM Studio, Ollama or llama.cpp) running on your computer with at least one model loaded. You can still run setup without a running engine and start the model later.
+3. **A local model server** running on your computer with at least one model loaded. Any program that serves an OpenAI-compatible API works ([engine-adapters.md](engine-adapters.md)). You can still run setup without one and start the model later.
 
 ---
 
@@ -58,7 +58,7 @@ ezbx --help
 
 ## 3. Set up your first box (`ezbx init`)
 
-Start Docker Desktop and your inference engine (with a model loaded), then run:
+Start Docker Desktop and your model server (with a model loaded), then run:
 
 ```text
 ezbx init
@@ -68,12 +68,12 @@ To preview what `ezbx init` will ask and create without changing anything on dis
 
 `ezbx init` walks you through six steps and shows the full plan before touching anything:
 
-1. **Inference engine:** `ezbx init` detects running engines on your computer and picks the first match by default. If your engine is on a custom port or requires an API key, pass `--engine`, `--url` and `--key-env`:
+1. **Model server:** `ezbx init` looks at a few common local ports, lists the servers it finds with the API each one speaks, and picks the first by default. It writes the address you pick as `url` under `[engine]`, and `ezbx up` contacts only that address. If your server is on another port or requires an API key, pass `--url` and `--key-env`:
    ```text
-   ezbx init --engine strata --url http://127.0.0.1:PORT --key-env STRATA_API_KEY
+   ezbx init --url http://127.0.0.1:PORT --key-env ENGINE_API_KEY
    ```
-   The key itself is never written into `ezbx.toml` or container images — ezbx only reads the named environment variable when starting the gateway.
-2. **Reasoning models:** Engines don't report whether a model thinks before answering, so `init` asks per model (`Is <model> a reasoning model?`). Answer `y` for reasoning models so their output isn't cut off mid-thought.
+   The key itself is never written into `ezbx.toml` or container images — ezbx only reads the named environment variable when starting the gateway. `--api openai` (or `lmstudio`) picks the API kind; the default, `auto`, uses the most specific one the server answers.
+2. **Reasoning models:** Servers don't report whether a model thinks before answering, so `init` asks per model (`Is <model> a reasoning model?`). Answer `y` for reasoning models so their output isn't cut off mid-thought.
 3. **Harnesses:** Choose one or more harnesses by number (coding tools first, assistant tools after):
 
    | ID | Name | Kind | Approval-skip flag (inside the box) |
@@ -169,8 +169,8 @@ Temporary mode switches reset to `ezbx.toml` on the next `ezbx up`, so a forgott
 |---|---|
 | Stop containers (keeps workspace, snapshots, and home volume) | `ezbx down` |
 | Start containers | `ezbx up` |
-| Find running engines | `ezbx engine detect` |
-| Point running box at another engine or port | `ezbx engine use <id>` (or `--url http://127.0.0.1:PORT`) |
+| Find model servers and the API each speaks | `ezbx engine detect` |
+| Point running box at the server again, or at another address | `ezbx engine use` (or `--url http://127.0.0.1:PORT`) |
 | Run full security, isolation, and model checks | `ezbx doctor` |
 | Open a temporary root shell (human-only, never the agent) | `ezbx admin shell` (add `--net` for temporary network) |
 | Wipe the agent home after taking a full backup | `ezbx reset` (`--restore <ID>` to undo) |
@@ -203,7 +203,8 @@ Use `--config FILE` or `EZBX_CONFIG` to point at a custom config file, and see [
 
 ### Common issues
 
-- **"Engine not found" during `init` or `up`:** Make sure your inference engine is running with a model loaded. If it runs on an unusual port, pass `--url http://127.0.0.1:PORT` (or set `url` under `[engine.<id>]` in `ezbx.toml`).
-- **Model replies stop mid-thought:** Add a `[models."<model-id>"]` section to `ezbx.toml` with `reasoning = true` and `max_tokens = 8192`, then run `ezbx down` and `ezbx up` (or `ezbx engine use <id>`).
+- **"Nothing answered at ..." during `up`, or no server listed by `init`:** Make sure your model server is running with a model loaded. If it runs on an unusual port, pass `--url http://127.0.0.1:PORT` to `init` (or set `url` under `[engine]` in `ezbx.toml`).
+- **"The [engine] section changed":** the config was written by ezbx 0.2 or earlier, which named an engine. Replace the `[engine]` section as the message shows, or run `ezbx init` again with `--url`.
+- **Model replies stop mid-thought:** Add a `[models."<model-id>"]` section to `ezbx.toml` with `reasoning = true` and `max_tokens = 8192`, then run `ezbx down` and `ezbx up` (or `ezbx engine use`).
 - **"Permission denied" in `/workspace`:** If Docker created a missing workspace directory as root, fix ownership from the host with `ezbx admin shell -- chown 1000:1000 /workspace` (from Git Bash, prefix with `MSYS_NO_PATHCONV=1`).
 - **"Admin shell is already running":** If a terminal closed unexpectedly while `ezbx admin shell` was open, clean it up with `docker stop ezbx-main-admin`.

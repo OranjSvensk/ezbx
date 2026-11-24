@@ -1,19 +1,17 @@
 // Command ezbx is the ezbx command line tool.
 //
-// It starts and stops a box (ezbx up, ezbx down), finds inference engines
-// (ezbx engine detect), runs the gateway (ezbx gateway serve) and more.
+// It starts and stops a box (ezbx up, ezbx down), finds model servers by the
+// API they speak (ezbx engine detect), runs the gateway (ezbx gateway serve)
+// and more.
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -41,8 +39,8 @@ const usage = `ezbx - boxed-up local AI agents
 
 Usage:
   ezbx [--version] [help]
-  ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--engine ID|auto|later]
-            [--url ADDRESS] [--key-env NAME] [--reasoning]
+  ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--url ADDRESS | --later]
+            [--api auto|openai|lmstudio] [--key-env NAME] [--reasoning]
             [--harness pi,opencode,omp,codex,claude,hermes,openclaw]
             [--tools pack:coding,ffmpeg|none] [--workspace PATH]
             [--network off|allow|on] [--memory 8g]
@@ -59,8 +57,8 @@ Usage:
   ezbx net [off|allow|on] [--box NAME]
   ezbx net allow|remove HOST... [--box NAME]
   ezbx engine detect [--json] [--timeout 500ms] [--url ADDRESS]...
-  ezbx engine use [ID] [--url ADDRESS] [--box NAME]
-  ezbx gateway serve [--upstream ADDRESS] [--engine ID] [--listen ADDRESS]
+  ezbx engine use [--url ADDRESS] [--api auto|openai|lmstudio] [--box NAME]
+  ezbx gateway serve [--upstream ADDRESS] [--engine KIND] [--listen ADDRESS]
                      [--key-env NAME | --key-file FILE] [--log FILE]
                      [--proxy ADDRESS] [--network off|allow|on] [--allow HOST]...
                      [--allow-file FILE]
@@ -72,7 +70,7 @@ Usage:
   ezbx doctor [--config FILE] [--box NAME] [--json]
 
 Commands:
-  init            Guided setup: finds the engine, asks the questions, shows
+  init            Guided setup: finds the model server, asks the questions, shows
                   the plan, then writes ezbx.toml and starts the box.
                   Run it again to change the setup.
   build           Build the gateway and box images from the files inside
@@ -82,7 +80,7 @@ Commands:
                   removes older ezbx images, after asking.
   up              Start the box described in ezbx.toml: its networks, the
                   gateway and the box, with the harness config filled in
-                  from the engine's models. Then run the doctor.
+                  from the model server's models. Then run the doctor.
   down            Remove the box's containers and networks. The workspace,
                   the state folder and the agent's home volume are kept.
   shell           Open bash in the box's workspace, or start a harness
@@ -110,25 +108,27 @@ Commands:
                   hosts. net off|allow|on changes the mode until the next
                   up. net allow HOST approves a host and saves it, so it
                   stays approved; net remove HOST forgets it.
-  engine detect   Find inference engines running on this computer.
-  engine use      Point the running gateway at an engine (found again now,
-                  or at --url) and refresh the harness config in the box.
-                  Lasts until the next up, which uses ezbx.toml.
-  gateway serve   Run the gateway: the model route (/v1/... to one engine),
+  engine detect   Find model servers on this computer's common ports (and
+                  at --url), and the API each one speaks. Any server with
+                  an OpenAI-compatible API works, whatever program runs it.
+  engine use      Point the running gateway at the server in ezbx.toml (or
+                  at --url), checked again now, and refresh the harness
+                  config in the box. Lasts until the next up.
+  gateway serve   Run the gateway: the model route (/v1/... to one server),
                   and optionally the egress proxy and the admin API.
-                  Without --upstream it uses the one engine it detects.
+                  Without --upstream it uses the one server it finds.
   gateway admin   Call the admin API. Meant to run inside the gateway
                   container through docker exec. CALL is one of:
                     status
-                    ready              (does the engine answer with models?)
-                    engine UPSTREAM [ID]
+                    ready              (does the server answer with models?)
+                    engine UPSTREAM [KIND]
                     network off|allow|on [HOST]...
                     allow HOST
   gateway health  Exit 0 if the gateway answers /healthz, for Docker's
                   healthcheck.
   harness render  Write a harness's config files, filled in from the
-                  engine's model list, laid out like the agent's home.
-  doctor          Check Docker, the engine, the networks, the gateway and
+                  server's model list, laid out like the agent's home.
+  doctor          Check Docker, the model server, the networks, the gateway and
                   the box, then check from inside the box's network that it
                   reaches the model and nothing else. Explains each fix.
   version         Print the ezbx version (same as --version or -v).
@@ -232,11 +232,11 @@ func runDetect(args []string, stdout, stderr io.Writer) int {
 
 	adapters, err := adapter.LoadFS(providers.FS)
 	if err != nil {
-		fmt.Fprintln(stderr, "internal error loading adapters:", err)
+		fmt.Fprintln(stderr, "internal error loading the API kinds:", err)
 		return 1
 	}
 
-	d := &detect.Detector{Adapters: adapters, Run: runCommand, Timeout: *timeout}
+	d := &detect.Detector{Adapters: adapters, Timeout: *timeout}
 	res := d.Detect(context.Background(), urls)
 
 	if *asJSON {
@@ -253,17 +253,17 @@ func runDetect(args []string, stdout, stderr io.Writer) int {
 
 func printTable(w io.Writer, res detect.Result) {
 	if len(res.Engines) == 0 {
-		fmt.Fprintln(w, "No inference engine found.")
-		fmt.Fprintln(w, "Start one, or point at it with --url http://127.0.0.1:PORT")
+		fmt.Fprintln(w, "No model server found on the common ports.")
+		fmt.Fprintln(w, "Start one, or point at it with --url http://127.0.0.1:PORT. Any server with an OpenAI-compatible API works.")
 	} else {
-		fmt.Fprintln(w, "Inference engines found")
+		fmt.Fprintln(w, "Model servers found (by the API they speak)")
 		for _, e := range res.Engines {
-			fmt.Fprintf(w, "  %-10s %s   %d model(s)   [%s]\n", e.ID, e.URL, len(e.Models), e.Verified)
+			fmt.Fprintf(w, "  %-10s %s   %d model(s)\n", e.ID, e.URL, len(e.Models))
 			for _, m := range e.Models {
 				fmt.Fprintf(w, "      %s%s\n", m.ID, describe(m))
 			}
 			if len(e.AlsoMatched) > 0 {
-				fmt.Fprintf(w, "      (also looked like: %s; the most specific match was chosen)\n", strings.Join(e.AlsoMatched, ", "))
+				fmt.Fprintf(w, "      (also speaks: %s; the most specific kind was chosen)\n", strings.Join(e.AlsoMatched, ", "))
 			}
 			if fw := detect.FileNamedWarning(e); fw != "" {
 				fmt.Fprintf(w, "      warning: %s.\n", fw)
@@ -274,11 +274,8 @@ func printTable(w io.Writer, res detect.Result) {
 		if r.KeySent {
 			fmt.Fprintf(w, "note: %s refused the key it was sent\n", r.URL)
 		} else {
-			fmt.Fprintf(w, "note: %s asks for a key, so it wasn't checked. Set url and key_env under [engine.ID] in ezbx.toml\n", r.URL)
+			fmt.Fprintf(w, "note: %s asks for a key, so it wasn't checked. Set url and key_env under [engine] in ezbx.toml\n", r.URL)
 		}
-	}
-	for _, n := range res.Notes {
-		fmt.Fprintln(w, "note:", n)
 	}
 }
 
@@ -297,37 +294,4 @@ func describe(m detect.Model) string {
 		return ""
 	}
 	return "   (" + strings.Join(parts, ", ") + ")"
-}
-
-// runCommand runs an engine's own status command. Only commands that come
-// from the adapters built into ezbx are ever run.
-func runCommand(ctx context.Context, argv []string) ([]byte, error) {
-	return runCommandFor(ctx, argv, 5*time.Second)
-}
-
-// runCommandFor runs a command with a time limit. When the limit is reached,
-// the command and everything it started are ended, not just the first
-// process (see killTree).
-func runCommandFor(ctx context.Context, argv []string, limit time.Duration) ([]byte, error) {
-	if len(argv) == 0 {
-		return nil, errors.New("empty command")
-	}
-	ctx, cancel := context.WithTimeout(ctx, limit)
-	defer cancel()
-
-	path, err := exec.LookPath(argv[0])
-	if err != nil {
-		return nil, err
-	}
-	cmd := exec.CommandContext(ctx, path, argv[1:]...)
-	prepareTree(cmd)
-	cmd.Cancel = func() error { return killTree(cmd.Process) }
-	// If a leftover process still holds the output pipe, stop waiting anyway.
-	cmd.WaitDelay = 2 * time.Second
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return nil, err
-	}
-	return out.Bytes(), nil
 }

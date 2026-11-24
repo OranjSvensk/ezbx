@@ -64,8 +64,8 @@ func goodDocker() *fakeDocker {
 			},
 		},
 		exec: map[string]string{
-			"status":       `{"engine":"strata","upstream":"http://host.docker.internal:53000","network":{"mode":"off","allow":[]}}`,
-			"ready":        `{"ready":true,"engine":"strata","models":1}`,
+			"status":       `{"engine":"openai","upstream":"http://host.docker.internal:53000","network":{"mode":"off","allow":[]}}`,
+			"ready":        `{"ready":true,"engine":"openai","models":1}`,
 			writableScript: "writable\n",
 		},
 		inside:   Report{Checks: []Check{{Group: "From inside the box", Name: "model list through the gateway", Status: Pass}}},
@@ -111,7 +111,7 @@ func (f *fakeDocker) run(_ context.Context, args ...string) ([]byte, error) {
 }
 
 func runWith(f *fakeDocker) Report {
-	return runEngines(f, []detect.Engine{{ID: "strata", Name: "Strata", URL: "http://127.0.0.1:53000", Models: []detect.Model{{ID: "m"}}}}, nil, nil)
+	return runEngines(f, []detect.Engine{{ID: "openai", Name: "OpenAI-compatible API", URL: "http://127.0.0.1:53000", Models: []detect.Model{{ID: "m"}}}}, nil, nil)
 }
 
 // runEngines runs the doctor with engines found on the usual ports, plus
@@ -224,7 +224,7 @@ func TestAGoodSetupPasses(t *testing.T) {
 	if err := json.Unmarshal([]byte(run[len(run)-1]), &ic); err != nil {
 		t.Fatal(err)
 	}
-	if ic.Gateway != "gateway:8000" || ic.Proxy != "gateway:3128" || ic.Mode != "off" || ic.Engine != "strata" || joinInts(ic.OpenPorts) != "8000,3128" {
+	if ic.Gateway != "gateway:8000" || ic.Proxy != "gateway:3128" || ic.Mode != "off" || ic.Engine != "openai" || joinInts(ic.OpenPorts) != "8000,3128" {
 		t.Errorf("inside config: %+v", ic)
 	}
 	for _, want := range []string{"172.19.0.2:8000", "172.19.0.1:80", "192.0.2.10:445"} {
@@ -388,10 +388,10 @@ func TestEngineKeyCheck(t *testing.T) {
 
 	// The way older versions passed it.
 	f = goodDocker()
-	cmd(f, "--key-env", "STRATA_API_KEY")
-	gwCfg(f)["Env"] = []string{"PATH=/usr/bin", "STRATA_API_KEY=kv-docs-example-1"}
+	cmd(f, "--key-env", "ENGINE_API_KEY")
+	gwCfg(f)["Env"] = []string{"PATH=/usr/bin", "ENGINE_API_KEY=kv-docs-example-1"}
 	c := find(t, runWith(f), "engine key")
-	if c.Status != Warn || !strings.Contains(c.Detail, "STRATA_API_KEY") || strings.Contains(c.Detail, "kv-docs-example-1") {
+	if c.Status != Warn || !strings.Contains(c.Detail, "ENGINE_API_KEY") || strings.Contains(c.Detail, "kv-docs-example-1") {
 		t.Errorf("key in the environment: %+v", c)
 	}
 
@@ -440,7 +440,7 @@ func TestEngineThatAsksForAKey(t *testing.T) {
 		Docker: f.run,
 		Detect: func(context.Context, []string) detect.Result {
 			return detect.Result{
-				Engines: []detect.Engine{{ID: "strata", Name: "Strata", URL: "http://127.0.0.1:53000", Models: []detect.Model{{ID: "m"}}}},
+				Engines: []detect.Engine{{ID: "openai", Name: "OpenAI-compatible API", URL: "http://127.0.0.1:53000", Models: []detect.Model{{ID: "m"}}}},
 				Refused: []detect.Refusal{{URL: "http://127.0.0.1:18080"}},
 			}
 		},

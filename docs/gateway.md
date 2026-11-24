@@ -50,7 +50,7 @@ Responses that stream (server-sent events) are forwarded as they arrive, with no
 
 - **Box to gateway:** a placeholder key. It is not a real credential and exists because some harnesses insist on one.
 - **Gateway to engine:** if the engine needs a key, the gateway adds it. You name an environment variable holding it with `key_env` in `ezbx.toml` (environment variables only in 0.1, decided in `init-flow.md`). The key is never written into an image, a config the box can read, or a log.
-- **How the key reaches the gateway** (design decision 18). `ezbx up` reads the variable and writes the key to `engine-key` in the box's state folder, readable only by you, and mounts that one file read-only into the gateway at `/run/ezbx/engine-key` (never into the box). The gateway reads it once at start with `--key-file`. The gateway's environment and command line hold no key, so `docker inspect`, which people tend to paste into bug reports, doesn't show it; an earlier version passed it as an environment variable, which did. `ezbx down` removes the file with the containers, so the key is on disk only while the box exists, and a restart of Docker Desktop still finds it. A key that is empty, over 4 KB, or holds a line break (one trailing line break is dropped) stops `up` before anything is made, and the gateway refuses such a file too. `ezbx gateway serve --key-env NAME` still works for running the gateway by hand. `ezbx engine use` still refuses an engine with a key: switch with `engine.use` in `ezbx.toml`, then `ezbx down` and `ezbx up`. `ezbx doctor` warns if the gateway has a key in its environment (a box started by an older version).
+- **How the key reaches the gateway** (design decision 18). `ezbx up` reads the variable and writes the key to `engine-key` in the box's state folder, readable only by you, and mounts that one file read-only into the gateway at `/run/ezbx/engine-key` (never into the box). The gateway reads it once at start with `--key-file`. The gateway's environment and command line hold no key, so `docker inspect`, which people tend to paste into bug reports, doesn't show it; an earlier version passed it as an environment variable, which did. `ezbx down` removes the file with the containers, so the key is on disk only while the box exists, and a restart of Docker Desktop still finds it. A key that is empty, over 4 KB, or holds a line break (one trailing line break is dropped) stops `up` before anything is made, and the gateway refuses such a file too. `ezbx gateway serve --key-env NAME` still works for running the gateway by hand. `ezbx engine use` still refuses a server with a key: set it under `[engine]` in `ezbx.toml`, then `ezbx down` and `ezbx up`. `ezbx doctor` warns if the gateway has a key in its environment (a box started by an older version).
 
 ### Model list
 
@@ -60,7 +60,7 @@ Responses that stream (server-sent events) are forwarded as they arrive, with no
 
 Every reply that comes from the engine carries:
 
-- `X-Ezbx-Engine`: the engine id (for example `strata`).
+- `X-Ezbx-Engine`: the server's API kind (for example `openai`).
 - `X-Ezbx-Request-Id`: the id of the matching log line.
 - `X-Ezbx-Model`: the model name from the request, only when the request named one.
 
@@ -68,15 +68,15 @@ Any `X-Ezbx-*` header the engine sends itself is removed first, so only the gate
 
 These let `ezbx doctor` prove which engine answered (open question 4 in `design.md`).
 
-## 4. Switching engines
+## 4. Switching servers
 
-1. `ezbx engine use <id>` updates the config and calls the admin API.
-2. The gateway swaps its upstream. Requests already in flight finish on the old engine, and new requests go to the new one.
-3. If the model list changed, the CLI regenerates harness configs (`ezbx harness sync`).
+1. `ezbx engine use` (with `--url ADDRESS` or `--api KIND` to change them) checks the server again and calls the admin API. The change lasts until the next `ezbx up`, which uses `ezbx.toml`.
+2. The gateway swaps its upstream. Requests already in flight finish on the old server, and new requests go to the new one.
+3. The command rewrites the harness configs in the box from the server's model list.
 
-Reaching the host: on Docker Desktop the gateway uses the host alias, and this works for an engine bound to the host's loopback address (tested with Strata). Other setups come later (decision 4).
+Reaching the host: on Docker Desktop the gateway uses the host alias, and this works for a server bound to the host's loopback address (tested). Other setups come later (decision 4).
 
-**The Host header.** Some engines protect themselves against DNS rebinding by refusing any request whose `Host` header isn't a local name. Strata does, and refused `host.docker.internal:PORT` with 403. When the upstream is Docker Desktop's host alias (`host.docker.internal` or `gateway.docker.internal`), the gateway therefore sends `Host: localhost:PORT`. It still connects through the alias; only the name it presents changes. That is accurate, since the engine really is on the host's loopback. `--upstream-host` sets the header by hand for other setups. It takes only a host name or address with an optional port.
+**The Host header.** Some servers protect themselves against DNS rebinding by refusing any request whose `Host` header isn't a local name. One tested server did, and refused `host.docker.internal:PORT` with 403. When the upstream is Docker Desktop's host alias (`host.docker.internal` or `gateway.docker.internal`), the gateway therefore sends `Host: localhost:PORT`. It still connects through the alias; only the name it presents changes. That is accurate, since the engine really is on the host's loopback. `--upstream-host` sets the header by hand for other setups. It takes only a host name or address with an optional port.
 
 ## 5. The egress proxy
 
@@ -194,7 +194,7 @@ From the host, each call is one `docker exec`:
 docker exec ezbx-<box>-gateway /ezbx gateway admin status
 docker exec ezbx-<box>-gateway /ezbx gateway admin network allow registry.npmjs.org
 docker exec ezbx-<box>-gateway /ezbx gateway admin allow github.com
-docker exec ezbx-<box>-gateway /ezbx gateway admin engine http://host.docker.internal:PORT strata
+docker exec ezbx-<box>-gateway /ezbx gateway admin engine http://host.docker.internal:PORT openai
 ```
 
 `ezbx net` and `ezbx engine use` will wrap these.
@@ -229,9 +229,9 @@ Built and tested (`internal/gateway`, run with `ezbx gateway serve`):
 
 Each proxy protection was mutation-checked: turning it off makes a test fail.
 
-Checked against a real engine (Strata), with the hardened gateway in its container: readiness, the model list, a chat reply, a streamed reply that arrived chunk by chunk, a stream cancelled by the box, the path checks, and Pi using tools through it (see [isolation-test.md](isolation-test.md)).
+Checked against a real local model server, with the hardened gateway in its container: readiness, the model list, a chat reply, a streamed reply that arrived chunk by chunk, a stream cancelled by the box, the path checks, and Pi using tools through it (see [isolation-test.md](isolation-test.md)).
 
-Not built yet: the engine unload call, a setting to allow a chosen local address, the cloud provider routes (design decision 8), and token usage in the log. Engine detection sends the key only to the engine's configured `url` (design decision 19), so an engine that also wants its key for the model list works too.
+Not built yet: the engine unload call, a setting to allow a chosen local address, the cloud provider routes (design decision 8), and token usage in the log. Detection sends the key only to the configured `url` (design decision 19), so a server that also wants its key for the model list works too.
 
 Docker: the gateway image ([docker/gateway.Dockerfile](../docker/gateway.Dockerfile)) was run locked down with the proxy and admin API in the isolation test ([isolation-test.md](isolation-test.md)). `ezbx` doesn't create or start containers yet; that was done by hand.
 
