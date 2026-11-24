@@ -98,6 +98,20 @@ echo "{}" > .npmrc
 git add -A
 expect blocked --staged "npm credentials file"
 
+# Handoff notes are private, at the top or in their own folder.
+new_repo
+mkdir handoffs && echo "notes" > handoffs/HANDOFF-x-1.md
+git add -f -A
+expect blocked --staged "handoff file in the handoffs folder"
+new_repo
+mkdir handoffs && echo "notes" > handoffs/prompt.txt
+git add -f -A
+expect blocked --staged "any file in the handoffs folder"
+new_repo
+mkdir -p sub && echo "notes" > sub/HANDOFF-x-1.md
+git add -f -A
+expect blocked --staged "handoff file in a subfolder"
+
 # Renames must be checked, both for new content and for the new name.
 new_repo
 seq 1 200 > notes.txt && git add -A && git commit -qm base

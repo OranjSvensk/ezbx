@@ -27,6 +27,7 @@ CLAUDE.md
 GEMINI.md
 .claude/
 HANDOFF*.md
+handoffs/
 
 # ---------- Generated and noisy files ----------
 *.exe

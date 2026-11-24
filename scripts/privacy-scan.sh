@@ -145,7 +145,7 @@ for entry in $ENTRIES; do
     .npmrc|*/.npmrc|.pypirc|*/.pypirc|.netrc|*/.netrc|*credentials*.json) report "credential file: $f" ;;
     backups/*|pi-config/*|harness-config/*|config/local*|*.local.json|*.local.toml|*.local.yaml)
       report "local-only file: $f" ;;
-    agents/*|*/agents/*|AGENTS.md|*/AGENTS.md|CLAUDE.md|*/CLAUDE.md|GEMINI.md|.claude/*|HANDOFF*)
+    agents/*|*/agents/*|AGENTS.md|*/AGENTS.md|CLAUDE.md|*/CLAUDE.md|GEMINI.md|.claude/*|HANDOFF*|*/HANDOFF*|handoffs/*|*/handoffs/*)
       report "agent or private file: $f" ;;
   esac
 done
