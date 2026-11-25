@@ -73,6 +73,7 @@ Usage:
                      [--admin 127.0.0.1:PORT --admin-token-file FILE]
   ezbx gateway admin [--addr 127.0.0.1:PORT] [--token-file FILE] CALL
   ezbx gateway health [--addr 127.0.0.1:PORT]
+  ezbx harness list [--box NAME] [--json] | ezbx harness add|remove ID... [--box NAME]
   ezbx harness render ID --out FOLDER [--url ADDRESS] [--default MODEL]
                      [--context N] [--max-tokens N] [--reasoning]
   ezbx doctor [--config FILE] [--box NAME] [--json]
@@ -144,6 +145,9 @@ Commands:
                     allow HOST
   gateway health  Exit 0 if the gateway answers /healthz, for Docker's
                   healthcheck.
+  harness         list shows the verified harnesses and which the box has;
+                  add and remove change them in ezbx.toml (then ezbx build,
+                  ezbx down and ezbx up).
   harness render  Write a harness's config files, filled in from the
                   server's model list, laid out like the agent's home.
   doctor          Check Docker, the model server, the networks, the gateway and
@@ -230,6 +234,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if len(args) >= 2 && args[0] == "harness" && args[1] == "render" {
 		return runHarnessRender(args[2:], stdout, stderr)
+	}
+	if len(args) >= 1 && args[0] == "harness" {
+		return runHarness(args[1:], stdout, stderr)
 	}
 	if len(args) >= 2 && args[0] == "gateway" {
 		switch args[1] {
