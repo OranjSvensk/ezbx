@@ -210,37 +210,52 @@ func runDestroy(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	cfgFlag := fs.String("config", "", "config file")
 	boxFlag := fs.String("box", "", "box name")
-	alsoConfig := fs.Bool("remove-config", false, "also remove ezbx.toml (and ezbx.toml.previous)")
+	alsoConfig := fs.Bool("remove-config", false, "also remove the box from ezbx.toml (the whole file, and ezbx.toml.previous, when it is the only box)")
 	yes := fs.Bool("yes", false, "don't ask (refused while a session is running)")
+	allImages := fs.Bool("images", false, "also remove every other ezbx image no container uses, and the build record")
+	asJSON := fs.Bool("json", false, "print one JSON result (needs --yes); the list goes to stderr")
 	words, _, err := parseInterleaved(fs, args)
 	if err != nil {
 		return 2
 	}
+	// With --json, standard output holds only the result.
+	out := stdout
+	if *asJSON {
+		out = stderr
+	}
+	refuse := func(err error) int {
+		if *asJSON {
+			return writeResult(stdout, *boxFlag, nil, err)
+		}
+		return report(stderr, err)
+	}
 	if len(words) != 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx destroy [--box NAME] [--remove-config] [--yes]")
-		return 2
+		return refuse(usageError("Usage: ezbx destroy [--box NAME] [--remove-config] [--images] [--yes] [--json]"))
+	}
+	if *asJSON && !*yes {
+		return refuse(usageError("ezbx destroy --json needs --yes: it can't ask for the box name"))
 	}
 	t, err := resolveBox(*cfgFlag, *boxFlag)
 	if err != nil {
-		return report(stderr, err)
+		return refuse(err)
 	}
 	cfgFile := t.dirs.ConfigFile(*cfgFlag, os.Getenv)
 	stateDir, err := stateDirFor(t)
 	if err != nil {
-		return report(stderr, err)
+		return refuse(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	r := &box.Runner{Docker: dockerIn, Out: stdout}
+	r := &box.Runner{Docker: dockerIn, Out: out}
 	if err := r.CheckDocker(ctx); err != nil {
-		return report(stderr, err)
+		return refuse(err)
 	}
 	busyNow, err := activity(ctx, t.name)
 	if err != nil {
-		return report(stderr, err)
+		return refuse(err)
 	}
 	if len(busyNow) > 0 && *yes {
-		return report(stderr, fmt.Errorf("something is running in box %q (%s). End it first, or run ezbx destroy without --yes to be asked", t.name, strings.Join(busyNow, "; ")))
+		return refuse(fmt.Errorf("something is running in box %q (%s). End it first, or run ezbx destroy without --yes to be asked", t.name, strings.Join(busyNow, "; ")))
 	}
 
 	// What exists, to show before anything is removed.
@@ -253,7 +268,7 @@ func runDestroy(args []string, stdout, stderr io.Writer) int {
 	} {
 		ok, err := r.Exists(ctx, item.kind, item.name)
 		if err != nil {
-			return report(stderr, err)
+			return refuse(err)
 		}
 		if ok {
 			list = append(list, fmt.Sprintf("%-9s %s: %s", item.kind, item.name, item.what))
@@ -268,28 +283,33 @@ func runDestroy(args []string, stdout, stderr io.Writer) int {
 	}
 	imgs, err := r.Images(ctx)
 	if err != nil {
-		return report(stderr, err)
+		return refuse(err)
 	}
-	// Images aren't one box's own: any that another container uses (another
-	// box, say) are kept.
+	// Only this box's images go, unless --images: another box in ezbx.toml
+	// may need the same ones, and any that a container uses are kept.
 	usedByOthers, err := imagesUsedByOthers(ctx, n, t.name)
 	if err != nil {
-		return report(stderr, err)
+		return refuse(err)
 	}
-	var keptImages []string
-	for _, img := range imgs {
-		if usedByOthers[img.Name] || usedByOthers[img.ID] {
-			keptImages = append(keptImages, img.Name)
-			continue
-		}
+	own, others := imageOwners(t.cfg, t.name)
+	removeImgs, keptImages := destroyImages(imgs, usedByOthers, own, others, *allImages)
+	for _, img := range removeImgs {
 		list = append(list, fmt.Sprintf("%-9s %s (%s)", "image", img.Name, img.Size))
 	}
 	record := images.RecordFile(t.dirs.Config)
-	if _, err := os.Stat(record); err == nil {
+	if _, err := os.Stat(record); err == nil && *allImages {
 		list = append(list, fmt.Sprintf("%-9s %s", "file", record))
 	}
+	// --remove-config takes only this box's section when other boxes stay.
 	var cfgFiles []string
-	if *alsoConfig {
+	cfgText, keepOthers := "", false
+	if *alsoConfig && t.cfg != nil {
+		cfgText, keepOthers = configWithout(t.cfg, t.name, time.Now())
+	}
+	switch {
+	case *alsoConfig && keepOthers && t.box() != nil:
+		list = append(list, fmt.Sprintf("%-9s [box.%s] in %s (the other boxes stay; the old file is kept as .previous)", "setting", t.name, cfgFile))
+	case *alsoConfig && !keepOthers:
 		for _, f := range []string{cfgFile, cfgFile + ".previous"} {
 			if _, err := os.Stat(f); err == nil {
 				cfgFiles = append(cfgFiles, f)
@@ -298,42 +318,48 @@ func runDestroy(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if len(list) == 0 {
-		fmt.Fprintf(stdout, "ezbx has nothing for box %q on this computer. Nothing to remove.\n", t.name)
+		fmt.Fprintf(out, "ezbx has nothing for box %q on this computer. Nothing to remove.\n", t.name)
+		if *asJSON {
+			return writeResult(stdout, t.name, map[string]any{"removed": []string{}, "kept": keptText(keptImages)}, nil)
+		}
 		return 0
 	}
 
-	fmt.Fprintf(stdout, "ezbx destroy removes, for box %q", t.name)
-	fmt.Fprintln(stdout, ":")
+	fmt.Fprintf(out, "ezbx destroy removes, for box %q", t.name)
+	fmt.Fprintln(out, ":")
 	for _, l := range list {
-		fmt.Fprintln(stdout, "  "+l)
+		fmt.Fprintln(out, "  "+l)
 	}
-	fmt.Fprintln(stdout, "Kept:")
+	fmt.Fprintln(out, "Kept:")
 	if b := t.box(); b != nil {
 		if ws, err := workspaceOf(b); err == nil {
-			fmt.Fprintf(stdout, "  the workspace %s (never touched)\n", ws)
+			fmt.Fprintf(out, "  the workspace %s (never touched)\n", ws)
 		}
 	} else {
-		fmt.Fprintln(stdout, "  the workspace (never touched)")
+		fmt.Fprintln(out, "  the workspace (never touched)")
 	}
 	if !*alsoConfig {
-		fmt.Fprintf(stdout, "  %s (--remove-config removes it too)\n", cfgFile)
+		fmt.Fprintf(out, "  %s (--remove-config removes it too)\n", cfgFile)
 	}
 	for _, k := range keptImages {
-		fmt.Fprintf(stdout, "  the image %s, because another container uses it\n", k)
+		fmt.Fprintf(out, "  the image %s, because %s\n", k.Name, k.Why)
 	}
-	fmt.Fprintln(stdout, "  base images Docker downloaded to build ezbx's (node, golang); they aren't ezbx's own. Remove them with docker image rm if you like.")
+	if !*allImages {
+		fmt.Fprintln(out, "  other ezbx images: other boxes' and older builds (ezbx build --prune, or ezbx destroy --images, removes unused ones)")
+	}
+	fmt.Fprintln(out, "  base images Docker downloaded to build ezbx's (node, golang); they aren't ezbx's own. Remove them with docker image rm if you like.")
 	if len(busyNow) > 0 {
-		fmt.Fprintf(stdout, "Running now, and ended by this: %s\n", strings.Join(busyNow, "; "))
+		fmt.Fprintf(out, "Running now, and ended by this: %s\n", strings.Join(busyNow, "; "))
 	}
 	if !*yes {
-		fmt.Fprintln(stdout, "\nThis can't be undone.")
-		p := &setup.Prompter{In: bufio.NewReader(stdin), Out: stdout}
+		fmt.Fprintln(out, "\nThis can't be undone.")
+		p := &setup.Prompter{In: bufio.NewReader(stdin), Out: out}
 		typed, err := p.Ask(fmt.Sprintf("Type the box name (%s) to remove all of the above, or anything else to stop", t.name), "", nil)
 		if err != nil {
-			return report(stderr, err)
+			return refuse(err)
 		}
 		if strings.TrimSpace(typed) != t.name {
-			fmt.Fprintln(stdout, "Nothing was removed.")
+			fmt.Fprintln(out, "Nothing was removed.")
 			return 0
 		}
 	}
@@ -354,10 +380,7 @@ func runDestroy(args []string, stdout, stderr io.Writer) int {
 	if _, err := r.RemoveVolume(ctx, n.Home); err != nil {
 		fail(err)
 	}
-	for _, img := range imgs {
-		if usedByOthers[img.Name] || usedByOthers[img.ID] {
-			continue // listed as kept above
-		}
+	for _, img := range removeImgs {
 		if err := r.RemoveImage(ctx, img); err != nil {
 			fail(err)
 		}
@@ -366,21 +389,47 @@ func runDestroy(args []string, stdout, stderr io.Writer) int {
 		if err := os.RemoveAll(stateDir); err != nil {
 			fail(err)
 		} else {
-			fmt.Fprintln(stdout, "removed folder", stateDir)
+			fmt.Fprintln(out, "removed folder", stateDir)
 		}
 	}
-	for _, f := range append([]string{record}, cfgFiles...) {
+	if *alsoConfig && keepOthers && t.box() != nil {
+		if err := writeConfig(cfgFile, cfgText); err != nil {
+			fail(err)
+		} else {
+			fmt.Fprintf(out, "removed [box.%s] from %s\n", t.name, cfgFile)
+		}
+	}
+	files := cfgFiles
+	if *allImages {
+		files = append([]string{record}, files...)
+	}
+	for _, f := range files {
 		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
 			fail(err)
 		} else if err == nil {
-			fmt.Fprintln(stdout, "removed file", f)
+			fmt.Fprintln(out, "removed file", f)
 		}
+	}
+	if *asJSON {
+		var err error
+		if failed > 0 {
+			err = fmt.Errorf("%d item(s) weren't removed; the list is on stderr", failed)
+		}
+		return writeResultData(stdout, t.name, map[string]any{"removed": list, "kept": keptText(keptImages)}, err)
 	}
 	if failed > 0 {
 		return 1
 	}
 	fmt.Fprintf(stdout, "Box %q is destroyed. The workspace is untouched. To start again: ezbx init\n", t.name)
 	return 0
+}
+
+func keptText(k []keptImage) []string {
+	out := []string{}
+	for _, i := range k {
+		out = append(out, i.Name+": "+i.Why)
+	}
+	return out
 }
 
 // Backups -----------------------------------------------------------------

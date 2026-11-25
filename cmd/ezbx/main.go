@@ -46,9 +46,13 @@ Usage:
             [--harness pi,opencode,omp,codex,claude,hermes,openclaw]
             [--tools pack:coding,ffmpeg|none] [--workspace PATH]
             [--network airgap|off|allow|on] [--memory 8g]
+  ezbx create --box NAME --workspace FOLDER [--network MODE] [--allow HOST]...
+              [--readonly FOLDER]... [--harness LIST] [--tools LIST]
+              [--profile NAME] [--memory 8g] [--config FILE] [--json]
   ezbx build [--box NAME] [--config FILE] [--prune [--yes]]
   ezbx up [--box NAME] [--config FILE] [--no-doctor]
   ezbx down [--box NAME] [--config FILE]
+  ezbx start [--box NAME] [--doctor] [--json] | ezbx stop [--box NAME] [--json]
   ezbx shell [HARNESS] [--box NAME] [--no-snapshot] [-- HARNESS ARGS...]
   ezbx exec [--box NAME] [--json] [--cwd DIR] [--timeout 10m] [--env NAME=VALUE]...
             [--snapshot] -- COMMAND [ARGS...]
@@ -57,7 +61,7 @@ Usage:
   ezbx rewind [ID] [--yes]
   ezbx admin shell [--net] [--box NAME] [-- COMMAND...]
   ezbx reset [--rebuild] [--restore ID] [--yes] [--no-doctor] | ezbx reset --list
-  ezbx destroy [--box NAME] [--remove-config] [--yes]
+  ezbx destroy [--box NAME] [--remove-config] [--images] [--yes] [--json]
   ezbx net [airgap|off|allow|on] [--box NAME]
   ezbx net allow|remove HOST... [--box NAME]
   ezbx engine detect [--json] [--timeout 500ms] [--url ADDRESS]...
@@ -77,6 +81,10 @@ Commands:
   init            Guided setup: finds the model server, asks the questions, shows
                   the plan, then writes ezbx.toml and starts the box.
                   Run it again to change the setup.
+  create          Add a box to ezbx.toml without asking anything (for
+                  programs; ezbx init asks). Builds and starts nothing.
+  start | stop    ezbx up and ezbx down for one box. start runs no doctor
+                  unless --doctor; with --json both print the box's state.
   build           Build the gateway and box images from the files inside
                   this program, with the tools chosen in ezbx.toml. Each
                   image is named after a hash of what goes into it, so an
@@ -110,8 +118,9 @@ Commands:
                   config and images. --restore ID puts a backed-up home back.
   destroy         Remove everything ezbx made for the box: containers,
                   networks, the agent's home, the state folder (snapshots
-                  too) and ezbx's images. Never the workspace. Asks you to
-                  type the box name first.
+                  too) and the box's images that no other box needs.
+                  --images removes every unused ezbx image too. Never the
+                  workspace. Asks you to type the box name first.
   net             Show the network mode, allowed and recently blocked
                   hosts. net airgap|off|allow|on changes the mode until the next
                   up. net allow HOST approves a host and saves it, so it
@@ -164,6 +173,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if len(args) >= 1 && args[0] == "exec" {
 		return runExec(args[1:], stdout, stderr)
+	}
+	if len(args) >= 1 && args[0] == "create" {
+		return runCreate(args[1:], stdout, stderr)
+	}
+	if len(args) >= 1 && args[0] == "start" {
+		return runStart(args[1:], stdout, stderr)
+	}
+	if len(args) >= 1 && args[0] == "stop" {
+		return runStop(args[1:], stdout, stderr)
 	}
 	if len(args) >= 2 && args[0] == "engine" && args[1] == "detect" {
 		return runDetect(args[2:], stdout, stderr)

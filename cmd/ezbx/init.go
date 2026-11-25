@@ -315,23 +315,9 @@ func preflight(ctx context.Context, w io.Writer) error {
 
 // gatherFacts finds everything the questions need.
 func gatherFacts(ctx context.Context, existing *config.Config, o setup.Options, dirs paths.Dirs) (setup.Facts, error) {
-	home, _ := os.UserHomeDir()
-	f := setup.Facts{Home: home, Own: []string{dirs.Config, dirs.State}, System: systemDirs(), Existing: existing, DockerMemory: dockerMemory(ctx)}
-
-	all, err := harness.LoadFS(harnesses.FS)
+	f, err := baseFacts(ctx, existing, dirs)
 	if err != nil {
-		return f, fmt.Errorf("internal error loading harnesses: %w", err)
-	}
-	for _, m := range all {
-		if m.Verified.Status == "verified" {
-			f.Harnesses = append(f.Harnesses, m)
-		}
-	}
-	sort.SliceStable(f.Harnesses, func(i, j int) bool {
-		return f.Harnesses[i].Kind == "coding" && f.Harnesses[j].Kind != "coding"
-	})
-	if f.Catalog, err = tools.Load(catalog.FS); err != nil {
-		return f, fmt.Errorf("internal error loading the tool catalogue: %w", err)
+		return f, err
 	}
 
 	// The scan offers every kind; --api only narrows what is listed.
@@ -363,6 +349,31 @@ func gatherFacts(ctx context.Context, existing *config.Config, o setup.Options, 
 	res := (&detect.Detector{Adapters: adapters, Keys: keys}).Detect(ctx, urls)
 	f.Engines = res.Engines
 	f.Refused = res.Refused
+	return f, nil
+}
+
+// baseFacts is everything the questions need except the model servers, so
+// ezbx create can use it without contacting any.
+func baseFacts(ctx context.Context, existing *config.Config, dirs paths.Dirs) (setup.Facts, error) {
+	home, _ := os.UserHomeDir()
+	f := setup.Facts{Home: home, Own: []string{dirs.Config, dirs.State}, System: systemDirs(), Existing: existing, DockerMemory: dockerMemory(ctx)}
+
+	all, err := harness.LoadFS(harnesses.FS)
+	if err != nil {
+		return f, fmt.Errorf("internal error loading harnesses: %w", err)
+	}
+	for _, m := range all {
+		if m.Verified.Status == "verified" {
+			f.Harnesses = append(f.Harnesses, m)
+		}
+	}
+	sort.SliceStable(f.Harnesses, func(i, j int) bool {
+		return f.Harnesses[i].Kind == "coding" && f.Harnesses[j].Kind != "coding"
+	})
+	if f.Catalog, err = tools.Load(catalog.FS); err != nil {
+		return f, fmt.Errorf("internal error loading the tool catalogue: %w", err)
+	}
+
 	return f, nil
 }
 

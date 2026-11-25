@@ -43,21 +43,39 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Usage: ezbx up [--box NAME] [--config FILE] [--no-doctor]")
 		return 2
 	}
+	plan, err := startBox(*cfgFlag, *boxFlag, !*noDoctor, stdout, stderr)
+	switch {
+	case errors.Is(err, errDoctorFound):
+		fmt.Fprintf(stderr, "Box %q is up, but the doctor found problems (above).\n", plan.Box)
+		return 1
+	case err != nil:
+		return report(stderr, err)
+	case *noDoctor:
+		fmt.Fprintf(stdout, "Box %q is up.\n", plan.Box)
+	default:
+		fmt.Fprintf(stdout, "\nBox %q is up. Open it with: docker exec -it %s bash\n", plan.Box, plan.Names.Box)
+	}
+	return 0
+}
+
+// errDoctorFound means the box started but the doctor's checks failed.
+var errDoctorFound = errors.New("the box is up, but the doctor found problems")
+
+// startBox starts a box from ezbx.toml (the only one, when name is empty)
+// and, with doctorToo, runs the doctor. It never builds or pulls an image.
+func startBox(cfgFlag, name string, doctorToo bool, stdout, stderr io.Writer) (box.Plan, error) {
 	dirs, err := paths.Default()
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return box.Plan{}, err
 	}
-	cfgFile := dirs.ConfigFile(*cfgFlag, os.Getenv)
+	cfgFile := dirs.ConfigFile(cfgFlag, os.Getenv)
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return box.Plan{}, err
 	}
-	name := *boxFlag
 	if name == "" {
 		if name, err = cfg.Default(); err != nil {
-			return report(stderr, usageError(err.Error()))
+			return box.Plan{}, usageError(err.Error())
 		}
 	}
 	fmt.Fprintln(stdout, "config:", cfgFile)
@@ -66,25 +84,20 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 	plan, err := makePlan(ctx, cfg, name, dirs, stdout)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return plan, err
 	}
 	r := &box.Runner{Docker: dockerIn, Out: stdout}
 	if err := r.Up(ctx, plan); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return plan, err
 	}
-	if *noDoctor {
-		fmt.Fprintf(stdout, "Box %q is up.\n", plan.Box)
-		return 0
+	if !doctorToo {
+		return plan, nil
 	}
 	fmt.Fprintln(stdout)
 	if code := runDoctor([]string{"--config", cfgFile, "--box", plan.Box}, stdout, stderr); code != 0 {
-		fmt.Fprintf(stderr, "Box %q is up, but the doctor found problems (above).\n", plan.Box)
-		return code
+		return plan, errDoctorFound
 	}
-	fmt.Fprintf(stdout, "\nBox %q is up. Open it with: docker exec -it %s bash\n", plan.Box, plan.Names.Box)
-	return 0
+	return plan, nil
 }
 
 // runDown removes a box's containers and networks. It never removes the
@@ -105,14 +118,19 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return report(stderr, err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	r := &box.Runner{Docker: dockerIn, Out: stdout}
-	if err := r.Down(ctx, t.name, t.dirs.Box(t.name)); err != nil {
+	if err := stopBox(t, stdout); err != nil {
 		return report(stderr, err)
 	}
 	fmt.Fprintf(stdout, "Kept: the workspace, the state folder (token, log, approved hosts) and the volume %s.\n", box.NamesFor(t.name).Home)
 	return 0
+}
+
+// stopBox removes a box's containers and networks, and its engine key file.
+func stopBox(t target, stdout io.Writer) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	r := &box.Runner{Docker: dockerIn, Out: stdout}
+	return r.Down(ctx, t.name, t.dirs.Box(t.name))
 }
 
 // makePlan turns the config into a plan: it checks the workspace, finds the

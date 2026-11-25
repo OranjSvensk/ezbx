@@ -46,6 +46,7 @@ type Options struct {
 	Workspace string
 	ReadOnly  []string // read-only folders; nil: ask
 	Network   string
+	Allow     []string // hosts for allow mode; nil: ask, starting from the config's
 	Memory    string
 }
 
@@ -586,7 +587,11 @@ func askNetwork(f Facts, o Options, a *Answers, p *Prompter, fromProfile bool) e
 		sort.Strings(theirs)
 		fmt.Fprintln(p.Out, "  Allowed for the chosen harnesses anyway:", strings.Join(theirs, ", "))
 	}
-	ans, err := p.Ask("More hosts to allow (separated by commas, blank for none)", strings.Join(a.Allow, ","), func(s string) error {
+	hosts := strings.Join(a.Allow, ",")
+	if o.Allow != nil {
+		hosts = strings.Join(o.Allow, ",")
+	}
+	ans, err := p.Ask("More hosts to allow (separated by commas, blank for none)", hosts, func(s string) error {
 		for _, h := range splitList(s) {
 			if !config.HostName(h) {
 				return fmt.Errorf("%q is not a host name such as registry.npmjs.org or *.example.com.", h)
