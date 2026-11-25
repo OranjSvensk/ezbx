@@ -191,6 +191,11 @@ func TestTokensInTheLog(t *testing.T) {
 	if reply := send("/v1/messages", `{"model":"big-model","max_tokens":16,"stream":true,"messages":[{"role":"user","content":"hi"}]}`); strings.Contains(reply, `"input_tokens":1,`) {
 		t.Errorf("placeholder count: %s", reply)
 	}
+	// Take its log line too, or the next lastEntry may return it: the line is
+	// written just after the reply (seen only under -race in CI).
+	if e := lastEntry(t, logs); e.Path != "/v1/messages" || e.TokensIn != 21 {
+		t.Errorf("placeholder request's log: %+v", e)
+	}
 	// A plain stream through the gateway is left as the box asked for it.
 	eng.sawOptions = nil
 	send("/v1/chat/completions", `{"model":"big-model","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
