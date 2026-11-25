@@ -7,9 +7,9 @@
 
 **Boxed-up local AI agents.**
 
-ezbx is a planned one-click setup for running AI coding and agent tools inside a sandboxed container, while the model itself keeps running on your own machine.
+ezbx is a one-command setup for running AI coding and agent tools inside a sandboxed container, while the model itself keeps running on your own machine.
 
-> **Status: early release (`v0.4.0`).** All seven harnesses — Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw — are built, pinned in `ezbx.lock`, and verified end to end on Windows 11 with Docker Desktop and a local model server (including file tools in `/workspace` with `network = "off"`). Every command on the road to 0.1 below is built, alongside read-only folders with secret masking ([docs/readonly.md](docs/readonly.md)), model server support by API kind (`openai`, `lmstudio`, `anthropic`; [docs/engine-adapters.md](docs/engine-adapters.md)), and starter profiles ([docs/profiles.md](docs/profiles.md)). Linux, macOS and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), the contract for programs that drive ezbx is in [docs/runtime-contract.md](docs/runtime-contract.md) (its first phase is in 0.4), and designs are in [docs/](docs/).
+> **Status: early release (`v0.4.0`), usable on Windows.** Setup, the box, the gateway, the network switch, snapshots and the admin tools all work, and all seven harnesses (Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw) are verified end to end on Windows 11 with Docker Desktop and a local model server. Since 0.4, one `ezbx.toml` can hold several boxes, there is an `airgap` network mode, and other programs can drive ezbx through a JSON contract ([docs/runtime-contract.md](docs/runtime-contract.md)). Linux and macOS builds are published but untested. Test results are in [docs/isolation-test.md](docs/isolation-test.md) and designs in [docs/](docs/).
 
 ```text
 # Scoop (Windows):
@@ -34,28 +34,40 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 - **Network on or off.** A switch controls whether the agent can reach the internet: `airgap` (not even the model), `off` (the model only), `allow` (listed hosts) or `on`.
 - **Root stays with you.** The agent runs as an unprivileged user. Admin access is reserved for the human.
 
-## Planned first version
+## What works today
 
-1. An `ezbx init` setup that finds your model server and asks which harnesses to install.
-2. The gateway and the network switch.
-3. Snapshots of the writable folder, so an agent session can be undone.
+| Area | What you get |
+|---|---|
+| Setup | `ezbx init` finds the model server, asks the questions (or takes a starter profile, [docs/profiles.md](docs/profiles.md)), writes `ezbx.toml` and shows the plan first |
+| Images | `ezbx build` builds from pinned versions in `ezbx.lock`, with the tool packs you chose ([docs/build.md](docs/build.md)) |
+| The box | `ezbx up` / `down`, `ezbx shell [harness]`; new in 0.4: `ezbx harness add\|remove\|list` |
+| Model servers | Any server with an OpenAI- or Anthropic-compatible API, or LM Studio's own (`openai`, `anthropic`, `lmstudio`; [docs/engine-adapters.md](docs/engine-adapters.md)); `ezbx engine detect` / `use`; new in 0.4: a `default` model alias |
+| Network | `ezbx net off\|allow\|on`, `ezbx net allow HOST`; the box's only way out is the gateway; new in 0.4: `airgap` |
+| Read-only folders | Host folders the agent may read at `/readonly/<name>`, with secret files masked ([docs/readonly.md](docs/readonly.md)) |
+| Undo | `ezbx snapshot` / `review` / `rewind`; `ezbx shell` takes a snapshot first ([docs/snapshots.md](docs/snapshots.md)) |
+| For the human | `ezbx admin shell` (a separate root container), `ezbx reset` (with a backup), `ezbx destroy` (never the workspace), `ezbx doctor` ([docs/admin.md](docs/admin.md)) |
+| Several boxes (new in 0.4) | `[box.<name>]` sections in one `ezbx.toml`, sharing the model server; `--box NAME` |
+| For other programs (new in 0.4) | `ezbx version --json`, `create`, `start`, `exec`, `status`, `stop`, `destroy --json` ([docs/runtime-contract.md](docs/runtime-contract.md)) |
+| Logging | The gateway logs every request without its content ([docs/gateway.md](docs/gateway.md)); new in 0.4: token counts |
 
-## Road to the first usable version
+### Where it runs
 
-The goal: set up Pi with a local model, from nothing, using only `ezbx` commands, with every planned safety feature. Other harnesses and cloud keys come after.
+| Platform | State |
+|---|---|
+| Windows 11 + Docker Desktop (Engine 28+) | Verified: every command, all seven harnesses, the isolation tests |
+| Linux, macOS | Binaries published with each release, untested ([threat model](docs/threat-model.md)) |
 
-| Command | What it does | Status |
-|---|---|---|
-| `ezbx init` | Finds the model server, asks the questions, writes `ezbx.toml`, shows the plan first | done |
-| `ezbx build` | Builds the images from pinned versions listed in `ezbx.lock`, with the tool packs you chose ([docs/build.md](docs/build.md)) | done |
-| `ezbx up` / `ezbx down` | Start and remove the box | done |
-| `ezbx shell` / `ezbx shell pi` | A terminal in the box, or Pi | done |
-| `ezbx net off\|allow\|on`, `ezbx net allow HOST` | The network switch and approvals | done |
-| `ezbx engine use` | Point a running box at the model server again, for example after it moves to a new port | done |
-| `ezbx snapshot` / `rewind` / `review` | Undo an agent's changes to the workspace; `ezbx shell` takes a snapshot first ([docs/snapshots.md](docs/snapshots.md)) | done |
-| `ezbx admin shell` | A root shell for the human, in a separate, temporary container ([docs/admin.md](docs/admin.md)) | done |
-| `ezbx reset` / `destroy` | A fresh agent home after a backup, or remove everything ezbx made (never the workspace) | done |
-| `ezbx doctor` | Check the whole setup and explain fixes | done |
+## What's next
+
+- Harness configs that use the `default` model alias, so a harness follows the model you choose.
+- `ezbx events --jsonl`, the runtime contract's second phase (a live stream of box, network and gateway events).
+- Linux and macOS: tested support, and a Linux end-to-end job in CI.
+- Cloud API keys through the gateway, kept out of the box like local keys.
+- Winget (the package is waiting for review).
+
+## Releases
+
+`v0.1.0`/`v0.1.1` (setup, the gateway and network switch, snapshots, the harnesses), `v0.2.0` (`allow` mode, more model servers, `reset` with backup), `v0.3.0`/`v0.3.1` (read-only folders with secret masking, model servers by API kind, starter profiles), `v0.4.0` (several boxes, `airgap`, the runtime contract). The milestones are in [docs/design.md](docs/design.md), section 12. Notes and downloads: [Releases](https://github.com/OranjSvensk/ezbx/releases).
 
 ## Safety note
 
