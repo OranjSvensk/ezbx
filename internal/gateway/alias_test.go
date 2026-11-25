@@ -96,7 +96,11 @@ func TestDefaultModelBudget(t *testing.T) {
 	t.Cleanup(up.Close)
 	body := `{"model":"default"}`
 	long := strings.Repeat("m", 200)
-	g, err := New(Config{Upstream: up.URL, DefaultModel: long, MaxBuffered: int64(len(body)) + 10})
+	// Room for two short bodies: a request gives its share back only when
+	// its handler ends, which can be just after the client has the reply,
+	// so the next request may start while the last still holds it. The
+	// 200-character name still doesn't fit.
+	g, err := New(Config{Upstream: up.URL, DefaultModel: long, MaxBuffered: 2*int64(len(body)) + 10})
 	if err != nil {
 		t.Fatal(err)
 	}
