@@ -161,3 +161,26 @@ func mustBox(t *testing.T, c *config.Config, name string) Answers {
 	a, _ := FromConfigBox(c, name)
 	return a
 }
+
+// airgap can be typed at the network question, and a mistake names all four.
+func TestGatherAirgap(t *testing.T) {
+	f := facts(t)
+	ws := filepath.Join(f.Home, "w")
+	input := strings.Join([]string{"", "", "", "", ws, "", "closed", "airgap", ""}, "\n") + "\n"
+	p, out := prompter(input)
+	res, err := Gather(f, Options{}, p)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if res.Answers.Network != "airgap" || len(res.Answers.Allow) != 0 {
+		t.Errorf("network: %+v", res.Answers)
+	}
+	for _, want := range []string{"Type airgap, off, allow or on.", "airgap  nothing at all, not even the model"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	if _, err := config.Parse(ConfigText(res.Answers, time.Now())); err != nil {
+		t.Error(err)
+	}
+}

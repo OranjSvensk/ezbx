@@ -9,14 +9,15 @@ import (
 
 // Network modes for the egress proxy. See docs/gateway.md, section 5.
 const (
-	ModeOff   = "off"   // every proxy request is refused
-	ModeAllow = "allow" // only hosts on the allowlist
-	ModeOn    = "on"    // the public internet
+	ModeAirgap = "airgap" // every proxy request is refused, and the model route too
+	ModeOff    = "off"    // every proxy request is refused; the model route works
+	ModeAllow  = "allow"  // only hosts on the allowlist
+	ModeOn     = "on"     // the public internet
 )
 
-// ValidMode reports whether m is one of the three network modes.
+// ValidMode reports whether m is one of the four network modes.
 func ValidMode(m string) bool {
-	return m == ModeOff || m == ModeAllow || m == ModeOn
+	return m == ModeAirgap || m == ModeOff || m == ModeAllow || m == ModeOn
 }
 
 // blockedNames are refused by name, before any lookup, so the log gives a

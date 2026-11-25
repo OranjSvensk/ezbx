@@ -116,10 +116,13 @@ func TestRecentBlocked(t *testing.T) {
 		`{"time":"t5","route":"proxy","method":"CONNECT","host":"192.0.2.1:443","status":403,"blocked":true,"reason":"not_on_allowlist"}`,
 		`{"time":"t6","route":"proxy","method":"CONNECT","host":"example.com:443","status":200}`,
 		`{"time":"t7","route":"model","path":"/v1/models","status":200}`,
+		`{"time":"t8","route":"proxy","method":"CONNECT","host":"registry.npmjs.org:443","status":403,"blocked":true,"reason":"network_airgap"}`,
+		`{"time":"t9","route":"model","path":"/v1/models","status":403,"blocked":true,"reason":"network_airgap"}`,
 		`not json`,
 	}, "\n")
 	got := RecentBlocked([]byte(log))
-	if len(got) != 2 || got[0].Host != "github.com" || got[0].Count != 2 || got[0].Last != "t2" || got[1].Host != "pypi.org" || got[1].Reason != "network_off" {
+	if len(got) != 3 || got[0].Host != "github.com" || got[0].Count != 2 || got[0].Last != "t2" || got[1].Host != "pypi.org" || got[1].Reason != "network_off" ||
+		got[2].Host != "registry.npmjs.org" || got[2].Reason != "network_airgap" {
 		t.Errorf("%+v", got)
 	}
 }

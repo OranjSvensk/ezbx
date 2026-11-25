@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,7 +38,7 @@ type Box struct {
 	Memory    string     `toml:"memory"`    // Docker's form, such as 4g or 512m
 	CPUs      float64    `toml:"cpus"`      // 0 means no limit
 	PIDs      int        `toml:"pids"`      // process limit
-	Network   string     `toml:"network"`   // off | allow | on
+	Network   string     `toml:"network"`   // airgap | off | allow | on
 	Allow     []string   `toml:"allow"`     // extra hosts for allow mode
 	Harnesses []string   `toml:"harnesses"`
 	Tools     []string   `toml:"tools"` // tool ids and "pack:" names; nil when the key is left out
@@ -169,6 +170,14 @@ func HostName(s string) bool {
 	return strings.Trim(last, "0123456789") != ""
 }
 
+// NetworkModes are the network modes, from the most closed to the most open:
+// airgap (no model route, no internet), off (the model route only), allow
+// (the model route and listed hosts) and on (the public internet too).
+var NetworkModes = []string{"airgap", "off", "allow", "on"}
+
+// NetworkMode reports whether s is one of the network modes.
+func NetworkMode(s string) bool { return slices.Contains(NetworkModes, s) }
+
 // MemoryValue reports whether s is a memory limit in Docker's form, such as
 // 4g or 512m.
 func MemoryValue(s string) bool { return memoryRE.MatchString(strings.ToLower(s)) }
@@ -244,10 +253,8 @@ func (b *Box) check(name string) error {
 	if b.Network == "" {
 		b.Network = DefaultNetwork
 	}
-	switch b.Network {
-	case "off", "allow", "on":
-	default:
-		return fmt.Errorf("%snetwork %q: use off, allow or on", p, b.Network)
+	if !NetworkMode(b.Network) {
+		return fmt.Errorf("%snetwork %q: use airgap, off, allow or on", p, b.Network)
 	}
 	for _, h := range b.Allow {
 		if !HostName(h) {

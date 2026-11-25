@@ -44,7 +44,7 @@ Usage:
             [--api auto|openai|lmstudio|anthropic] [--key-env NAME] [--reasoning]
             [--harness pi,opencode,omp,codex,claude,hermes,openclaw]
             [--tools pack:coding,ffmpeg|none] [--workspace PATH]
-            [--network off|allow|on] [--memory 8g]
+            [--network airgap|off|allow|on] [--memory 8g]
   ezbx build [--box NAME] [--config FILE] [--prune [--yes]]
   ezbx up [--box NAME] [--config FILE] [--no-doctor]
   ezbx down [--box NAME] [--config FILE]
@@ -55,13 +55,13 @@ Usage:
   ezbx admin shell [--net] [--box NAME] [-- COMMAND...]
   ezbx reset [--rebuild] [--restore ID] [--yes] [--no-doctor] | ezbx reset --list
   ezbx destroy [--box NAME] [--remove-config] [--yes]
-  ezbx net [off|allow|on] [--box NAME]
+  ezbx net [airgap|off|allow|on] [--box NAME]
   ezbx net allow|remove HOST... [--box NAME]
   ezbx engine detect [--json] [--timeout 500ms] [--url ADDRESS]...
   ezbx engine use [--url ADDRESS] [--api auto|openai|lmstudio|anthropic] [--box NAME]
   ezbx gateway serve [--upstream ADDRESS] [--engine KIND] [--listen ADDRESS]
                      [--key-env NAME | --key-file FILE] [--log FILE]
-                     [--proxy ADDRESS] [--network off|allow|on] [--allow HOST]...
+                     [--proxy ADDRESS] [--network airgap|off|allow|on] [--allow HOST]...
                      [--allow-file FILE]
                      [--admin 127.0.0.1:PORT --admin-token-file FILE]
   ezbx gateway admin [--addr 127.0.0.1:PORT] [--token-file FILE] CALL
@@ -106,7 +106,7 @@ Commands:
                   too) and ezbx's images. Never the workspace. Asks you to
                   type the box name first.
   net             Show the network mode, allowed and recently blocked
-                  hosts. net off|allow|on changes the mode until the next
+                  hosts. net airgap|off|allow|on changes the mode until the next
                   up. net allow HOST approves a host and saves it, so it
                   stays approved; net remove HOST forgets it.
   engine detect   Find model servers on this computer's common ports (and
@@ -124,7 +124,7 @@ Commands:
                     status
                     ready              (does the server answer with models?)
                     engine UPSTREAM [KIND]
-                    network off|allow|on [HOST]...
+                    network airgap|off|allow|on [HOST]...
                     allow HOST
   gateway health  Exit 0 if the gateway answers /healthz, for Docker's
                   healthcheck.

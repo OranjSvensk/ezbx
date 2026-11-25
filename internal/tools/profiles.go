@@ -68,10 +68,8 @@ func (p Profile) check(file string, c *Catalog) error {
 	if _, err := c.Resolve(p.Tools, nil); err != nil {
 		return err
 	}
-	switch p.Network {
-	case "off", "allow", "on":
-	default:
-		return fmt.Errorf("network %q: use off, allow or on", p.Network)
+	if !config.NetworkMode(p.Network) {
+		return fmt.Errorf("network %q: use airgap, off, allow or on", p.Network)
 	}
 	if p.Network != "allow" && len(p.Allow) > 0 {
 		return fmt.Errorf("network %q cannot have an allow list", p.Network)

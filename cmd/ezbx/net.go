@@ -16,7 +16,8 @@ import (
 const netUsage = `Usage:
   ezbx net                    show the network mode, the allowed hosts and
                               recently blocked hosts
-  ezbx net off|allow|on       change the mode now (until the next ezbx up,
+  ezbx net airgap|off|allow|on
+                              change the mode now (until the next ezbx up,
                               which uses the mode in ezbx.toml)
   ezbx net allow HOST...      approve hosts for allow mode, now and from
                               then on (saved in the state folder)
@@ -49,7 +50,7 @@ func runNet(args []string, stdout, stderr io.Writer) int {
 	switch {
 	case len(words) == 0:
 		return report(stderr, showNet(ctx, r, t, stdout))
-	case len(words) == 1 && (words[0] == "off" || words[0] == "allow" || words[0] == "on"):
+	case len(words) == 1 && config.NetworkMode(words[0]):
 		return report(stderr, setMode(ctx, r, t, words[0], stdout))
 	case len(words) >= 2 && words[0] == "allow":
 		return report(stderr, allowHosts(ctx, r, t, approved, words[1:], stdout))
@@ -90,7 +91,7 @@ func showNet(ctx context.Context, r *box.Runner, t target, w io.Writer) error {
 		fmt.Fprintf(w, " (ezbx.toml says %s, used again at the next ezbx up)", m)
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "  off:   no internet; allow: only the hosts below; on: the public internet, never local addresses")
+	fmt.Fprintln(w, "  airgap: not even the model; off: the model, no internet; allow: only the hosts below; on: the public internet, never local addresses")
 	if len(s.Network.Allow) == 0 {
 		fmt.Fprintln(w, "Allowed hosts: none")
 	} else {
@@ -137,11 +138,14 @@ func setMode(ctx context.Context, r *box.Runner, t target, mode string, w io.Wri
 	}
 	fmt.Fprintf(w, "Box %q: network %s (was %s).", t.name, got, s.Network.Mode)
 	if closed > 0 {
-		fmt.Fprintf(w, " Closed %d open connection(s) the new mode doesn't allow.", closed)
+		fmt.Fprintf(w, " Closed %d open connection(s) or model request(s) the new mode doesn't allow.", closed)
 	}
 	fmt.Fprintln(w)
 	if m := configMode(t); m != "" && m != got {
 		fmt.Fprintf(w, "This lasts until the next ezbx up, which goes back to %s (from ezbx.toml).\n", m)
+	}
+	if got == "airgap" {
+		fmt.Fprintln(w, "The model route is closed too, so harnesses in the box can't reach the model until: ezbx net off")
 	}
 	if got == "allow" && len(s.Network.Allow) == 0 {
 		fmt.Fprintln(w, "No hosts are allowed yet. Approve one with: ezbx net allow HOST")
@@ -186,7 +190,7 @@ func allowHosts(ctx context.Context, r *box.Runner, t target, file string, hosts
 	case "allow":
 		fmt.Fprintln(w, ", so these hosts can be reached.")
 		readOnlyNetWarning(t, "allow", w)
-	case "off":
+	case "airgap", "off":
 		fmt.Fprintln(w, ", so nothing can be reached until: ezbx net allow")
 	default:
 		fmt.Fprintln(w, "; the list is used in allow mode.")

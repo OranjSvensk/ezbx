@@ -23,6 +23,7 @@ const (
 // Reasons a proxy request didn't go through, as written to the log.
 const (
 	reasonNetworkOff   = "network_off"
+	reasonAirgap       = "network_airgap"
 	reasonNotAllowed   = "not_on_allowlist"
 	reasonLocalAddress = "local_address"
 	reasonPort         = "port_not_allowed"
@@ -34,7 +35,7 @@ const (
 
 // ProxyConfig holds the egress proxy's settings.
 type ProxyConfig struct {
-	Mode       string   // off, allow or on; empty means off
+	Mode       string   // airgap, off, allow or on; empty means off
 	Allow      []string // allowlist used in allow mode
 	MaxTunnels int      // open connections at once; 0 means 256
 	Ports      []int    // destination ports allowed; empty means 80 and 443
@@ -46,6 +47,7 @@ type ProxyConfig struct {
 // mode. See docs/gateway.md, section 5.
 type Proxy struct {
 	log        *logger
+	gw         *Gateway // its model route follows the mode too (airgap)
 	ports      map[int]bool
 	maxTunnels int
 
@@ -81,6 +83,7 @@ func (t *tunnel) close() {
 func (g *Gateway) NewProxy(cfg ProxyConfig) (*Proxy, error) {
 	p := &Proxy{
 		log:        g.log,
+		gw:         g,
 		ports:      map[int]bool{},
 		maxTunnels: cfg.MaxTunnels,
 		tunnels:    map[*tunnel]struct{}{},
@@ -115,7 +118,7 @@ func (g *Gateway) NewProxy(cfg ProxyConfig) (*Proxy, error) {
 // It returns how many were closed.
 func (p *Proxy) SetNetwork(mode string, allow []string) (int, error) {
 	if !ValidMode(mode) {
-		return 0, errors.New("network mode must be off, allow or on")
+		return 0, errors.New("network mode must be airgap, off, allow or on")
 	}
 	list, err := newAllowlist(allow)
 	if err != nil {
@@ -124,7 +127,9 @@ func (p *Proxy) SetNetwork(mode string, allow []string) (int, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.mode, p.allow = mode, list
-	closed := 0
+	// The model route closes with the proxy's lock held, so no tunnel or
+	// model request can slip between the two changes.
+	closed := p.gw.setAirgap(mode == ModeAirgap)
 	for t := range p.tunnels {
 		if p.ruleLocked(t.host) != "" {
 			t.killed.Store(true)
@@ -177,6 +182,8 @@ func (p *Proxy) Stats() ProxyStats {
 // returns a reason when they refuse it, or "". The caller holds p.mu.
 func (p *Proxy) ruleLocked(host string) string {
 	switch {
+	case p.mode == ModeAirgap:
+		return reasonAirgap
 	case p.mode == ModeOff:
 		return reasonNetworkOff
 	case p.mode == ModeAllow && !p.allow.allows(host):

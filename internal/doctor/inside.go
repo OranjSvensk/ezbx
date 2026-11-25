@@ -23,7 +23,7 @@ import (
 type InsideConfig struct {
 	Gateway   string   // host:port of the model route, e.g. gateway:8000
 	Proxy     string   // host:port of the egress proxy; empty if none
-	Mode      string   // network mode the gateway reports: off, allow or on
+	Mode      string   // network mode the gateway reports: airgap, off, allow or on
 	Engine    string   // engine id the gateway should stamp on replies
 	OpenPorts []int    // every gateway port the box may reach
 	Deny      []string // host:port addresses the box must not reach directly
@@ -74,6 +74,44 @@ func tinyCompletion(ctx context.Context, base, model string, wait time.Duration)
 	return Pass, fmt.Sprintf("answered in %d ms", time.Since(start).Milliseconds()), ""
 }
 
+// judgeModelList checks the gateway's answer to GET /v1/models from inside:
+// the model list from the expected engine, or, in airgap mode, the
+// gateway's own refusal. It returns the check and the first model's id.
+func judgeModelList(cfg InsideConfig, status int, engine string, body []byte) (Check, string) {
+	c := Check{Name: "model list through the gateway"}
+	var list struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	_ = json.Unmarshal(body, &list)
+	if cfg.Mode == "airgap" {
+		c.Name = "airgap closes the model route"
+		if status == http.StatusForbidden && list.Error.Code == "network_airgap" && engine == "" {
+			c.Status, c.Detail = Pass, "the gateway refused the model list"
+		} else {
+			c.Status, c.Detail = Fail, fmt.Sprintf("status %d", status)
+			c.Fix = "The gateway is too old or misconfigured. Run ezbx build, then ezbx down and ezbx up."
+		}
+		return c, ""
+	}
+	switch {
+	case status != http.StatusOK:
+		c.Status, c.Detail, c.Fix = Fail, fmt.Sprintf("status %d", status), "Run `ezbx gateway admin ready` in the gateway container to see why the engine refused."
+	case len(list.Data) == 0:
+		c.Status, c.Detail, c.Fix = Warn, "the engine lists no models", "Load a model in your engine."
+	case cfg.Engine != "" && engine != cfg.Engine:
+		c.Status, c.Detail, c.Fix = Fail, fmt.Sprintf("answered by engine %q, expected %q", engine, cfg.Engine), "Something other than the gateway answered, or it forwards to the wrong engine."
+	default:
+		c.Status, c.Detail = Pass, fmt.Sprintf("%d model(s), engine %s", len(list.Data), engine)
+		return c, list.Data[0].ID
+	}
+	return c, ""
+}
+
 // RunInside runs the checks that need to see what the box sees.
 func RunInside(ctx context.Context, cfg InsideConfig) Report {
 	if cfg.Timeout <= 0 {
@@ -89,31 +127,20 @@ func RunInside(ctx context.Context, cfg InsideConfig) Report {
 	if err != nil {
 		r.add(g, "model list through the gateway", Fail, shortErr(err), "Check that the gateway is running and attached to the inside network as \"gateway\".")
 	} else {
-		var list struct {
-			Data []struct {
-				ID string `json:"id"`
-			} `json:"data"`
-		}
-		_ = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&list)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		resp.Body.Close()
-		engine := resp.Header.Get("X-Ezbx-Engine")
-		switch {
-		case resp.StatusCode != http.StatusOK:
-			r.add(g, "model list through the gateway", Fail, fmt.Sprintf("status %d", resp.StatusCode), "Run `ezbx gateway admin ready` in the gateway container to see why the engine refused.")
-		case len(list.Data) == 0:
-			r.add(g, "model list through the gateway", Warn, "the engine lists no models", "Load a model in your engine.")
-		case cfg.Engine != "" && engine != cfg.Engine:
-			r.add(g, "model list through the gateway", Fail, fmt.Sprintf("answered by engine %q, expected %q", engine, cfg.Engine), "Something other than the gateway answered, or it forwards to the wrong engine.")
-		default:
-			model = list.Data[0].ID
-			r.add(g, "model list through the gateway", Pass, fmt.Sprintf("%d model(s), engine %s", len(list.Data), engine), "")
-		}
+		var c Check
+		c, model = judgeModelList(cfg, resp.StatusCode, resp.Header.Get("X-Ezbx-Engine"), body)
+		r.add(g, c.Name, c.Status, c.Detail, c.Fix)
 	}
 
 	// 2. A one-token completion goes through and is stamped with the model.
-	if model == "" {
+	switch {
+	case cfg.Mode == "airgap":
+		r.add(g, "a tiny completion", Skip, "the model route is closed in airgap mode", "")
+	case model == "":
 		r.add(g, "a tiny completion", Skip, "no model to ask", "")
-	} else {
+	default:
 		s, detail, fix := tinyCompletion(ctx, "http://"+cfg.Gateway, model, completionWait)
 		r.add(g, "a tiny completion", s, detail, fix)
 	}
@@ -188,7 +215,7 @@ func RunInside(ctx context.Context, cfg InsideConfig) Report {
 	}
 	status := connectVia(cfg.Proxy, "example.com:443", cfg.Timeout*5)
 	switch cfg.Mode {
-	case "off":
+	case "airgap", "off":
 		if status == "403" {
 			r.add(g, "network off is enforced", Pass, "example.com refused", "")
 		} else {

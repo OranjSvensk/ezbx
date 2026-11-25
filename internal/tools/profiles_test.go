@@ -86,7 +86,7 @@ func TestLoadRefusesBadProfiles(t *testing.T) {
 		"unknown tool":         {"profiles/p.json", repl(`["a"]`, `["nope"]`), `unknown tool "nope"`},
 		"unverified tool":      {"profiles/p.json", repl(`["a"]`, `["wip"]`), `"wip" isn't verified`},
 		"unknown pack":         {"profiles/p.json", repl(`["a"]`, `["pack:nope"]`), `unknown tool pack`},
-		"bad network":          {"profiles/p.json", repl(`"allow"`, `"open"`), "use off, allow or on"},
+		"bad network":          {"profiles/p.json", repl(`"allow"`, `"open"`), "use airgap, off, allow or on"},
 		"allow when off":       {"profiles/p.json", repl(`"network": "allow"`, `"network": "off"`), "cannot have an allow list"},
 		"allow when on":        {"profiles/p.json", repl(`"network": "allow"`, `"network": "on"`), "cannot have an allow list"},
 		"allow IP address":     {"profiles/p.json", repl(`"github.com"`, `"10.0.0.1"`), "is not a host name"},

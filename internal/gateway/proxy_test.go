@@ -141,6 +141,8 @@ func TestProxyModes(t *testing.T) {
 		want   int
 		reason string
 	}{
+		{ModeAirgap, nil, http.StatusForbidden, reasonAirgap},
+		{ModeAirgap, []string{"public.test"}, http.StatusForbidden, reasonAirgap},
 		{ModeOff, nil, http.StatusForbidden, reasonNetworkOff},
 		{ModeOff, []string{"public.test"}, http.StatusForbidden, reasonNetworkOff},
 		{ModeAllow, nil, http.StatusForbidden, reasonNotAllowed},
@@ -192,7 +194,7 @@ func TestProxyRefusesLocalAddressesInEveryMode(t *testing.T) {
 
 	// A local address is reported as local in every mode, not as "not on the
 	// allowlist" or "network off", so the log never suggests approving it.
-	for _, mode := range []string{ModeOff, ModeAllow} {
+	for _, mode := range []string{ModeAirgap, ModeOff, ModeAllow} {
 		if _, err := env.p.SetNetwork(mode, nil); err != nil {
 			t.Fatal(err)
 		}

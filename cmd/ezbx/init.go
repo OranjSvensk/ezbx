@@ -61,13 +61,13 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		}
 		return nil
 	})
-	fs.StringVar(&o.Network, "network", "", "off, allow or on")
+	fs.StringVar(&o.Network, "network", "", "airgap, off, allow or on")
 	fs.StringVar(&o.Memory, "memory", "", "memory limit, such as 8g")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--box NAME] [--config FILE] [--profile NAME] [--list-profiles] [--url ADDRESS] [--api auto|openai|lmstudio|anthropic] [--key-env NAME] [--later] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--readonly PATH]... [--network off|allow|on] [--memory 8g]")
+		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--box NAME] [--config FILE] [--profile NAME] [--list-profiles] [--url ADDRESS] [--api auto|openai|lmstudio|anthropic] [--key-env NAME] [--later] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--readonly PATH]... [--network airgap|off|allow|on] [--memory 8g]")
 		return 2
 	}
 	if *listProfiles {

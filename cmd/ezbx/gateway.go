@@ -59,7 +59,7 @@ func runGateway(args []string, stdout, stderr io.Writer) int {
 	keyFile := fs.String("key-file", "", "file holding the engine's key (what ezbx up uses); read at start")
 	logFile := fs.String("log", "-", "where to write the JSON log; - means standard output")
 	proxyAddr := fs.String("proxy", "", "address for the egress proxy; empty means no proxy")
-	network := fs.String("network", gateway.ModeOff, "network mode for the proxy: off, allow or on")
+	network := fs.String("network", gateway.ModeOff, "network mode: airgap (the model route closed too), off, allow or on")
 	var allow addresses
 	fs.Var(&allow, "allow", "host the proxy allows in allow mode, such as registry.npmjs.org or *.github.com (repeatable)")
 	allowFile := fs.String("allow-file", "", "file of more hosts to allow, one per line (# starts a comment); read at start")
@@ -288,7 +288,7 @@ func runAdmin(args []string, stdout, stderr io.Writer) int {
 		method, path, body = http.MethodPut, "/admin/engine", map[string]string{"upstream": rest[1], "engine": id}
 	case "network":
 		if len(rest) < 2 {
-			fmt.Fprintln(stderr, "Usage: network off|allow|on [HOST]...")
+			fmt.Fprintln(stderr, "Usage: network airgap|off|allow|on [HOST]...")
 			return 2
 		}
 		method, path, body = http.MethodPut, "/admin/network", gateway.NetworkState{Mode: rest[1], Allow: append([]string{}, rest[2:]...)}

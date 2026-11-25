@@ -93,6 +93,12 @@ type Gateway struct {
 	transport *http.Transport
 	proxy     *httputil.ReverseProxy
 	log       *logger
+
+	// mu guards airgap and inflight together, so a model request can't start
+	// unseen while the mode changes to airgap.
+	mu       sync.Mutex
+	airgap   bool
+	inflight map[*reqInfo]struct{}
 }
 
 // reqInfo travels with a request through the proxy. All of its fields are
@@ -106,6 +112,7 @@ type reqInfo struct {
 	ttfb    time.Duration
 	cancel  context.CancelFunc
 	idleHit atomic.Bool
+	cut     atomic.Bool // ended by a change to airgap
 }
 
 type ctxKey struct{}
@@ -267,6 +274,8 @@ func (g *Gateway) forward(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	info := &reqInfo{t: g.target.Load(), id: newID(), start: time.Now(), cancel: cancel}
 	rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+	open := g.track(info)
+	defer g.untrack(info)
 
 	defer func() {
 		e := entry{
@@ -282,6 +291,10 @@ func (g *Gateway) forward(w http.ResponseWriter, r *http.Request) {
 			TTFBMs: info.ttfb.Milliseconds(),
 		}
 		switch {
+		case !open:
+			e.Blocked, e.Reason = true, reasonAirgap
+		case info.cut.Load():
+			e.Closed = "network_tightened"
 		case r.Context().Err() != nil:
 			// The client left, perhaps in the middle of a stream.
 			e.Status, e.End = 499, "client_gone"
@@ -290,6 +303,10 @@ func (g *Gateway) forward(w http.ResponseWriter, r *http.Request) {
 		}
 		g.log.write(e)
 	}()
+	if !open {
+		writeError(rec, http.StatusForbidden, reasonAirgap, "The network is in airgap mode: the box may not reach the model either. On the host, ezbx net off (or allow, on) opens the model route again.")
+		return
+	}
 
 	held, err := g.readModel(rec, r, info)
 	defer g.buffered.give(held)
@@ -339,6 +356,47 @@ func (g *Gateway) forward(w http.ResponseWriter, r *http.Request) {
 }
 
 var errBusy = errors.New("gateway busy")
+
+// track records a model request so a change to airgap can end it. It
+// reports false, recording nothing, when the gateway is in airgap mode.
+func (g *Gateway) track(info *reqInfo) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.airgap {
+		return false
+	}
+	if g.inflight == nil {
+		g.inflight = map[*reqInfo]struct{}{}
+	}
+	g.inflight[info] = struct{}{}
+	return true
+}
+
+func (g *Gateway) untrack(info *reqInfo) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.inflight, info)
+}
+
+// setAirgap opens or closes the model route. Closing it ends every model
+// request in flight, streams included, and cancels them at the engine. It
+// returns how many were ended.
+func (g *Gateway) setAirgap(on bool) int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.airgap = on
+	if !on {
+		return 0
+	}
+	n := 0
+	for info := range g.inflight {
+		info.cut.Store(true)
+		info.cancel()
+		delete(g.inflight, info)
+		n++
+	}
+	return n
+}
 
 // readModel reads the request body (up to the size limit) to learn which
 // model was asked for, then puts the body back for forwarding. It returns how
@@ -447,6 +505,11 @@ func (g *Gateway) modifyResponse(resp *http.Response) error {
 }
 
 func (g *Gateway) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	// A change to airgap ended the request before the engine answered.
+	if info, ok := r.Context().Value(ctxKey{}).(*reqInfo); ok && info.cut.Load() {
+		writeError(w, http.StatusForbidden, reasonAirgap, "The network was switched to airgap mode, which closes the model route.")
+		return
+	}
 	// The client went away: nobody is left to read an answer.
 	if errors.Is(err, context.Canceled) {
 		if rec, ok := w.(*statusRecorder); ok {

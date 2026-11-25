@@ -224,3 +224,21 @@ func only(c *Config) (string, *Box) {
 	}
 	return n, c.Box[n]
 }
+
+func TestNetworkModes(t *testing.T) {
+	for _, m := range []string{"airgap", "off", "allow", "on"} {
+		c, err := Parse("version = 1\n[box.main]\nworkspace = '/w'\nnetwork = '" + m + "'\nharnesses = ['pi']\n")
+		if err != nil {
+			t.Errorf("%s: %v", m, err)
+			continue
+		}
+		if _, b := only(c); b.Network != m || !NetworkMode(m) {
+			t.Errorf("%s read back as %q", m, b.Network)
+		}
+	}
+	for _, m := range []string{"", "Airgap", "none", "local-model-only"} {
+		if NetworkMode(m) {
+			t.Errorf("%q is not a mode", m)
+		}
+	}
+}

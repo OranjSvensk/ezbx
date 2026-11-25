@@ -548,21 +548,21 @@ func harnessIDs(list []harness.Manifest) string {
 }
 
 func askNetwork(f Facts, o Options, a *Answers, p *Prompter, fromProfile bool) error {
-	fmt.Fprintln(p.Out, "\nNetwork for the agent (the model always works):")
-	fmt.Fprintln(p.Out, "  off    no internet")
-	fmt.Fprintln(p.Out, "  allow  only the hosts you list, such as registry.npmjs.org")
-	fmt.Fprintln(p.Out, "  on     the public internet; local addresses stay blocked")
-	fmt.Fprintln(p.Out, "  Change it any time with: ezbx net off|allow|on")
+	fmt.Fprintln(p.Out, "\nNetwork for the agent:")
+	fmt.Fprintln(p.Out, "  airgap  nothing at all, not even the model (for tests, builds and linters)")
+	fmt.Fprintln(p.Out, "  off     the model only, no internet")
+	fmt.Fprintln(p.Out, "  allow   the model and only the hosts you list, such as registry.npmjs.org")
+	fmt.Fprintln(p.Out, "  on      the model and the public internet; local addresses stay blocked")
+	fmt.Fprintln(p.Out, "  Change it any time with: ezbx net airgap|off|allow|on")
 	def := o.Network
 	if def == "" {
 		def = a.Network
 	}
 	mode, err := p.Ask("Network", def, func(s string) error {
-		switch s {
-		case "off", "allow", "on":
+		if config.NetworkMode(s) {
 			return nil
 		}
-		return errors.New("Type off, allow or on.")
+		return errors.New("Type airgap, off, allow or on.")
 	})
 	if err != nil {
 		return err
