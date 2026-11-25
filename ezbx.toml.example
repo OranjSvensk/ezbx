@@ -10,12 +10,14 @@
 # slashes, because a backslash inside double quotes starts an escape.
 version = 1
 
+# More boxes can follow as [box.other] sections with their own workspace;
+# commands then need --box NAME. They share the [engine] below.
 [box.main]                        # name: lowercase letters, digits and dashes
 workspace = '~/ezbx/workspace'    # the ONLY folder the agent can write to
 # memory  = "8g"                  # default: half of Docker's memory, from 2g to 8g
 # cpus    = 4                     # default: no limit
 # pids    = 512                   # process limit, default 512
-network   = "off"                 # off | allow | on
+network   = "off"                 # airgap | off | allow | on (airgap: not even the model)
 # allow   = ["registry.npmjs.org"] # hosts allowed in "allow" mode, besides the harnesses' own
 harnesses = ["pi"]                # more are added once their install is verified
 tools     = ["pack:coding"]       # built into the box: packs (pack:coding, pack:web,
@@ -48,6 +50,7 @@ api     = "auto"                  # auto | openai | lmstudio | anthropic (auto:
 # key_env = "ENGINE_API_KEY"      # NAME of an environment variable holding the key,
 #                                 # never the key itself (it is only sent to url)
 # host    = "localhost:PORT"      # Host header to send, for servers that check it
+# default_model = "MODEL"         # what a request for the model "default" gets
 
 # Facts about a model that servers don't report. Use the id from
 # "ezbx engine detect".

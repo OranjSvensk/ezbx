@@ -33,7 +33,7 @@ ezbx init --yes           accept detected defaults without prompting
 ezbx init --config FILE   take every answer from a config file
 ```
 
-Useful flags: `--profile NAME`, `--list-profiles`, `--url ADDRESS`, `--api auto|openai|lmstudio|anthropic`, `--key-env NAME`, `--later`, `--harness a,b`, `--workspace PATH`, `--network off|allow|on`, `--no-start`, `--here` (write config next to the current folder, for developers).
+Useful flags: `--profile NAME`, `--list-profiles`, `--url ADDRESS`, `--api auto|openai|lmstudio|anthropic`, `--key-env NAME`, `--later`, `--harness a,b`, `--workspace PATH`, `--network airgap|off|allow|on`, `--box NAME` (set up that box, or add it beside the others), `--no-start`, `--here` (write config next to the current folder, for developers).
 
 Prompts are plain text questions in version 0.1. Arrow-key menus can come later without changing the flow.
 

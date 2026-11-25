@@ -96,6 +96,7 @@ To preview what `ezbx init` will ask and create without changing anything on dis
 
    **Read-only folders (optional, none by default):** folders the agent may read but never change, such as other projects to learn from. They appear at `/readonly/<name>`. Common secret files in them (`.env` files, keys, `.ssh/` and more) are hidden, and `init` asks about any other file that looks like it holds a secret. Pass `--readonly PATH` (more than once for more). If a secret file appears in one later, `ezbx shell` refuses to start until you run `ezbx down` and `ezbx up`. See [readonly.md](readonly.md).
 6. **Network mode and memory limit:**
+   - `airgap`: nothing at all, not even the model; for tests, builds and linters.
    - `off` (default): no internet access; only the model route through the gateway works.
    - `allow`: only approved hostnames (such as `registry.npmjs.org`) are reachable.
    - `on`: public internet allowed; local/private/loopback/metadata addresses remain blocked.
@@ -155,6 +156,7 @@ ezbx net remove registry.npmjs.org
 ezbx net allow                    temporarily switch to allow mode (until next ezbx up)
 ezbx net on                       temporarily allow public internet (until next ezbx up)
 ezbx net off                      return to off mode
+ezbx net airgap                   close the model route too (ends model requests in flight)
 ```
 
 Temporary mode switches reset to `ezbx.toml` on the next `ezbx up`, so a forgotten `ezbx net on` never persists.
@@ -174,7 +176,14 @@ Temporary mode switches reset to `ezbx.toml` on the next `ezbx up`, so a forgott
 | Run full security, isolation, and model checks | `ezbx doctor` |
 | Open a temporary root shell (human-only, never the agent) | `ezbx admin shell` (add `--net` for temporary network) |
 | Wipe the agent home after taking a full backup | `ezbx reset` (`--restore <ID>` to undo) |
-| Remove all ezbx containers, volumes, state, and unused ezbx images | `ezbx destroy` (never touches your workspace) |
+| Remove the box's containers, volumes, state, and the images only it needs | `ezbx destroy` (never touches your workspace; `--images` also removes every unused ezbx image) |
+| See whether a box is running | `ezbx status` (`--json` for scripts) |
+| Run one command in the box, without a terminal | `ezbx exec -- npm test` (`--json`, `--timeout 10m`) |
+| Add or remove a harness | `ezbx harness add opencode`, then `ezbx build`, `ezbx down`, `ezbx up` |
+
+### Several boxes
+
+One `ezbx.toml` can hold several boxes, each with its own workspace, harnesses, network mode, containers and snapshots; they share the model server. Add one with `ezbx init --box NAME` (or, without questions, `ezbx create --box NAME --workspace FOLDER`), then give `--box NAME` to every command: `ezbx build --box NAME`, `ezbx up --box NAME`, `ezbx shell --box NAME`. Two boxes can't share a workspace folder. Programs that drive ezbx use the commands in [runtime-contract.md](runtime-contract.md).
 
 ### Adding harnesses or tools later
 

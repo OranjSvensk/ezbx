@@ -55,7 +55,9 @@ Responses that stream (server-sent events) are forwarded as they arrive, with no
 
 ### Model list
 
-`GET /v1/models` returns what the engine reports, as is. The CLI reads the same list to generate harness configs (see `harness-manifest.md`). A fixed alias such as `default` is a possible later addition, so configs wouldn't need regenerating when the model changes.
+`GET /v1/models` returns what the engine reports, as is. The CLI reads the same list to generate harness configs (see `harness-manifest.md`).
+
+**The `default` alias** (design decision 26). With `default_model` under `[engine]` in `ezbx.toml` (`--default-model` on `ezbx gateway serve`), a request for the model `default` is sent to the engine with that model's name instead, on every route, translated or not; every other field of the body is kept. The log and `X-Ezbx-Model` name the real model. Without it, `default` reaches the engine as it is. The name follows the header rule: up to 200 printable ASCII characters, and not `default` itself. `ezbx engine use` sends the setting again with the new upstream, and a new address drops it, since another server may not have that model.
 
 ### Response headers
 
@@ -85,6 +87,7 @@ The proxy is how the box reaches the internet, if at all.
 
 | Mode | Behavior |
 |---|---|
+| `airgap` | Every proxy request is refused, and so is every model request (403, `network_airgap`). Switching to it ends model requests in flight, streams included, and cancels them at the engine; they count with the closed tunnels. `/healthz` still answers. |
 | `off` | Every proxy request is refused. Only the model route works. |
 | `allow` | Requests are allowed only to hosts on the allowlist. |
 | `on` | Requests to the public internet are allowed. |
@@ -116,12 +119,13 @@ One JSON object per line, written to the per-user state folder (decided in `init
 | `engine`, `model` | Model route: the engine, and the model name from the request when present. |
 | `status` | The status code sent back. For a tunnel, 200 means it opened. |
 | `blocked`, `reason` | Proxy: `blocked` is true when the network rules refused the request, and `reason` says which rule (`network_off`, `not_on_allowlist`, `local_address`, `port_not_allowed`). A request that failed for another reason has a `reason` (`lookup_failed`, `connect_failed`, `bad_host`, `proxy_busy`) but isn't `blocked`. |
-| `closed` | Proxy: `network_tightened` when a mode change ended the tunnel. |
+| `closed` | `network_tightened` when a mode change ended the tunnel, or (in `airgap`) the model request. |
+| `doctor` | Proxy: true for `ezbx doctor`'s own probes, which carry `X-Ezbx-Doctor: 1`. `ezbx net` leaves them out of its list of blocked hosts; the proxy applies its rules to them as to anything else, and drops the header from what it forwards. |
 | `ms`, `ttfb_ms` | Total time and, on the model route, time to the first byte. For a tunnel, `ms` is how long it stayed open. |
 | `end` | Only when a reply was cut short: `client_gone` (the box left; the status is then 499) or `engine_idle` (the engine went quiet). |
-| `tokens_in`, `tokens_out` | Planned. When the response reports usage. **Verify** how each engine reports usage in streams. |
+| `tokens_in`, `tokens_out` | Model route: the token counts the reply reported, read from what the gateway sent the box (a JSON body up to 4 MiB, or a stream's `data:` lines up to 1 MiB each), in OpenAI's or Anthropic's shape. Left out when the reply reported none. |
 
-Built today: everything above except the token counts. A proxy line is written when a tunnel ends, with `time` set to when it started. The admin token never appears in the log.
+Built today: everything above. When the gateway translates a stream from an OpenAI-compatible server, it asks for the counts with `stream_options.include_usage` and asks again without it if the server answers 400; the real numbers then reach the harness too (they used to be placeholders). A plain stream passed through is left as the harness asked for it, so its counts are logged only when the harness asked for usage. A proxy line is written when a tunnel ends, with `time` set to when it started. The admin token never appears in the log.
 
 Prompts and responses are **not** logged. A switch to log them, and rotation by size, are planned.
 
@@ -184,7 +188,7 @@ Every call needs `Authorization: Bearer <token>`. The token is at least 32 chara
 |---|---|---|
 | `GET /admin/status` | | Current state (section 7). |
 | `GET /admin/ready` | | Whether the engine answers with at least one model. |
-| `PUT /admin/engine` | `{"upstream": "http://…", "engine": "id"}` | Switch the upstream engine. |
+| `PUT /admin/engine` | `{"upstream": "http://…", "engine": "id", "default_model": "name"}` | Switch the upstream engine. `default_model` sets the `default` alias; left out, the alias is off, since it belonged to the old server. |
 | `PUT /admin/network` | `{"mode": "allow", "allow": ["registry.npmjs.org"]}` | Set the mode and replace the allowlist. The reply says how many tunnels were closed. |
 | `POST /admin/network/allow` | `{"domain": "github.com"}` | Add one entry and keep the mode. |
 | `POST /admin/engine/unload` | | Planned: ask the engine to unload its model, if the adapter supports it ("gaming mode"). |
@@ -195,7 +199,7 @@ From the host, each call is one `docker exec`:
 docker exec ezbx-<box>-gateway /ezbx gateway admin status
 docker exec ezbx-<box>-gateway /ezbx gateway admin network allow registry.npmjs.org
 docker exec ezbx-<box>-gateway /ezbx gateway admin allow github.com
-docker exec ezbx-<box>-gateway /ezbx gateway admin engine http://host.docker.internal:PORT openai
+docker exec ezbx-<box>-gateway /ezbx gateway admin engine http://host.docker.internal:PORT openai [DEFAULT_MODEL]
 ```
 
 `ezbx net` and `ezbx engine use` will wrap these.
@@ -232,7 +236,7 @@ Each proxy protection was mutation-checked: turning it off makes a test fail.
 
 Checked against a real local model server, with the hardened gateway in its container: readiness, the model list, a chat reply, a streamed reply that arrived chunk by chunk, a stream cancelled by the box, the path checks, and Pi using tools through it (see [isolation-test.md](isolation-test.md)).
 
-Not built yet: the engine unload call, a setting to allow a chosen local address, the cloud provider routes (design decision 8), and token usage in the log. Detection sends the key only to the configured `url` (design decision 19), so a server that also wants its key for the model list works too.
+Not built yet: the engine unload call, a setting to allow a chosen local address, and the cloud provider routes (design decision 8). Detection sends the key only to the configured `url` (design decision 19), so a server that also wants its key for the model list works too.
 
 Docker: the gateway image ([docker/gateway.Dockerfile](../docker/gateway.Dockerfile)) was run locked down with the proxy and admin API in the isolation test ([isolation-test.md](isolation-test.md)). `ezbx` doesn't create or start containers yet; that was done by hand.
 
@@ -240,10 +244,11 @@ Docker: the gateway image ([docker/gateway.Dockerfile](../docker/gateway.Dockerf
 
 - **0.1 (done):** model route, streaming, key injection, response headers, `off` and `on` modes, logging, health, admin API.
 - **0.2 (done):** `allow` mode, blocked-request workflow, `doctor` end-to-end checks.
-- **Later:** the `default` alias, usage metering, several engines at once.
+- **0.4:** the `airgap` mode, the `default` alias, token counts in the log.
+- **Later:** usage metering, several engines at once.
 
 ## 13. Open questions
 
-1. How each engine reports token usage in streamed responses.
+1. ~~How each engine reports token usage in streamed responses.~~ The gateway asks for it (decision 25). Still to check live: which servers accept `stream_options`.
 2. Whether the gateway should enforce one request at a time per engine, or leave queuing to the engine.
 3. ~~Default location of the state folder and logs.~~ Decided in `init-flow.md`: a per-user state folder, never inside the workspace and never mounted into the box.

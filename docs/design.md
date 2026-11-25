@@ -1,6 +1,6 @@
 # ezbx design (draft 0.1)
 
-Status: `v0.3.1` early release (verified on Windows 11 with Docker Desktop and a local model server across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`). Built: read-only folders with secret masking ([readonly.md](readonly.md)), starter profiles ([profiles.md](profiles.md)), model server detection by API kind (`openai`, `lmstudio`, `anthropic`; decision 22), the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)).
+Status: `v0.3.1` early release, with the 0.4 work on `main` (the runtime contract's phase 1, several boxes, the `airgap` mode; section 12). Verified on Windows 11 with Docker Desktop and a local model server across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`. Built: read-only folders with secret masking ([readonly.md](readonly.md)), starter profiles ([profiles.md](profiles.md)), model server detection by API kind (`openai`, `lmstudio`, `anthropic`; decision 22), the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)).
 
 ## 1. Goal
 
@@ -52,7 +52,7 @@ One small service that does four jobs:
 | **Model route** | Exposes one stable OpenAI-compatible address inside the box, for example `http://gateway:8000/v1`, and forwards to the model server in `ezbx.toml`. Moving to another server changes one setting and no harness config. |
 | **Key injection** | Keys stay on the host and the agent never sees a real one. Built for the model server's key on the model route. Cloud API keys will use one reverse route per provider on the gateway (decision 8, not built yet), because the egress proxy never decrypts HTTPS and so cannot add a key to a tunnelled request. |
 | **Egress control** | A forward proxy that applies the current network mode (section 5). |
-| **Request log** | Records model, latency and how each request ended. Token counts and blocked requests are planned. |
+| **Request log** | Records model, latency, how each request ended, the token counts a reply reports, and blocked proxy requests. |
 
 Decided: the gateway is one small Go binary, shipped in a minimal image and sharing code with the CLI. The full design is in [gateway.md](gateway.md).
 
@@ -73,6 +73,7 @@ Containers reach the host through a host alias. On Docker Desktop this works for
 
 | Mode | Model route | Internet |
 |---|---|---|
+| `airgap` | no | none |
 | `off` | yes | none |
 | `allow` | yes | only domains on the allowlist (package registries, the code host, and any API a chosen cloud harness needs) |
 | `on` | yes | the public internet (local networks and the host stay blocked) |
@@ -81,6 +82,7 @@ Containers reach the host through a host alias. On Docker Desktop this works for
 - A mode switched with `ezbx net` lasts until the next `ezbx up` or gateway restart, which go back to the mode in `ezbx.toml`, so a forgotten `on` never outlives its session. Hosts approved with `ezbx net allow` are saved in the box's state folder and kept (decision 11).
 - Each harness manifest lists the domains it needs, and `allow` merges the lists of the installed harnesses.
 - Cloud-backed harnesses won't work in `off`. `ezbx doctor` says so.
+- `airgap` closes the model route too, for commands that need no model at all, such as tests, builds and linters. Switching a running box to it ends model requests in flight (decision 24).
 - The default allowlist is tiny: package registries and the code host. Everything else is added on demand. The gateway logs blocked requests, and `ezbx net allow <domain>` approves one. Allowlists are plain data files, so people can contribute to them.
 
 ## 6. The box
@@ -113,10 +115,13 @@ Before each session, ezbx snapshots the workspace into a store in the box's stat
 
 ```text
 ezbx init               guided setup: engine, harnesses, folders
-ezbx up | down          start or stop the gateway and box
+ezbx create             add a box to ezbx.toml without asking anything (for programs)
+ezbx up | down          start or stop the gateway and box (start | stop for programs)
 ezbx shell [harness]    open a terminal in the box, or launch a harness
-ezbx net off|allow|on   change the network mode
-ezbx engine detect|use|status
+ezbx exec -- COMMAND    run one command in the box without a terminal
+ezbx status             missing, stopped, running or unhealthy
+ezbx net airgap|off|allow|on   change the network mode
+ezbx engine detect|use
 ezbx harness add|remove|list
 ezbx snapshot | rewind | review
 ezbx admin shell        human-only root shell in a temporary admin container
@@ -124,6 +129,8 @@ ezbx doctor             check Docker, engine, gateway, mounts and network
 ezbx reset              a fresh agent home and containers; backs up first and refuses to continue if the backup fails
 ezbx destroy            remove everything ezbx made for a box, never the workspace
 ```
+
+Programs that drive ezbx use `--json` on these commands; the contract is in [runtime-contract.md](runtime-contract.md).
 
 Language: Go, built as one cross-platform binary. The first milestone targets Windows with Docker Desktop, and the code avoids Windows-only assumptions so Linux can follow.
 
@@ -145,7 +152,8 @@ The full threat model is in [threat-model.md](threat-model.md): what is protecte
 1. **0.1 (done, `v0.1.0`):** `init`, engine detection for Strata and one other engine, the gateway with the model route and `off`/`on`, one harness, snapshots.
 2. **0.2 (done, `v0.2.0`):** `allow` mode, more engines and harnesses, `doctor`, `reset` with backup and restore. The remaining harnesses and `review`, first planned for 0.3, came early.
 3. **0.3 (done, `v0.3.1`):** read-only folders with secret masking and the full threat model, model servers by API kind (decision 22: `openai`, `lmstudio`, `anthropic`), starter profiles (`offline`, `open`, `python-ml`, `research`, `web-dev` in [profiles.md](profiles.md)).
-4. **Later:** tray or GUI front end, other container runtimes, a tool-calling self-test for models.
+4. **0.4 (on `main`, not released):** the runtime contract's phase 1 for programs that drive ezbx ([runtime-contract.md](runtime-contract.md): `version --json`, `status`, `create`, `start`, `exec`, `stop`, `destroy --json`), several boxes in one `ezbx.toml` (decision 23), the `airgap` mode (decision 24), token counts in the gateway's log (decision 25), the `default` model alias (decision 26), `ezbx harness add|remove|list`, and `destroy` limited to its box (decision 27).
+5. **Later:** `ezbx events --jsonl`, cloud API keys (decision 8), Linux and macOS, tray or GUI front end, other container runtimes, a tool-calling self-test for models.
 
 ## 13. Decisions
 
@@ -155,7 +163,7 @@ The full threat model is in [threat-model.md](threat-model.md): what is protecte
 | 2 | Allowlist | Tiny default list plus each harness's domains. Blocked requests are logged and approved with `ezbx net allow`. Lists are data files. |
 | 3 | Platforms | Windows with Docker Desktop first. No Windows-only assumptions in the code. Linux next, macOS later. |
 | 4 | Engines bound to loopback outside Docker Desktop | Version 0.1 supports Docker Desktop only. `ezbx doctor` detects the problem and explains the fix. A proper helper comes later. |
-| 5 | Boxes | One box in 0.1 holding many projects. The config format allows several named boxes so they can be added later without breaking anything. |
+| 5 | Boxes | One box in 0.1 holding many projects. The config format allowed several named boxes from the start; 0.4 runs them (decision 23). |
 | 6 | Second harness | Pi first, then OpenCode 2, pinned at an exact version. It supports a custom OpenAI-compatible provider, which points at the gateway. Its npm launcher needs its install script, so the lockfile pins its prebuilt Linux x64 baseline program instead ([build.md](build.md)). |
 | 7 | Reaching the admin API | It listens only on the gateway container's own loopback, with no published port. The CLI calls it through `docker exec`, and a token is still required. The box has no network path to it. See [gateway.md](gateway.md), section 2. |
 | 8 | Cloud API keys | One reverse route per cloud provider on the gateway, built like the model route. The harness points its base address at the gateway, and the gateway adds the key and forwards to that provider's fixed address. Each provider gets a small adapter for its key style. Only API-key providers are covered; account logins that refresh their own tokens are a separate case for later. Built after the isolation proof, since 0.1's first harness uses a local model. |
@@ -173,6 +181,11 @@ The full threat model is in [threat-model.md](threat-model.md): what is protecte
 | 20 | Which harnesses a box image holds | Only the box's own (`harnesses` in `ezbx.toml`), so each box carries what it uses; the list is part of the image's name. The box Dockerfile has one harness stage that runs the install script of every harness folder in the build files, so a new harness needs no Dockerfile change. A harness's `env` is set on the box container by `ezbx up`. Chosen over building every verified harness into every box (OpenCode alone adds about 250 MB). See [build.md](build.md). |
 | 21 | Read-only folders and secret masking | Built. A read-only bind mount at `/readonly/<name>`, with an empty read-only overlay over each file or folder that matches a mask; a built-in mask list that `mask` adds to and only `unmask` can lift; content warnings rather than refusals; `ezbx shell` refuses a session when a new secret file isn't masked yet; the workspace's folder refusals plus no overlaps; network warnings, not refusals. See [readonly.md](readonly.md). |
 | 22 | Which model servers ezbx supports | Any server, by the API it speaks: an API kind (`openai`, `lmstudio`, `anthropic`) is a data file of probes and model-fact paths, with no product names, status commands or start, stop and unload commands. `[engine]` holds `url`, `api` (`auto` by default), `key_env` and `host`; the 0.2 form (`engine.use`, `[engine.<id>]` tables) is refused with a message showing the new one. `ezbx up`, `ezbx engine use` and `ezbx doctor` contact only the configured address and the gateway's upstream; only `ezbx init` and `ezbx engine detect` look at common local ports. A new address drops the old `key_env` and `host`. Chosen over adapters per engine program: ezbx would have to keep verifying each program one by one, while the model server is yours to choose. The `anthropic` kind (passing `/v1/messages` through and translating `/v1/chat/completions` and `/v1/responses` to it) is built. |
+| 23 | Several boxes | `ezbx.toml` may hold several `[box.<name>]` sections, sharing one `[engine]`. Each has its own containers, networks, home volume, state folder and image. A command acts on the only box, or on the one `--box` names; with several, `--box` is required rather than guessed. Two boxes may not have the same workspace or one inside the other, because each snapshots and rewinds its own. `ezbx init --box NAME` and `ezbx create` add one and keep the others; `ezbx build` builds every box's image (or `--box`'s), and `--prune` keeps every box's current one. Chosen over one config file per box (the engine settings would be copied into each) and over keeping one box (a program running several agents needs several). |
+| 24 | A mode without the model | `airgap` joins `off`, `allow` and `on`: the gateway refuses the model route (403, `network_airgap`) as well as everything through the proxy, and a switch to it ends model requests in flight. `off` keeps its meaning (the model only), so no existing config changes. The box still reaches the gateway's ports, which refuse it; taking the gateway off the box's network would be stronger, but switching modes while the box runs would then mean reconnecting networks. Chosen over renaming `off` to `local-model-only` and using `off` for this mode, which would have given one word two meanings. |
+| 25 | Token counts in the log | The gateway reads `usage` from what it sends the box (JSON, or a stream's events, in OpenAI's or Anthropic's shape) and logs `tokens_in` and `tokens_out`, never the content. When it translates a stream, it asks the server for usage (`stream_options.include_usage`, part of OpenAI's API) and passes the real numbers on; a server that refuses the option with 400 is asked once more without it. |
+| 26 | A `default` model | `default_model` under `[engine]` names a model; a request for the model `default` gets it, on every route, and the log and `X-Ezbx-Model` name the real one. It belongs to the server, so a new address drops it, like `key_env`. Without it, `default` reaches the engine as it is. |
+| 27 | What `destroy` removes | Everything for its box, and only the images that box needs that no other box in `ezbx.toml` needs and no container uses; `--images` removes every unused ezbx image, as 0.3 did. `--remove-config` takes out the box's section, or the whole file when it was the only box. Chosen so destroying one agent's box never breaks another's. |
 
 ## 14. Open questions
 

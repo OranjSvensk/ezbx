@@ -9,7 +9,7 @@
 
 ezbx is a planned one-click setup for running AI coding and agent tools inside a sandboxed container, while the model itself keeps running on your own machine.
 
-> **Status: early release (`v0.3.1`).** All seven harnesses — Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw — are built, pinned in `ezbx.lock`, and verified end to end on Windows 11 with Docker Desktop and a local model server (including file tools in `/workspace` with `network = "off"`). Every command on the road to 0.1 below is built, alongside read-only folders with secret masking ([docs/readonly.md](docs/readonly.md)), model server support by API kind (`openai`, `lmstudio`, `anthropic`; [docs/engine-adapters.md](docs/engine-adapters.md)), and starter profiles ([docs/profiles.md](docs/profiles.md)). Linux, macOS and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), the planned caller contract is in [docs/runtime-contract.md](docs/runtime-contract.md), and designs are in [docs/](docs/).
+> **Status: early release (`v0.3.1`).** All seven harnesses — Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw — are built, pinned in `ezbx.lock`, and verified end to end on Windows 11 with Docker Desktop and a local model server (including file tools in `/workspace` with `network = "off"`). Every command on the road to 0.1 below is built, alongside read-only folders with secret masking ([docs/readonly.md](docs/readonly.md)), model server support by API kind (`openai`, `lmstudio`, `anthropic`; [docs/engine-adapters.md](docs/engine-adapters.md)), and starter profiles ([docs/profiles.md](docs/profiles.md)). Linux, macOS and cloud keys come next. Test results are in [docs/isolation-test.md](docs/isolation-test.md), the contract for programs that drive ezbx is in [docs/runtime-contract.md](docs/runtime-contract.md) (its first phase is on `main`, for 0.4), and designs are in [docs/](docs/).
 
 ```text
 # Scoop (Windows):
@@ -23,7 +23,7 @@ ezbx init                 # asks the questions, shows the plan, builds and start
 ezbx shell pi             # opens Pi in the box (or opencode, omp, codex, claude, hermes, openclaw)
 ```
 
-New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-started.md). Other commands: `ezbx up` and `ezbx down` start and remove the box described in `ezbx.toml` (see [ezbx.toml.example](ezbx.toml.example)), `ezbx build` builds the images, `ezbx review` and `ezbx rewind` show and undo what changed in the workspace since a snapshot, `ezbx net` shows and switches the network and approves hosts, `ezbx engine detect` and `ezbx engine use` find a model server and point the box at it, and `ezbx doctor` checks the whole setup and explains any fix.
+New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-started.md). Other commands: `ezbx up` and `ezbx down` start and remove a box described in `ezbx.toml` (it can hold several; give `--box NAME`) (see [ezbx.toml.example](ezbx.toml.example)), `ezbx build` builds the images, `ezbx review` and `ezbx rewind` show and undo what changed in the workspace since a snapshot, `ezbx net` shows and switches the network and approves hosts, `ezbx engine detect` and `ezbx engine use` find a model server and point the box at it, `ezbx harness add|remove|list` changes a box's harnesses, and `ezbx doctor` checks the whole setup and explains any fix. For programs that drive ezbx, `ezbx create`, `start`, `exec`, `status`, `stop` and `destroy` take `--json` ([docs/runtime-contract.md](docs/runtime-contract.md)).
 
 ## The idea
 
@@ -31,7 +31,7 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 - **The work stays in the box.** Agents run in a container and can only write to folders you choose.
 - **One stable address between them.** A small gateway lets the box talk to your model server, so moving to another server or port doesn't mean reconfiguring every tool.
 - **You choose the harnesses.** Pick from Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw, in any combination. Each one's install method is verified and pinned in `ezbx.lock`.
-- **Network on or off.** A switch controls whether the agent can reach the internet.
+- **Network on or off.** A switch controls whether the agent can reach the internet: `airgap` (not even the model), `off` (the model only), `allow` (listed hosts) or `on`.
 - **Root stays with you.** The agent runs as an unprivileged user. Admin access is reserved for the human.
 
 ## Planned first version

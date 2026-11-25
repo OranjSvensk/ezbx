@@ -6,7 +6,8 @@ Three commands for the human, never the agent.
 ezbx admin shell [--net] [-- COMMAND...]     a root shell beside the box
 ezbx reset [--rebuild] [--restore ID] [--yes] [--no-doctor]
 ezbx reset --list                            the backups reset has made
-ezbx destroy [--remove-config] [--yes]       remove everything ezbx made for the box
+ezbx destroy [--remove-config] [--images] [--yes] [--json]
+                                             remove everything ezbx made for the box
 ```
 
 ## Decisions
@@ -37,5 +38,5 @@ Decided before the code was written (design decisions 16 and 17).
 - Closing a terminal window doesn't always end the admin shell in it, and its container then stays, so a new `ezbx admin shell` (and `reset`, `destroy`) says one is open. The message gives the way out: `docker stop ezbx-<box>-admin` (the container is removed when it stops), or `docker rm` for one that is left over but not running.
 
 - An admin shell with `--net` reaches the whole internet; the box's network switch doesn't apply to it.
-- `destroy` on one box removes ezbx images no container uses, even if another box that is down would need them. `ezbx build` makes them again.
+- `destroy` removes only its box's images that no other box in `ezbx.toml` needs and no container uses (design decision 27). Older builds and images of boxes no longer in `ezbx.toml` stay until `ezbx build --prune` or `ezbx destroy --images`, which removes every ezbx image no container uses, as 0.3 did. `--remove-config` takes only the box's section out of `ezbx.toml` when other boxes stay.
 - A backup holds the agent's home, the config and the approved hosts, not the snapshots (they stay where they are) or the images (they can be built again).

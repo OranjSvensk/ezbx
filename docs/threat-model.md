@@ -31,17 +31,19 @@ Trusted: you, your inference engine, Docker Desktop and its VM, Windows, and oth
 
 - **Control:** only `/workspace` and the agent's home volume are writable. The box runs as user `agent` (uid 1000) with every capability dropped, `no-new-privileges`, no Docker socket, and no host folders except the workspace and any read-only folders, which are mounted read-only. `up` refuses a workspace that is a drive root, your home folder, a system folder, or overlaps ezbx's own folders. Snapshots live outside the box, so the agent can't rewrite its own history.
 - **Proven by:** [isolation-test.md](isolation-test.md) ("The box image", "`ezbx up` and `ezbx down`", "A workspace the agent can't write"), `ezbx doctor`'s box lock-down and no-socket checks, `CheckWorkspace` tests.
+- **Several boxes:** no two boxes' workspaces may be the same folder or one inside the other, so one box's agent can't write into another's, and one box's `rewind` can't undo another's work. Proven by `TestRefused` and `TestGatherSeveralBoxes`.
 - **Read-only folders:** mounted read-only, secrets masked by name, secret-looking contents warned about, and a session refused when a new secret file appears ([readonly.md](readonly.md)). Proven by unit tests, the mask test in [isolation-test.md](isolation-test.md) ("Read-only folder masks") and `ezbx doctor`'s "Read-only folders" checks.
 
 ### Box to network
 
-- **Control:** isolation by topology. The box is only on an `--internal` network created with `gateway_mode_ipv4=isolated` and IPv6 off, so the gateway is the only thing it can reach. The gateway's proxy decides by mode: `off` refuses everything, `allow` only listed host names, `on` the public internet. In every mode it refuses local, private, link-local (including `169.254.169.254`), reserved and Docker Desktop addresses, checks every address a name resolves to and connects to the checked address, and allows ports 80 and 443 only. A mode switched with `ezbx net` lasts until the next `up`.
+- **Control:** isolation by topology. The box is only on an `--internal` network created with `gateway_mode_ipv4=isolated` and IPv6 off, so the gateway is the only thing it can reach. The gateway's proxy decides by mode: `airgap` and `off` refuse everything (`airgap` refuses the model route too), `allow` only listed host names, `on` the public internet. In every mode it refuses local, private, link-local (including `169.254.169.254`), reserved and Docker Desktop addresses, checks every address a name resolves to and connects to the checked address, and allows ports 80 and 443 only. A mode switched with `ezbx net` lasts until the next `up`.
 - **Proven by:** the probe in [isolation-test.md](isolation-test.md) (every TCP target and DNS path listed there), the gateway's address tests, and `ezbx doctor`'s throwaway check container, which repeats the port scans and proxy refusals.
 
 ### Box to engine
 
 - **Control:** the gateway forwards to one fixed engine address, `/v1/...` paths only, GET, HEAD and POST only, with path checks (no `.`, `..`, `//`, backslashes or control characters), no protocol upgrades, size and time limits. The engine's key is added by the gateway and never enters the box. The gateway's log records requests without their content.
 - **Proven by:** gateway tests, [isolation-test.md](isolation-test.md) ("With a real engine", "The engine key file").
+- **`ezbx exec`:** runs as the agent, like `ezbx shell`, and refuses `--env` variables that would change the proxy, `HOME`, `PATH` or `USER`, or that look like secrets, so a program driving ezbx can't hand the box a key by mistake. Proven by `TestCheckExecEnv`.
 
 ### Box to gateway administration
 

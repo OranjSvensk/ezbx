@@ -1,56 +1,62 @@
-# Runtime contract for external callers (planned)
+# Runtime contract for external callers
 
-> **Status:** planning contract (target: `ezbx` v0.4.0+). None of the new flags or subcommands below exist in `ezbx` v0.3.0 yet; where an item maps to an existing v0.3.0 command, it is noted explicitly.
+> **Status:** phase 1 is built for `ezbx` v0.4.0: `version --json`, `status`, `create`, `start`, `exec`, `stop`, `destroy --json`, several boxes in one `ezbx.toml`, and the four network modes. `events --jsonl` (section 2, last part) is still planned.
 
-This document defines the stable CLI and JSON contract between `ezbx` (the sandbox runtime) and external desktop or orchestration callers such as Cadre. `ezbx` owns container isolation, gateway routing, network enforcement, and snapshots; the caller owns Git worktrees, per-agent branch governance, prompt assembly, and human approvals.
+This document defines the stable CLI and JSON contract between `ezbx` (the sandbox runtime) and external desktop or orchestration programs that drive it. `ezbx` owns container isolation, gateway routing, network enforcement, and snapshots; the caller owns Git worktrees, per-agent branch governance, prompt assembly, and human approvals.
 
 ---
 
 ## 1. Design rules
 
-1. **CLI over IPC/HTTP daemon.** Callers invoke the `ezbx` binary directly as a subprocess (`--json` or `--jsonl` on stdout, diagnostics on stderr). There is no separate host background server to discover or authenticate against.
-2. **Structured machine output.** Every command in section 2 supports `--json` and returns one JSON object on stdout. Non-interactive commands never prompt on stdin; destructive actions require `--yes`.
-3. **Fail closed.** If `ezbx` is missing, Docker is unavailable, the version/contract check fails, or a requested box has stale images, `ezbx` exits non-zero with a structured error and never falls back to running unboxed on the host.
-4. **No secret or prompt leaks in events.** Streams and status responses report box names, network state, exit codes, and byte/latency metadata only — never model prompts, responses, tokens, or API keys.
+1. **CLI, not a daemon.** Callers run the `ezbx` binary as a subprocess. With `--json` a command prints one JSON object on stdout and nothing else there; progress and diagnostics go to stderr. There is no background server to discover or authenticate against.
+2. **Nothing interactive.** The contract commands never ask a question. A destructive command needs `--yes`, and `--json` on one that would ask (`destroy`) is refused without it.
+3. **Fail closed.** If Docker is unavailable, the box isn't running, or its images don't match `ezbx.toml`, `ezbx` exits non-zero with a structured error and never falls back to running anything on the host.
+4. **No secrets or prompts in results.** Results report box names, network state, exit codes and timings. Engine keys never enter the box or any result. `exec --json` returns the output of the command the caller ran, which is the caller's own.
 
 ---
 
-## 2. Lifecycle and execution commands
+## 2. Commands
 
-Every command accepts `--box <name>` (defaults to `main`) and `--json` (except `events --jsonl`, which streams newline-delimited JSON).
+Every command takes `--box NAME`. With one box in `ezbx.toml` it may be left out; with several, it is required (the box is never guessed). `--config FILE` names another config file.
 
-| Command | Purpose | Maps from v0.3.0 |
+| Command | Purpose | Same as |
 |---|---|---|
-| `ezbx create` | Validate workspace/mounts and register a named box config without starting containers | `init` / config write |
-| `ezbx start` | Ensure images match `ezbx.inputs`, start gateway + box networks and containers, wait healthy | `up` |
-| `ezbx exec` | Run one command or harness inside the running box non-interactively and stream stdout/stderr | `shell` (non-TTY) |
-| `ezbx stop` | Stop and remove box + gateway containers and networks while keeping home volume, snapshots, and workspace | `down` |
-| `ezbx destroy` | Remove everything `ezbx` created for `--box <name>` (containers, volumes, state); never deletes the workspace | `destroy --box <name>` |
-| `ezbx status` | Report whether the box is stopped/starting/running, active network mode, gateway health, and image input hash | `doctor` / container inspect |
-| `ezbx events --jsonl` | Stream structured lifecycle, network, and gateway events as one JSON object per line until interrupted | gateway log + container events |
+| `ezbx version --json` | The handshake: version, contract version, features | |
+| `ezbx create` | Add a box to `ezbx.toml` without asking anything; builds, starts and downloads nothing | `ezbx init`, non-interactive |
+| `ezbx build --box NAME` | Build the box's images (the only command that downloads) | |
+| `ezbx start` | Start the box from images that match `ezbx.toml`; never builds or pulls | `ezbx up --no-doctor` (`--doctor` runs the doctor too) |
+| `ezbx exec` | Run one command in the running box, without a terminal | `ezbx shell`, non-interactive |
+| `ezbx status` | Whether the box is missing, stopped, running or unhealthy | |
+| `ezbx stop` | Remove the box's containers and networks; keep its home volume, snapshots and workspace | `ezbx down` |
+| `ezbx destroy --yes` | Remove everything `ezbx` made for this box; never the workspace | |
+| `ezbx net MODE` | Change the network mode of a running box (section 3) | |
 
 ### Command details
 
-- **`ezbx create --box <name> --workspace <dir> [--network <mode>] [--allow <host>...] [--readonly <dir[:name]>...] [--json]`**
-  - Registers the box under `EZBX_HOME` without touching Docker images or downloading anything.
-  - Refuses overlapping state/workspace folders and enforces `internal/readonly` default secret masks.
-- **`ezbx start --box <name> [--json]`**
-  - Refuses unbuilt or mismatched images (`ezbx.inputs` check); never pulls or builds implicitly.
-  - Starts the isolated gateway and box containers and blocks until health checks pass.
-- **`ezbx exec --box <name> [--cwd /workspace] [--timeout <duration>] [--env KEY=VAL...] [--json] -- <cmd> [args...]`**
-  - Runs as the unprivileged `agent` user (`uid 1000`) inside the box.
-  - `--env` only forwards explicit non-secret variables; engine keys remain inside the gateway and never enter the box environment.
-  - With `--json`, returns `{ "ok": true, "exitCode": 0, "durationMs": 412, "stdout": "...", "stderr": "..." }` (or streams raw stdout/stderr when `--json` is omitted).
-- **`ezbx stop --box <name> [--json]`**
-  - Cleanly shuts down the running box and gateway for `<name>` without touching other boxes.
-- **`ezbx destroy --box <name> --yes [--json]`**
-  - Scoped strictly to `--box <name>` (unlike `v0.3.0`'s global image prune). Never removes shared base images or the workspace folder.
-- **`ezbx status --box <name> [--json]`**
-  - Returns box state (`"missing" | "stopped" | "running" | "unhealthy"`), `networkMode`, `allow` list, `workspace`, `gatewayHealthy`, `imageTag`, and `ezbxVersion`.
+- **`ezbx create --box NAME --workspace FOLDER [--network MODE] [--allow HOST]... [--readonly FOLDER]... [--harness LIST] [--tools LIST] [--profile NAME] [--memory 8g] [--json]`**
+  - Writes a `[box.NAME]` section (the file's old content is kept as `ezbx.toml.previous`) and makes the workspace folder. Defaults come from the `offline` starter profile unless `--profile` names another.
+  - Refuses a box name that exists already (`box_exists`), a workspace that is, holds or sits inside another box's workspace, and the folders `ezbx init` refuses (drive roots, the home folder, system folders, `ezbx`'s own folders). Read-only folders get the default secret masks.
+  - `[engine]` (the model server) is shared by every box. `--url`, `--api` and `--key-env` are taken only when `ezbx.toml` doesn't exist yet; otherwise change the server with `ezbx init` or `ezbx engine use`.
+  - `data`: `configFile`, `workspace`, `network`, `allow`, `harnesses`, `tools`, `readonly`.
+- **`ezbx start --box NAME [--doctor] [--json]`**
+  - Refuses images that aren't built from the current inputs (`image_mismatch`) and a box that is already up (`box_already_running`). Waits until the gateway's health check passes. `data` is the box's state, as `status` reports it.
+- **`ezbx exec --box NAME [--cwd DIR] [--timeout 10m] [--env NAME=VALUE]... [--snapshot] [--json] -- COMMAND [ARGS...]`**
+  - Runs as the unprivileged `agent` user (uid 1000) in `/workspace` (or `--cwd`, a clean full path inside the box). Standard input is passed through.
+  - `--timeout` ends the command inside the box (coreutils `timeout`, killed 5 seconds later if it hasn't ended), so nothing keeps running there after `ezbx` gives up.
+  - `--env` passes plain variables only: proxy variables, `HOME`, `PATH`, `USER`, and names containing `KEY`, `TOKEN`, `SECRET` or `PASSWORD` are refused (`invalid_args`). A model server's key belongs under `[engine] key_env`, where only the gateway reads it.
+  - No workspace snapshot unless `--snapshot` (the caller owns its worktrees). The read-only folder check of `ezbx shell` runs every time: a new secret file in a read-only folder stops the command.
+  - Without `--json`, the command's output streams through and `ezbx` exits with its exit code. With `--json`, `ezbx` exits 0 once the command has run, and `data` is `{"exitCode": 0, "durationMs": 412, "stdout": "...", "stderr": "..."}`, with `stdoutTruncated`/`stderrTruncated` when either passed 1 MiB (the first 1 MiB is kept) and bytes that aren't UTF-8 replaced. A command stopped by `--timeout` gives `ok: false`, error `timeout`, and the partial `data` with `timedOut: true`.
+- **`ezbx status --box NAME [--json]`**
+  - `data`: `state` (`missing`: not in `ezbx.toml` and nothing exists; `stopped`; `running`; `unhealthy`, with `problems`), `workspace`, `networkMode` (the running gateway's, else `ezbx.toml`'s), `configNetworkMode`, `allow`, `gatewayHealthy`, `imageTag`, `imageCurrent` (whether the running box uses the image `ezbx.toml` needs now), `ezbxVersion`. It only reads.
+- **`ezbx stop --box NAME [--json]`**: `data` is the box's state afterwards.
+- **`ezbx destroy --box NAME --yes [--remove-config] [--images] [--json]`**
+  - Removes the box's containers, networks, home volume and state folder (snapshots and backups too), and the box's images that no other box in `ezbx.toml` needs and no other container uses. `--images` also removes every other `ezbx` image no container uses, and the build record. Never the workspace.
+  - `--remove-config` also takes the box's section out of `ezbx.toml` (the whole file only when it was the only box).
+  - With `--json` the list of what is removed goes to stderr, and `data` is `{"removed": [...], "kept": [...]}`.
 
-### Standard JSON envelope
+### The JSON result
 
-Every `--json` command returns one object:
+Every `--json` command except `version` prints one object:
 
 ```json
 {
@@ -61,7 +67,7 @@ Every `--json` command returns one object:
 }
 ```
 
-On failure (non-zero exit code), `ok` is `false` and `error` carries a machine-readable `code` plus a plain-English `message`:
+On failure `ok` is `false`, the exit code is non-zero (2 for `invalid_args`, else 1), and `error` carries a machine-readable `code` plus a plain-English `message`:
 
 ```json
 {
@@ -70,83 +76,89 @@ On failure (non-zero exit code), `ok` is `false` and `error` carries a machine-r
   "contractVersion": 1,
   "error": {
     "code": "image_mismatch",
-    "message": "box image inputs changed; run ezbx build first"
+    "message": "the image ezbx-box:3f2a91c0d4be isn't built yet. Run ezbx build (it needs the internet once), then ezbx up"
   }
 }
 ```
 
-Standard error codes: `invalid_args`, `box_not_found`, `box_already_running`, `docker_unavailable`, `image_mismatch`, `network_blocked`, `contract_mismatch`, `timeout`, `internal_error`.
+| Code | Meaning |
+|---|---|
+| `invalid_args` | A flag or value was wrong, or a setting was refused (exit code 2) |
+| `box_not_found` | `ezbx.toml` has no box by that name |
+| `box_exists` | `create` was asked for a box `ezbx.toml` already has |
+| `box_not_running` | The box's containers aren't running |
+| `box_already_running` | `start` found the box up already; `stop` it first to apply changes |
+| `docker_unavailable` | Docker doesn't answer, or is older than Engine 28 |
+| `image_mismatch` | An image isn't built, or wasn't built from the current inputs; run `ezbx build` |
+| `timeout` | `exec --timeout` stopped the command, or a step took too long |
+| `internal_error` | Anything else; the message says what |
 
-### `ezbx events --jsonl [--box <name>] [--since <rfc3339>]`
+A caller may also define `contract_mismatch` for itself (section 4); `ezbx` never prints it.
 
-Emits one compact JSON line per event, flushed immediately:
+### Planned: `ezbx events --jsonl [--box NAME] [--since RFC3339]`
+
+One compact JSON line per event, flushed at once, until interrupted:
 
 ```json
-{"ts":"2026-11-24T19:00:00Z","event":"box.started","box":"agent-ada","data":{"networkMode":"local-model-only"}}
-{"ts":"2026-11-24T19:00:02Z","event":"exec.started","box":"agent-ada","data":{"execId":"ex_01","cmd":"npm test"}}
+{"ts":"2026-11-24T19:00:00Z","event":"box.started","box":"agent-ada","data":{"networkMode":"off"}}
 {"ts":"2026-11-24T19:00:08Z","event":"net.blocked","box":"agent-ada","data":{"host":"example.com","port":443}}
 {"ts":"2026-11-24T19:00:11Z","event":"exec.exited","box":"agent-ada","data":{"execId":"ex_01","exitCode":0,"durationMs":9012}}
 ```
 
-Defined event types: `box.created`, `box.started`, `box.stopped`, `box.destroyed`, `exec.started`, `exec.exited`, `net.changed`, `net.blocked`, `gateway.request`, `snapshot.created`.
+Planned event types: `box.created`, `box.started`, `box.stopped`, `box.destroyed`, `exec.started`, `exec.exited`, `net.changed`, `net.blocked`, `gateway.request`, `snapshot.created`. `exec.started` will carry the program's name and how many arguments it had, never the arguments, which can hold a prompt.
 
 ---
 
 ## 3. Four network modes
 
-`ezbx` exposes four explicit network modes on `create`, `start`, and `ezbx net`:
+| Mode | Outbound internet | Model route (host model server via the gateway) | Intended use |
+|---|---|---|---|
+| `airgap` | Blocked | Blocked | Offline tests, builds, linters and reviewed scripts |
+| `off` | Blocked | Allowed | Local AI coding with no internet at all (the default) |
+| `allow` | Approved hosts only | Allowed | Package registries or other hosts on an explicit allowlist |
+| `on` | The public internet through the proxy | Allowed | Research or setup sessions a human approved |
 
-| Contract mode | Outbound internet | Local model gateway route | Intended use | `ezbx.toml` v0.3 equivalent |
-|---|---|---|---|---|
-| `off` | Blocked | Blocked | Offline tests, builds, linters, and reviewed skill scripts | *(new in v0.4)* |
-| `local-model-only` | Blocked | Allowed (host model server via gateway only) | Local AI coding sessions with zero internet egress | `network = "off"` |
-| `allowlist` | Approved hosts only | Allowed | Cloud model APIs or package registries on an explicit allowlist | `network = "allow"` |
-| `open` | Unrestricted via proxy | Allowed | Explicit user-approved research or setup sessions | `network = "on"` |
-
-- **Backwards compatibility:** Existing `ezbx.toml` files using `"off"`, `"allow"`, and `"on"` remain valid; the CLI and contract layer map them to `"local-model-only"`, `"allowlist"`, and `"open"` automatically, while `"airgap"` / `"none"` (or `--network off` in contract mode) enforce full gateway + internet isolation.
-- **No silent escalation:** Switching from `off` or `local-model-only` to `allowlist` or `open` must be requested explicitly by the caller (e.g., after a human approval gate).
+- The same four words are used in `ezbx.toml`, `ezbx create --network`, `ezbx init --network` and `ezbx net`. A config written before 0.4 keeps its meaning: `off` has always been "the model only".
+- In `airgap` the gateway refuses every model request with 403 (`network_airgap`) and its proxy refuses everything. Switching a running box to `airgap` ends model requests in flight, streams included, and cancels them at the engine. The box still reaches the gateway's two ports, which refuse it.
+- **No silent escalation:** `ezbx net` changes the mode only when asked, and the next `start` goes back to the mode in `ezbx.toml`.
 
 ---
 
 ## 4. Version pinning and capability handshake
 
-Callers verify compatibility before creating or starting any box by running:
+Callers check compatibility before creating or starting any box:
 
 ```text
 ezbx version --json
 ```
-
-Expected response:
 
 ```json
 {
   "ok": true,
   "version": "0.4.0",
   "contractVersion": 1,
-  "features": [
-    "lifecycle-v1",
-    "events-jsonl",
-    "net-four-modes",
-    "readonly-masks"
-  ],
+  "features": ["lifecycle-v1", "net-four-modes", "readonly-masks", "status-v1"],
   "platform": "windows/amd64"
 }
 ```
 
+`events-jsonl` joins the features when `events --jsonl` is built.
+
 Pinning rules for callers:
 
-1. **Exact contract major check:** Require `contractVersion === 1`. Any breaking change to flags, JSON fields, or event schemas bumps `contractVersion`.
-2. **Minimum SemVer range:** Pin a tested minimum and upper major bound (for example `>=0.4.0 <1.0.0`), recorded in the caller's manifest or release config.
-3. **Fail closed on mismatch:** If `ezbx` is absent, exits non-zero, reports an unsupported `contractVersion`, or lacks a required feature flag, the caller surfaces an actionable message pointing to `ezbx doctor` and refuses sandboxed execution.
-4. **No silent auto-updates:** Callers never download or overwrite the `ezbx` binary or container images automatically without explicit human consent.
+1. **Exact contract major check:** require `contractVersion === 1`. Any breaking change to flags, JSON fields or error codes raises it.
+2. **Minimum SemVer range:** pin a tested minimum and upper major bound (for example `>=0.4.0 <1.0.0`).
+3. **Fail closed on mismatch:** if `ezbx` is absent, exits non-zero, reports an unsupported `contractVersion`, or lacks a required feature, the caller surfaces an actionable message pointing to `ezbx doctor` and refuses sandboxed execution.
+4. **No silent auto-updates:** callers never download or overwrite the `ezbx` binary or its images without explicit human consent.
 
 ---
 
 ## 5. Security invariants
 
-All protections documented in [threat-model.md](threat-model.md) and [readonly.md](readonly.md) stay enforced regardless of caller:
+All protections in [threat-model.md](threat-model.md) and [readonly.md](readonly.md) stay enforced whoever calls:
 
-- The box runs unprivileged (`agent`, `uid 1000`), with all Linux capabilities dropped, `no-new-privileges`, no Docker socket, and memory/CPU/PID limits.
-- Only `/workspace` (mapped to the caller's chosen project or worktree path) is writable on the host; optional `--readonly` folders apply default secret masking (`*` `.env*`, keys, `.ssh/`, etc.).
-- API keys stay on the host/gateway side and are never injected into the box environment or mounted state.
-- On `off` and `local-model-only` modes, isolated Docker internal networks prevent the container from reaching LAN addresses, Docker VM bridges, or public internet endpoints.
+- The box runs unprivileged (`agent`, uid 1000), with all Linux capabilities dropped, `no-new-privileges`, no Docker socket, and memory, CPU and process limits.
+- Only `/workspace` (the caller's chosen project or worktree folder) is writable from the box; optional read-only folders get the default secret masks (`.env` files, keys, `.ssh/` and more).
+- Engine keys stay with the gateway and never enter the box's environment or files.
+- In `airgap` and `off`, the internal Docker network keeps the box away from the LAN, Docker's own addresses and the internet.
+- Several boxes never share a workspace, so one box's `rewind` can't undo another agent's work.
