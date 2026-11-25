@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -39,6 +38,8 @@ const usage = `ezbx - boxed-up local AI agents
 
 Usage:
   ezbx [--version] [help]
+  ezbx version [--json]
+  ezbx status [--box NAME] [--config FILE] [--json]
   ezbx init [--plan] [--yes] [--no-start] [--box NAME] [--config FILE] [--profile NAME]
             [--list-profiles] [--url ADDRESS | --later]
             [--api auto|openai|lmstudio|anthropic] [--key-env NAME] [--reasoning]
@@ -133,7 +134,11 @@ Commands:
   doctor          Check Docker, the model server, the networks, the gateway and
                   the box, then check from inside the box's network that it
                   reaches the model and nothing else. Explains each fix.
-  version         Print the ezbx version (same as --version or -v).
+  status          Whether a box is missing, stopped, running or unhealthy,
+                  with its network mode and image. --json for programs.
+  version         Print the ezbx version (same as --version or -v). --json
+                  adds the contract version and features, for programs that
+                  run ezbx (docs/runtime-contract.md).
 `
 
 func main() {
@@ -142,9 +147,14 @@ func main() {
 
 // run is separate from main so it can be tested. It returns the exit code.
 func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 1 && (args[0] == "version" || args[0] == "--version" || args[0] == "-v") {
-		fmt.Fprintf(stdout, "ezbx %s (%s/%s)\n", resolveVersion(), runtime.GOOS, runtime.GOARCH)
-		return 0
+	if len(args) == 1 && (args[0] == "--version" || args[0] == "-v") {
+		return runVersion(nil, stdout, stderr)
+	}
+	if len(args) >= 1 && args[0] == "version" {
+		return runVersion(args[1:], stdout, stderr)
+	}
+	if len(args) >= 1 && args[0] == "status" {
+		return runStatus(args[1:], stdout, stderr)
 	}
 	if len(args) >= 2 && args[0] == "engine" && args[1] == "detect" {
 		return runDetect(args[2:], stdout, stderr)

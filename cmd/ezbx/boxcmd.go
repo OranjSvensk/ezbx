@@ -3,9 +3,7 @@ package main
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"os"
-	"strings"
 
 	"github.com/OranjSvensk/ezbx/internal/config"
 	"github.com/OranjSvensk/ezbx/internal/paths"
@@ -34,7 +32,7 @@ func (t target) needBox() (*config.Box, error) {
 	}
 	b := t.box()
 	if b == nil {
-		return nil, fmt.Errorf("box %q isn't in ezbx.toml (it has %s). Add it with ezbx init --box %s, or pick another with --box", t.name, strings.Join(t.cfg.Names(), ", "), t.name)
+		return nil, errNoBox(t.name, t.cfg.Names())
 	}
 	return b, nil
 }

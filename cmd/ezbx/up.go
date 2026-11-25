@@ -120,7 +120,7 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 func makePlan(ctx context.Context, cfg *config.Config, name string, dirs paths.Dirs, stdout io.Writer) (box.Plan, error) {
 	b, ok := cfg.Get(name)
 	if !ok {
-		return box.Plan{}, fmt.Errorf("box %q isn't in ezbx.toml (it has %s). Add it with ezbx init --box %s", name, strings.Join(cfg.Names(), ", "), name)
+		return box.Plan{}, errNoBox(name, cfg.Names())
 	}
 	home, _ := os.UserHomeDir()
 

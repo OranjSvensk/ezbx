@@ -113,3 +113,31 @@ func (r *Runner) CopyHome(ctx context.Context, p Plan) error {
 	}
 	return nil
 }
+
+// Container is what ezbx status needs to know about one container.
+type Container struct {
+	Exists, Running bool
+	Health          string // healthy, unhealthy or starting; "" without a healthcheck
+	Image           string // the image name it was started from
+}
+
+// Inspect looks up a container by its exact name. It refuses a container
+// with that name that ezbx didn't create.
+func (r *Runner) Inspect(ctx context.Context, name string) (Container, error) {
+	f, err := r.lookup(ctx, "container", name)
+	if err != nil || !f.exists {
+		return Container{}, err
+	}
+	if !f.managed {
+		return Container{}, fmt.Errorf("a container named %s exists, but ezbx didn't create it, so ezbx won't use it", name)
+	}
+	out, err := r.run(ctx, "container", "inspect", "--format", "{{.State.Running}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}|{{.Config.Image}}", name)
+	if err != nil {
+		return Container{}, err
+	}
+	parts := strings.SplitN(strings.TrimSpace(string(out)), "|", 3)
+	if len(parts) != 3 {
+		return Container{}, fmt.Errorf("unexpected answer from docker container inspect %s: %q", name, out)
+	}
+	return Container{Exists: true, Running: parts[0] == "true", Health: parts[1], Image: parts[2]}, nil
+}

@@ -74,12 +74,12 @@ func (r *Runner) lookup(ctx context.Context, kind, name string) (found, error) {
 func (r *Runner) CheckDocker(ctx context.Context) error {
 	out, err := r.run(ctx, "version", "--format", "{{.Server.Version}}")
 	if err != nil {
-		return fmt.Errorf("the Docker engine doesn't answer (%v). Start Docker Desktop, then try again", firstLine(err))
+		return coded(CodeDockerUnavailable, "the Docker engine doesn't answer (%v). Start Docker Desktop, then try again", firstLine(err))
 	}
 	v := strings.TrimSpace(string(out))
 	major, _ := strconv.Atoi(strings.SplitN(v, ".", 2)[0])
 	if major < 28 {
-		return fmt.Errorf("Docker Engine %s is too old: ezbx needs 28 or later for the isolated network option. Update Docker Desktop", v)
+		return coded(CodeDockerUnavailable, "Docker Engine %s is too old: ezbx needs 28 or later for the isolated network option. Update Docker Desktop", v)
 	}
 	return nil
 }
@@ -107,10 +107,10 @@ func (r *Runner) Up(ctx context.Context, p Plan) error {
 	for _, img := range []Image{p.GatewayImage, p.BoxImage} {
 		out, err := r.run(ctx, "image", "inspect", "--format", `{{index .Config.Labels "ezbx.inputs"}}`, img.Tag)
 		if err != nil {
-			return fmt.Errorf("the image %s isn't built yet. Run ezbx build (it needs the internet once), then ezbx up", img.Tag)
+			return coded(CodeImageMismatch, "the image %s isn't built yet. Run ezbx build (it needs the internet once), then ezbx up", img.Tag)
 		}
 		if got := strings.TrimSpace(string(out)); got != img.Inputs {
-			return fmt.Errorf("the image %s wasn't built by ezbx build from these files. Remove it, then run ezbx build", img.Tag)
+			return coded(CodeImageMismatch, "the image %s wasn't built by ezbx build from these files. Remove it, then run ezbx build", img.Tag)
 		}
 	}
 
@@ -124,7 +124,7 @@ func (r *Runner) Up(ctx context.Context, p Plan) error {
 			return fmt.Errorf("a container named %s exists, but ezbx didn't create it, so ezbx won't touch it. Rename or remove it yourself", name)
 		}
 		if f.exists {
-			return fmt.Errorf("box %q is already up (or partly up). To apply changes, run ezbx down, then ezbx up", p.Box)
+			return coded(CodeAlreadyRunning, "box %q is already up (or partly up). To apply changes, run ezbx down, then ezbx up", p.Box)
 		}
 	}
 
