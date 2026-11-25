@@ -1,6 +1,6 @@
 # ezbx design (draft 0.1)
 
-Status: `v0.3.0` early release (verified on Windows 11 with Docker Desktop and a local model server across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`). Built: read-only folders with secret masking ([readonly.md](readonly.md)), starter profiles ([profiles.md](profiles.md)), model server detection by API kind (`openai`, `lmstudio`, `anthropic`; decision 22), the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)).
+Status: `v0.3.1` early release (verified on Windows 11 with Docker Desktop and a local model server across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`). Built: read-only folders with secret masking ([readonly.md](readonly.md)), starter profiles ([profiles.md](profiles.md)), model server detection by API kind (`openai`, `lmstudio`, `anthropic`; decision 22), the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)).
 
 ## 1. Goal
 
@@ -144,7 +144,7 @@ The full threat model is in [threat-model.md](threat-model.md): what is protecte
 
 1. **0.1 (done, `v0.1.0`):** `init`, engine detection for Strata and one other engine, the gateway with the model route and `off`/`on`, one harness, snapshots.
 2. **0.2 (done, `v0.2.0`):** `allow` mode, more engines and harnesses, `doctor`, `reset` with backup and restore. The remaining harnesses and `review`, first planned for 0.3, came early.
-3. **0.3 (done, `v0.3.0`):** read-only folders with secret masking and the full threat model, model servers by API kind (decision 22: `openai`, `lmstudio`, `anthropic`), starter profiles (`offline`, `python-ml`, `research`, `web-dev` in [profiles.md](profiles.md)).
+3. **0.3 (done, `v0.3.1`):** read-only folders with secret masking and the full threat model, model servers by API kind (decision 22: `openai`, `lmstudio`, `anthropic`), starter profiles (`offline`, `open`, `python-ml`, `research`, `web-dev` in [profiles.md](profiles.md)).
 4. **Later:** tray or GUI front end, other container runtimes, a tool-calling self-test for models.
 
 ## 13. Decisions

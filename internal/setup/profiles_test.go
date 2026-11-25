@@ -40,8 +40,8 @@ func realFacts(t *testing.T) Facts {
 // produces a valid ezbx.toml that round-trips cleanly.
 func TestAllRealProfilesRoundTrip(t *testing.T) {
 	f := realFacts(t)
-	if len(f.Catalog.Profiles) != 4 {
-		t.Fatalf("want 4 profiles, got %d", len(f.Catalog.Profiles))
+	if len(f.Catalog.Profiles) != 5 {
+		t.Fatalf("want 5 profiles, got %d", len(f.Catalog.Profiles))
 	}
 	for _, id := range f.Catalog.ProfileIDs() {
 		pr := f.Catalog.Profiles[id]
@@ -83,20 +83,20 @@ func TestProfileInteractivePromptAndDefaults(t *testing.T) {
 	if a := res.Answers; a.Network != "off" || len(a.Allow) != 0 || strings.Join(a.Tools, ",") != "pack:coding" || strings.Join(a.Harnesses, ",") != "pi" {
 		t.Errorf("default profile wrong: %+v", a)
 	}
-	for _, id := range []string{"offline", "python-ml", "research", "web-dev"} {
+	for _, id := range []string{"offline", "open", "python-ml", "research", "web-dev"} {
 		if !strings.Contains(out.String(), id) {
 			t.Errorf("prompt missing profile %s\n%s", id, out.String())
 		}
 	}
 
-	// Interactive selection: engine L, bad profile input then 4 (web-dev), then accept defaults.
-	input := strings.Join([]string{"L", "99", "4", "", "", ws, "", "", "", ""}, "\n") + "\n"
+	// Interactive selection: engine L, bad profile input then 5 (web-dev), then accept defaults.
+	input := strings.Join([]string{"L", "99", "5", "", "", ws, "", "", "", ""}, "\n") + "\n"
 	p, out = prompter(input)
 	res, err = Gather(f, Options{}, p)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if !strings.Contains(out.String(), "Type a number from 1 to 4.") {
+	if !strings.Contains(out.String(), "Type a number from 1 to 5.") {
 		t.Errorf("missing profile validation hint:\n%s", out.String())
 	}
 	if a := res.Answers; a.Network != "allow" || strings.Join(a.Tools, ",") != "pack:coding,pack:web" ||
@@ -199,7 +199,7 @@ func TestProfileErrorsAndFormat(t *testing.T) {
 	p, _ := prompter("")
 	p.Auto = true
 
-	if _, err := Gather(f, Options{Profile: "nope", Later: true}, p); err == nil || !strings.Contains(err.Error(), "offline, python-ml, research, web-dev") {
+	if _, err := Gather(f, Options{Profile: "nope", Later: true}, p); err == nil || !strings.Contains(err.Error(), "offline, open, python-ml, research, web-dev") {
 		t.Errorf("unknown profile: %v", err)
 	}
 
@@ -227,7 +227,7 @@ func TestProfileErrorsAndFormat(t *testing.T) {
 		t.Errorf("FormatProfiles(nil) = %q", got)
 	}
 	formatted := FormatProfiles(f.Catalog)
-	for _, want := range []string{"offline", "Offline coding", "python-ml", "pypi.org", "research", "arxiv.org", "web-dev", "registry.npmjs.org"} {
+	for _, want := range []string{"offline", "Offline coding", "open", "Open workspace", "pack:media", "network: on", "python-ml", "pypi.org", "research", "arxiv.org", "web-dev", "registry.npmjs.org"} {
 		if !strings.Contains(formatted, want) {
 			t.Errorf("FormatProfiles missing %q\n%s", want, formatted)
 		}

@@ -36,7 +36,7 @@ Or download a release archive from [GitHub Releases](https://github.com/OranjSve
 Or install with Go 1.27 or later:
 
 ```text
-go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.3.0
+go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.3.1
 ```
 
 You can also build directly from a clone:
@@ -64,7 +64,7 @@ Start Docker Desktop and your model server (with a model loaded), then run:
 ezbx init
 ```
 
-To preview what `ezbx init` will ask and create without changing anything on disk, run `ezbx init --plan`. To inspect ready-made starter profiles (`offline`, `python-ml`, `research`, `web-dev`), run `ezbx init --list-profiles` or pass `--profile NAME` ([profiles.md](profiles.md)).
+To preview what `ezbx init` will ask and create without changing anything on disk, run `ezbx init --plan`. To inspect ready-made starter profiles (`offline`, `open`, `python-ml`, `research`, `web-dev`), run `ezbx init --list-profiles` or pass `--profile NAME` ([profiles.md](profiles.md)).
 
 `ezbx init` walks you through six steps and shows the full plan before touching anything:
 

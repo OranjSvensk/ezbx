@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "id": "open",
+  "name": "Open workspace",
+  "description": "All verified tool packs (coding, headless Chromium, media) with full public internet access (still non-root and isolated from LAN/host).",
+  "harnesses": ["pi"],
+  "tools": ["pack:coding", "pack:web", "pack:media"],
+  "network": "on",
+  "allow": []
+}

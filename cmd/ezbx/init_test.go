@@ -71,7 +71,7 @@ func TestInitListProfilesAndUnknownProfile(t *testing.T) {
 	if code := run([]string{"init", "--list-profiles"}, &out, &errOut); code != 0 || errOut.Len() != 0 {
 		t.Fatalf("exit %d stderr=%q", code, errOut.String())
 	}
-	for _, want := range []string{"offline", "python-ml", "research", "web-dev", "registry.npmjs.org", "pypi.org", "arxiv.org"} {
+	for _, want := range []string{"offline", "open", "python-ml", "research", "web-dev", "registry.npmjs.org", "pypi.org", "arxiv.org"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("--list-profiles missing %q\n%s", want, out.String())
 		}
@@ -79,7 +79,7 @@ func TestInitListProfilesAndUnknownProfile(t *testing.T) {
 
 	out.Reset()
 	errOut.Reset()
-	if code := run([]string{"init", "--profile", "nope"}, &out, &errOut); code != 2 || !strings.Contains(errOut.String(), "offline, python-ml, research, web-dev") {
+	if code := run([]string{"init", "--profile", "nope"}, &out, &errOut); code != 2 || !strings.Contains(errOut.String(), "offline, open, python-ml, research, web-dev") {
 		t.Errorf("unknown profile: code=%d stderr=%q", code, errOut.String())
 	}
 }

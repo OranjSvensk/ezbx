@@ -13,6 +13,7 @@ ezbx init --profile python-ml --yes
 | ID | Name | Harnesses | Tools | Network | Allowed hosts |
 |---|---|---|---|---|---|
 | `offline` | Offline coding | `pi` | `pack:coding` | `off` | none (default) |
+| `open` | Open workspace | `pi` | `pack:coding`, `pack:web`, `pack:media` | `on` | all public hosts (LAN/host still blocked) |
 | `python-ml` | Python and ML | `pi` | `pack:coding` | `allow` | `files.pythonhosted.org`, `github.com`, `huggingface.co`, `pypi.org` |
 | `research` | Research | `pi` | `pack:coding`, `pack:web` | `allow` | `arxiv.org`, `en.wikipedia.org`, `github.com`, `raw.githubusercontent.com` |
 | `web-dev` | Web development | `pi` | `pack:coding`, `pack:web` | `allow` | `api.github.com`, `github.com`, `raw.githubusercontent.com`, `registry.npmjs.org` |
@@ -20,6 +21,7 @@ ezbx init --profile python-ml --yes
 Notes on what is built into the image:
 
 - `pack:web` adds headless Chromium (several hundred MB; see [build.md](build.md)). If you want a smaller `research` box, pick `--tools pack:coding` during setup.
+- `open` builds all three tool packs (`pack:coding`, `pack:web`, `pack:media`) and sets `network = "on"` for full public internet access while keeping the box non-root and isolated from your LAN, host loopback services and files outside `/workspace`.
 - `python3` in `pack:coding` is Debian's Python 3 without `pip` or `venv` yet (`python-ml` still sets the Python/PyPI/Hugging Face allowlist and everyday coding tools).
 
 ## How they work

@@ -1,6 +1,6 @@
 # Threat model
 
-What ezbx protects, against whom, how, and what it leaves to you. It covers ezbx `v0.3.0` on Windows 11 with Docker Desktop, the only verified setup. Each claim points to where it is tested; [isolation-test.md](isolation-test.md) holds the live results, including the end-to-end test of read-only folders ([readonly.md](readonly.md)).
+What ezbx protects, against whom, how, and what it leaves to you. It covers ezbx `v0.3.1` on Windows 11 with Docker Desktop, the only verified setup. Each claim points to where it is tested; [isolation-test.md](isolation-test.md) holds the live results, including the end-to-end test of read-only folders ([readonly.md](readonly.md)).
 
 The short version: ezbx assumes the agent may misbehave, through a bad model, a prompt injection or a hostile file it reads, and limits what it can reach. It doesn't protect against a container escape, against malware already on your PC, or against you running, outside the box, something the agent wrote.
 

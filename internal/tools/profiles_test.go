@@ -13,11 +13,14 @@ func TestRealProfiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.Join(c.ProfileIDs(), ",")
-	if got != "offline,python-ml,research,web-dev" {
-		t.Fatalf("ProfileIDs = %q, want offline,python-ml,research,web-dev", got)
+	if got != "offline,open,python-ml,research,web-dev" {
+		t.Fatalf("ProfileIDs = %q, want offline,open,python-ml,research,web-dev", got)
 	}
 	if off := c.Profiles["offline"]; off.Network != "off" || len(off.Allow) != 0 {
 		t.Errorf("offline profile wrong: %+v", off)
+	}
+	if op := c.Profiles["open"]; op.Network != "on" || len(op.Allow) != 0 || strings.Join(op.Tools, ",") != "pack:coding,pack:web,pack:media" {
+		t.Errorf("open profile wrong: %+v", op)
 	}
 	if wd := c.Profiles["web-dev"]; wd.Network != "allow" || len(wd.Allow) == 0 || strings.Join(wd.Tools, ",") != "pack:coding,pack:web" {
 		t.Errorf("web-dev profile wrong: %+v", wd)

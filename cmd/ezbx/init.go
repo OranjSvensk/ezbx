@@ -42,7 +42,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	noStart := fs.Bool("no-start", false, "write the config, but don't start the box")
 	listProfiles := fs.Bool("list-profiles", false, "list starter profiles and exit")
 	var o setup.Options
-	fs.StringVar(&o.Profile, "profile", "", "starter profile: offline, python-ml, research or web-dev")
+	fs.StringVar(&o.Profile, "profile", "", "starter profile: offline, open, python-ml, research or web-dev")
 	fs.StringVar(&o.URL, "url", "", "the model server's address, such as http://127.0.0.1:1234, if it isn't found")
 	fs.StringVar(&o.API, "api", "", "the server's API kind: auto, openai, lmstudio or anthropic")
 	fs.BoolVar(&o.Later, "later", false, "no model server yet: write the config without one")
