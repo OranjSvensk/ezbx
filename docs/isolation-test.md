@@ -266,6 +266,21 @@ Box `vt` with Pi, built by `ezbx build` from `0778277` (with `tools` left out), 
 
 Not covered: a link (not a junction) made on Windows, which needs rights this account doesn't have (Linux CI covers links in the walk); a large folder's walk time; `ezbx init` asking about the folder (covered by unit tests). Everything made was removed afterwards: box `vt`, its volume, the images and build cache (Docker was empty before), the fake engine and the scratch folders.
 
+### Two boxes, `airgap`, and the runtime contract (2026-11-25)
+
+A live run of the 0.4 commands against the fake engine (`tools/fakeengine`, OpenAI kind), from a freshly reset Docker Desktop (Engine 29.9.3), with two boxes in one `ezbx.toml`: `vt` (`off`) and `vt2` (`airgap`), both Pi with no tools.
+
+- **`create`:** added both boxes without asking anything, and refused a third whose workspace sat inside `vt`'s (`invalid_args`). `ezbx build` built one box image for both (same inputs) and the gateway image.
+- **`start`:** started both side by side. With two boxes and no `--box` it refused (`invalid_args`), and a second start of `vt` gave `box_already_running`. The result held each box's state: running, gateway healthy, image current.
+- **`exec`:** ran as uid 1000 in `/workspace`, returned the command's exit code (3) and output in the result, and passed `--env CI=1` and `--cwd /tmp`. `--env GITHUB_TOKEN=x` was refused. `--timeout 2s` on a 300-second sleep ended it at about 2.2 s (`timeout`, `timedOut`, partial output kept), and afterwards no such process was left in the box.
+- **The model route:** from `vt` the model list and a chat request answered 200 through the gateway; from `vt2` both got 403 `network_airgap`. `ezbx net airgap` on `vt` closed the route at once (403) and `ezbx net off` opened it again (200); `ezbx status` showed the running mode beside `ezbx.toml`'s.
+- **The log:** model lines carried `tokens_in` and `tokens_out` (the fake engine reports 1 and 1), and the airgap refusal `blocked` with `network_airgap`.
+- **`ezbx doctor`:** passed on both (24 checks on `vt`; 23 and one skip on `vt2`, where "airgap closes the model route" passed and the tiny completion was skipped). Its 11 proxy probes were marked `doctor` in the log, and `ezbx net` listed none as blocked.
+- **`destroy`:** `destroy --json` without `--yes` was refused; `destroy --box vt2 --yes --remove-config --json` removed `vt2`'s containers, networks, volume, state folder and `ezbx.toml` section, kept both images (`vt` was using them), and left `vt` running. `ezbx status --box vt2` then said `missing`.
+- **Found:** the comment `init` writes after `network` still listed three modes, and the doctor named its proxy check "network off" in `airgap`. Both fixed the same day.
+
+Not covered: a real model server, harnesses using the `default` alias, translated streams against a server that refuses `stream_options`, and Linux.
+
 ## Limits of this result
 
 - On the test machine, public DNS servers didn't answer even from the outside network, so the "public DNS blocked" checks prove less than they appear to. The checks against Docker Desktop's own DNS server, which did answer from the outside, are the meaningful ones.

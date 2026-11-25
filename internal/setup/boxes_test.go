@@ -213,3 +213,12 @@ func TestDefaultModelKept(t *testing.T) {
 		t.Error("a new address kept the old server's default model")
 	}
 }
+
+// The comment init writes next to network names all four modes.
+func TestConfigTextNamesFourModes(t *testing.T) {
+	f := facts(t)
+	text := ConfigText(Answers{Box: "main", Workspace: filepath.Join(f.Home, "w"), Network: "airgap", Harnesses: []string{"pi"}}, time.Now())
+	if !strings.Contains(text, `network   = "airgap"   # airgap | off | allow | on`) {
+		t.Errorf("%s", text)
+	}
+}

@@ -217,9 +217,9 @@ func RunInside(ctx context.Context, cfg InsideConfig) Report {
 	switch cfg.Mode {
 	case "airgap", "off":
 		if status == "403" {
-			r.add(g, "network off is enforced", Pass, "example.com refused", "")
+			r.add(g, "network "+cfg.Mode+" is enforced", Pass, "example.com refused", "")
 		} else {
-			r.add(g, "network off is enforced", Fail, "proxy answered "+status+" for example.com", "")
+			r.add(g, "network "+cfg.Mode+" is enforced", Fail, "proxy answered "+status+" for example.com", "")
 		}
 	case "on":
 		if status == "200" {

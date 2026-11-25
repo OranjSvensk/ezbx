@@ -187,7 +187,7 @@ func boxText(name string, x config.Box) string {
 	if x.PIDs > 0 && x.PIDs != config.DefaultPIDs {
 		w("pids      = %d\n", x.PIDs)
 	}
-	w("network   = %s   # off | allow | on\n", quote(x.Network))
+	w("network   = %s   # airgap | off | allow | on\n", quote(x.Network))
 	if len(x.Allow) > 0 {
 		w("allow     = %s   # hosts for allow mode, besides the harnesses' own\n", list(x.Allow))
 	}
