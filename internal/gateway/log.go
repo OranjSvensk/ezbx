@@ -22,6 +22,10 @@ type entry struct {
 	TTFBMs int64  `json:"ttfb_ms,omitempty"`
 	End    string `json:"end,omitempty"` // client_gone or engine_idle when a reply was cut short
 
+	// Model route: the token counts the reply reported, when it did.
+	TokensIn  int `json:"tokens_in,omitempty"`
+	TokensOut int `json:"tokens_out,omitempty"`
+
 	// Blocked means the network rules refused the request, and Reason says
 	// which rule (on the model route, only network_airgap). A failed lookup or
 	// connection through the proxy has a Reason too, but is not Blocked.

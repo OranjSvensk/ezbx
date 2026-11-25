@@ -71,7 +71,21 @@ func (g *Gateway) postUpstreamJSON(w http.ResponseWriter, r *http.Request, info 
 
 // callChat sends a translated /v1/chat/completions request to the upstream
 // engine using the gateway's transport, key, host header and idle timer.
+//
+// A streamed request asks for the token counts at the end
+// (stream_options.include_usage, part of OpenAI's API). A server that
+// refuses the option with 400 is asked once more without it.
 func (g *Gateway) callChat(w http.ResponseWriter, r *http.Request, info *reqInfo, chatReq map[string]any) (*http.Response, error) {
+	if stream, _ := chatReq["stream"].(bool); !stream {
+		return g.postUpstreamJSON(w, r, info, "/v1/chat/completions", chatReq)
+	}
+	chatReq["stream_options"] = map[string]any{"include_usage": true}
+	resp, err := g.postUpstreamJSON(w, r, info, "/v1/chat/completions", chatReq)
+	if err != nil || resp.StatusCode != http.StatusBadRequest {
+		return resp, err
+	}
+	resp.Body.Close()
+	delete(chatReq, "stream_options")
 	return g.postUpstreamJSON(w, r, info, "/v1/chat/completions", chatReq)
 }
 
@@ -370,6 +384,7 @@ type chatStreamChunk struct {
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
+	Usage *usageCounts `json:"usage"` // the last chunk, when asked for with stream_options
 }
 
 type accToolCall struct {
@@ -401,7 +416,7 @@ func (g *Gateway) writeAnthropicStream(w http.ResponseWriter, body io.Reader, re
 			"content":       []any{},
 			"stop_reason":   nil,
 			"stop_sequence": nil,
-			"usage":         map[string]any{"input_tokens": 1, "output_tokens": 0},
+			"usage":         map[string]any{"input_tokens": 0, "output_tokens": 0},
 		},
 	})
 
@@ -410,6 +425,7 @@ func (g *Gateway) writeAnthropicStream(w http.ResponseWriter, body io.Reader, re
 	finish := ""
 	var tools []*accToolCall
 	toolByIndex := map[int]*accToolCall{}
+	promptTokens, completionTokens := 0, 0
 
 	sc := bufio.NewScanner(body)
 	sc.Buffer(make([]byte, 64<<10), 4<<20)
@@ -423,7 +439,13 @@ func (g *Gateway) writeAnthropicStream(w http.ResponseWriter, body io.Reader, re
 			break
 		}
 		var chunk chatStreamChunk
-		if json.Unmarshal([]byte(data), &chunk) != nil || len(chunk.Choices) == 0 {
+		if json.Unmarshal([]byte(data), &chunk) != nil {
+			continue
+		}
+		if chunk.Usage != nil {
+			promptTokens, completionTokens = chunk.Usage.in(), chunk.Usage.out()
+		}
+		if len(chunk.Choices) == 0 {
 			continue
 		}
 		finish = lastFinish(finish, chunk.Choices[0].FinishReason)
@@ -509,7 +531,7 @@ func (g *Gateway) writeAnthropicStream(w http.ResponseWriter, body io.Reader, re
 	writeSSE(w, flusher, "message_delta", map[string]any{
 		"type":  "message_delta",
 		"delta": map[string]any{"stop_reason": anthropicStop(finish, stopReason), "stop_sequence": nil},
-		"usage": map[string]any{"output_tokens": 1},
+		"usage": map[string]any{"input_tokens": promptTokens, "output_tokens": completionTokens},
 	})
 	writeSSE(w, flusher, "message_stop", map[string]any{"type": "message_stop"})
 }
@@ -807,6 +829,7 @@ func (g *Gateway) writeResponsesStream(w http.ResponseWriter, body io.Reader, re
 	var fullText strings.Builder
 	var tools []*accToolCall
 	toolByIndex := map[int]*accToolCall{}
+	promptTokens, completionTokens := 0, 0
 
 	sc := bufio.NewScanner(body)
 	sc.Buffer(make([]byte, 64<<10), 4<<20)
@@ -820,7 +843,13 @@ func (g *Gateway) writeResponsesStream(w http.ResponseWriter, body io.Reader, re
 			break
 		}
 		var chunk chatStreamChunk
-		if json.Unmarshal([]byte(data), &chunk) != nil || len(chunk.Choices) == 0 {
+		if json.Unmarshal([]byte(data), &chunk) != nil {
+			continue
+		}
+		if chunk.Usage != nil {
+			promptTokens, completionTokens = chunk.Usage.in(), chunk.Usage.out()
+		}
+		if len(chunk.Choices) == 0 {
 			continue
 		}
 		finish = lastFinish(finish, chunk.Choices[0].FinishReason)
@@ -970,6 +999,6 @@ func (g *Gateway) writeResponsesStream(w http.ResponseWriter, body io.Reader, re
 		end = "response.incomplete"
 	}
 	emit(end, map[string]any{
-		"response": buildResponsesObject(reqID, status, reqModel, fullText.String(), tools, incomplete, 1, 1),
+		"response": buildResponsesObject(reqID, status, reqModel, fullText.String(), tools, incomplete, promptTokens, completionTokens),
 	})
 }

@@ -100,6 +100,9 @@ type chatRequest struct {
 	TopP                *float64        `json:"top_p,omitempty"`
 	Stream              bool            `json:"stream"`
 	Stop                json.RawMessage `json:"stop"`
+	StreamOptions       *struct {
+		IncludeUsage bool `json:"include_usage"`
+	} `json:"stream_options"`
 }
 
 type chatMsg struct {
@@ -163,7 +166,7 @@ func (g *Gateway) serveChatViaAnthropic(w http.ResponseWriter, r *http.Request, 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.WriteHeader(http.StatusOK)
 	flusher, _ := w.(http.Flusher)
-	translateAnthropicStreamToChat(w, flusher, resp.Body, creq.Model, info.id)
+	info.noteUsage(translateAnthropicStreamToChat(w, flusher, resp.Body, creq.Model, info.id, creq.StreamOptions != nil && creq.StreamOptions.IncludeUsage))
 }
 
 // serveResponsesViaAnthropic reuses the gateway's Responses <-> chat structures
@@ -211,7 +214,7 @@ func (g *Gateway) serveResponsesViaAnthropic(w http.ResponseWriter, r *http.Requ
 	go func() {
 		defer wg.Done()
 		defer pw.Close()
-		translateAnthropicStreamToChat(pw, nil, resp.Body, rreq.Model, info.id)
+		translateAnthropicStreamToChat(pw, nil, resp.Body, rreq.Model, info.id, true)
 	}()
 	g.writeResponsesStream(w, pr, rreq.Model, info.id)
 	_ = pr.Close()
@@ -471,9 +474,11 @@ type anthropicStreamEvent struct {
 	Type    string `json:"type"`
 	Index   int    `json:"index"`
 	Message struct {
-		ID    string `json:"id"`
-		Model string `json:"model"`
+		ID    string      `json:"id"`
+		Model string      `json:"model"`
+		Usage usageCounts `json:"usage"`
 	} `json:"message"`
+	Usage        usageCounts `json:"usage"` // message_delta's
 	ContentBlock struct {
 		Type     string          `json:"type"`
 		Text     string          `json:"text"`
@@ -497,7 +502,10 @@ type streamToolBlock struct {
 	inlineArgs string
 }
 
-func translateAnthropicStreamToChat(w io.Writer, flusher http.Flusher, body io.Reader, reqModel, reqID string) {
+// With includeUsage (the client's stream_options.include_usage), a last chunk
+// carries the token counts, as OpenAI's API does. They are returned either
+// way, for the gateway's log.
+func translateAnthropicStreamToChat(w io.Writer, flusher http.Flusher, body io.Reader, reqModel, reqID string, includeUsage bool) (tokensIn, tokensOut int) {
 	msgID := "chatcmpl_" + reqID
 	model := reqModel
 	created := time.Now().Unix()
@@ -552,6 +560,8 @@ func translateAnthropicStreamToChat(w io.Writer, flusher http.Flusher, body io.R
 		}
 		switch ev.Type {
 		case "message_start":
+			tokensIn = max(tokensIn, ev.Message.Usage.in())
+			tokensOut = max(tokensOut, ev.Message.Usage.out())
 			if ev.Message.ID != "" {
 				msgID = ev.Message.ID
 			}
@@ -638,6 +648,8 @@ func translateAnthropicStreamToChat(w io.Writer, flusher http.Flusher, body io.R
 			if ev.Delta.StopReason != "" {
 				stopReason = ev.Delta.StopReason
 			}
+			tokensIn = max(tokensIn, ev.Usage.in())
+			tokensOut = max(tokensOut, ev.Usage.out())
 		case "message_stop":
 			done = true
 		}
@@ -646,6 +658,16 @@ func translateAnthropicStreamToChat(w io.Writer, flusher http.Flusher, body io.R
 		ensureStarted()
 		finish := anthropicToChatFinish(stopReason, nextToolIdx > 0)
 		emit(map[string]any{}, &finish)
+		if includeUsage && !writeFailed {
+			payload, _ := json.Marshal(map[string]any{
+				"id": msgID, "object": "chat.completion.chunk", "created": created, "model": model,
+				"choices": []any{},
+				"usage":   map[string]any{"prompt_tokens": tokensIn, "completion_tokens": tokensOut, "total_tokens": tokensIn + tokensOut},
+			})
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
+				writeFailed = true
+			}
+		}
 		if !writeFailed {
 			_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 			if flusher != nil {
@@ -653,4 +675,5 @@ func translateAnthropicStreamToChat(w io.Writer, flusher http.Flusher, body io.R
 			}
 		}
 	}
+	return tokensIn, tokensOut
 }

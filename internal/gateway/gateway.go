@@ -113,6 +113,9 @@ type reqInfo struct {
 	cancel  context.CancelFunc
 	idleHit atomic.Bool
 	cut     atomic.Bool // ended by a change to airgap
+
+	// Token counts the reply reported (usage.go); 0 when it didn't.
+	tokensIn, tokensOut int
 }
 
 type ctxKey struct{}
@@ -273,7 +276,7 @@ func (g *Gateway) forward(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	info := &reqInfo{t: g.target.Load(), id: newID(), start: time.Now(), cancel: cancel}
-	rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+	rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK, info: info}
 	open := g.track(info)
 	defer g.untrack(info)
 
@@ -290,6 +293,8 @@ func (g *Gateway) forward(w http.ResponseWriter, r *http.Request) {
 			Ms:     time.Since(info.start).Milliseconds(),
 			TTFBMs: info.ttfb.Milliseconds(),
 		}
+		rec.usage.finish(info)
+		e.TokensIn, e.TokensOut = info.tokensIn, info.tokensOut
 		switch {
 		case !open:
 			e.Blocked, e.Reason = true, reasonAirgap
@@ -633,6 +638,17 @@ func (b *idleBody) Close() error {
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
+
+	// On the model route, the reply is watched for its token counts.
+	info  *reqInfo
+	usage usageSniffer
+}
+
+func (s *statusRecorder) Write(p []byte) (int, error) {
+	if s.info != nil {
+		s.usage.feed(s.info, s.Header().Get("Content-Type"), p)
+	}
+	return s.ResponseWriter.Write(p)
 }
 
 func (s *statusRecorder) WriteHeader(code int) {
