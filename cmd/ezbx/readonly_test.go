@@ -165,11 +165,11 @@ func TestBeforeSessionChecksMasks(t *testing.T) {
 	if err := box.WriteMasks(state, []box.ReadOnlyMount{{Name: "ref", Path: ro}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := beforeSession(tg, true, io.Discard); err != nil {
+	if err := beforeSession(tg, true, "", io.Discard); err != nil {
 		t.Fatalf("nothing new: %v", err)
 	}
 	write(t, root, map[string]string{"ref/.env": "x"})
-	if err := beforeSession(tg, true, io.Discard); err == nil || !strings.Contains(err.Error(), "/readonly/ref/.env") {
+	if err := beforeSession(tg, true, "", io.Discard); err == nil || !strings.Contains(err.Error(), "/readonly/ref/.env") {
 		t.Fatalf("a new .env: %v", err)
 	}
 }

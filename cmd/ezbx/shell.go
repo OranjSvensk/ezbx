@@ -56,7 +56,7 @@ func runShell(args []string, stdout, stderr io.Writer) int {
 		return report(stderr, box.ErrNotUp{Box: t.name, What: "the box container isn't running"})
 	}
 
-	if err := beforeSession(t, *noSnap, stderr); err != nil {
+	if err := beforeSession(t, *noSnap, "ezbx shell --no-snapshot", stderr); err != nil {
 		return report(stderr, err)
 	}
 
@@ -129,7 +129,8 @@ func shellArgs(t target, id string, extra []string, tty bool) ([]string, error) 
 // secret file added to a read-only folder since ezbx up, which isn't masked
 // (docs/readonly.md, R5), then the undo point. If the snapshot fails, the
 // session doesn't start, because the agent's changes couldn't be undone.
-func beforeSession(t target, noSnap bool, stderr io.Writer) error {
+// without says how to start without a snapshot, for the error message.
+func beforeSession(t target, noSnap bool, without string, stderr io.Writer) error {
 	if err := checkMasks(t.dirs.Box(t.name)); err != nil {
 		return err
 	}
@@ -141,7 +142,7 @@ func beforeSession(t target, noSnap bool, stderr io.Writer) error {
 		err = takeAuto(sb, stderr)
 	}
 	if err != nil {
-		return fmt.Errorf("the snapshot before the session failed, so the session wasn't started: %w\nTo start without one: ezbx shell --no-snapshot", err)
+		return fmt.Errorf("the snapshot before the session failed, so the session wasn't started: %w\nTo start without one: %s", err, without)
 	}
 	return nil
 }

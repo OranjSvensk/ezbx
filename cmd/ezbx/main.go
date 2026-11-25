@@ -50,6 +50,8 @@ Usage:
   ezbx up [--box NAME] [--config FILE] [--no-doctor]
   ezbx down [--box NAME] [--config FILE]
   ezbx shell [HARNESS] [--box NAME] [--no-snapshot] [-- HARNESS ARGS...]
+  ezbx exec [--box NAME] [--json] [--cwd DIR] [--timeout 10m] [--env NAME=VALUE]...
+            [--snapshot] -- COMMAND [ARGS...]
   ezbx snapshot [-m NOTE] | ezbx snapshot list | ezbx snapshot remove ID [--yes]
   ezbx review [ID] [--diff]
   ezbx rewind [ID] [--yes]
@@ -87,6 +89,10 @@ Commands:
                   the state folder and the agent's home volume are kept.
   shell           Open bash in the box's workspace, or start a harness
                   there (ezbx shell pi), as the unprivileged agent user.
+  exec            Run one command in the running box as the agent, without
+                  a terminal, for scripts and programs. --json prints one
+                  result with the exit code and output; --timeout ends the
+                  command inside the box. No snapshot unless --snapshot.
   snapshot        Take an undo point of the workspace by hand (kept until
                   removed); list shows them all. ezbx shell takes one
                   before every session (the last 20 are kept).
@@ -155,6 +161,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if len(args) >= 1 && args[0] == "status" {
 		return runStatus(args[1:], stdout, stderr)
+	}
+	if len(args) >= 1 && args[0] == "exec" {
+		return runExec(args[1:], stdout, stderr)
 	}
 	if len(args) >= 2 && args[0] == "engine" && args[1] == "detect" {
 		return runDetect(args[2:], stdout, stderr)

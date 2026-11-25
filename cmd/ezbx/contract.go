@@ -65,7 +65,17 @@ func codeOf(err error) string {
 // writeResult prints the envelope for a result or an error and returns the
 // exit code: 0, 2 for a usage mistake, else 1.
 func writeResult(stdout io.Writer, boxName string, data any, err error) int {
-	env := envelope{OK: err == nil, Box: boxName, ContractVersion: contractVersion}
+	if err != nil {
+		data = nil
+	}
+	return writeResultData(stdout, boxName, data, err)
+}
+
+// writeResultData is writeResult that keeps the data even with an error,
+// for a result that is only partly there, such as the output of a command
+// that timed out.
+func writeResultData(stdout io.Writer, boxName string, data any, err error) int {
+	env := envelope{OK: err == nil, Box: boxName, ContractVersion: contractVersion, Data: data}
 	code := 0
 	if err != nil {
 		env.Error = &contractError{Code: codeOf(err), Message: err.Error()}
@@ -73,8 +83,6 @@ func writeResult(stdout io.Writer, boxName string, data any, err error) int {
 		if env.Error.Code == codeInvalidArgs {
 			code = 2
 		}
-	} else {
-		env.Data = data
 	}
 	out, _ := json.Marshal(env)
 	fmt.Fprintln(stdout, string(out))
