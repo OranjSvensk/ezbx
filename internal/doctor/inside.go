@@ -233,6 +233,10 @@ func RunInside(ctx context.Context, cfg InsideConfig) Report {
 	return r
 }
 
+// DoctorHeader marks the doctor's proxy probes. It only changes how ezbx
+// net lists them; the proxy applies its rules to them as to anything else.
+const DoctorHeader = "X-Ezbx-Doctor"
+
 // connectVia asks the proxy for a CONNECT tunnel and returns the status code
 // it answered with, or a short description of what went wrong.
 func connectVia(proxy, target string, timeout time.Duration) string {
@@ -242,7 +246,9 @@ func connectVia(proxy, target string, timeout time.Duration) string {
 	}
 	defer c.Close()
 	_ = c.SetDeadline(time.Now().Add(timeout * 5))
-	fmt.Fprintf(c, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target)
+	// The header marks the doctor's own probes in the gateway's log, so
+	// ezbx net doesn't list them as hosts the agent tried.
+	fmt.Fprintf(c, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n%s: 1\r\n\r\n", target, target, DoctorHeader)
 	line, err := bufio.NewReader(c).ReadString('\n')
 	if err != nil {
 		return "no answer (" + shortErr(err) + ")"

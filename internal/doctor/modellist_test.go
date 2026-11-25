@@ -1,8 +1,12 @@
 package doctor
 
 import (
+	"bufio"
+	"io"
+	"net"
 	"net/http"
 	"testing"
+	"time"
 )
 
 func TestJudgeModelList(t *testing.T) {
@@ -38,5 +42,35 @@ func TestJudgeModelList(t *testing.T) {
 		if (tc.mode == "airgap") != (c.Name == "airgap closes the model route") {
 			t.Errorf("%s: check named %q", tc.name, c.Name)
 		}
+	}
+}
+
+// connectVia marks its CONNECT as the doctor's.
+func TestConnectViaMarksItself(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	got := make(chan string, 1)
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		req, err := http.ReadRequest(bufio.NewReader(c))
+		if err != nil {
+			got <- err.Error()
+			return
+		}
+		got <- req.Method + " " + req.Host + " " + req.Header.Get(DoctorHeader)
+		io.WriteString(c, "HTTP/1.1 403 Forbidden\r\n\r\n")
+	}()
+	if s := connectVia(ln.Addr().String(), "example.com:443", time.Second); s != "403" {
+		t.Errorf("status %q", s)
+	}
+	if g := <-got; g != "CONNECT example.com:443 1" {
+		t.Errorf("the proxy saw %q", g)
 	}
 }

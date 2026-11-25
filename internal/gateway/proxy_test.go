@@ -41,6 +41,9 @@ func newProxyEnv(t *testing.T, cfg ProxyConfig) *proxyEnv {
 	env := &proxyEnv{logs: &syncBuffer{}}
 	env.site = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, "hello from "+r.Host+r.URL.Path)
+		if v := r.Header.Get("X-Ezbx-Doctor"); v != "" {
+			io.WriteString(w, " doctor="+v)
+		}
 	}))
 	t.Cleanup(env.site.Close)
 	_, env.port, _ = net.SplitHostPort(strings.TrimPrefix(env.site.URL, "http://"))
@@ -281,6 +284,29 @@ func TestProxyPlainHTTP(t *testing.T) {
 	if e := env.lastLog(t); e.Method != "GET" || e.Status != 200 || e.Blocked {
 		t.Errorf("allowed plain HTTP: log %+v", e)
 	}
+	// The doctor's mark stays in the gateway: the site never sees it.
+	req, _ := http.NewRequest(http.MethodGet, "http://public.test:"+env.port+"/page", nil)
+	req.Header.Set("X-Ezbx-Doctor", "1")
+	if resp, err := client.Do(req); err != nil {
+		t.Fatal(err)
+	} else {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if strings.Contains(string(body), "doctor=") {
+			t.Errorf("the mark was forwarded: %q", body)
+		}
+	}
+	// The line is written as the request ends; wait for it.
+	marked := false
+	for i := 0; i < 200 && !marked; i++ {
+		marked = env.lastLog(t).Doctor
+		if !marked {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if !marked {
+		t.Errorf("marked plain HTTP: log %+v", env.lastLog(t))
+	}
 
 	for _, target := range []string{"http://other.test:" + env.port + "/", "http://private.test:" + env.port + "/", "http://10.0.0.1/"} {
 		resp, err := client.Get(target)
@@ -361,5 +387,29 @@ func TestSetNetworkValidates(t *testing.T) {
 	}
 	if mode, _ := env.p.Network(); mode != ModeOff {
 		t.Errorf("a refused change still changed the mode to %q", mode)
+	}
+}
+
+// The doctor's probes are marked in the log and refused like any other.
+func TestProxyMarksDoctorProbes(t *testing.T) {
+	env := newProxyEnv(t, ProxyConfig{Mode: ModeOff})
+	for _, marked := range []bool{false, true} {
+		c, err := net.Dial("tcp", strings.TrimPrefix(env.srv.URL, "http://"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		hdr := ""
+		if marked {
+			hdr = "X-Ezbx-Doctor: 1\r\n"
+		}
+		io.WriteString(c, "CONNECT public.test:443 HTTP/1.1\r\nHost: public.test:443\r\n"+hdr+"\r\n")
+		line, _ := bufio.NewReader(c).ReadString('\n')
+		c.Close()
+		if !strings.Contains(line, "403") {
+			t.Errorf("marked %v: %q", marked, line)
+		}
+		if e := env.lastLog(t); e.Doctor != marked || !e.Blocked {
+			t.Errorf("marked %v: log %+v", marked, e)
+		}
 	}
 }

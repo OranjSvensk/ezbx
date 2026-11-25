@@ -34,8 +34,9 @@ func RecentBlocked(log []byte) []Blocked {
 			Host    string `json:"host"`
 			Blocked bool   `json:"blocked"`
 			Reason  string `json:"reason"`
+			Doctor  bool   `json:"doctor"`
 		}
-		if json.Unmarshal(sc.Bytes(), &e) != nil || e.Route != "proxy" || !e.Blocked {
+		if json.Unmarshal(sc.Bytes(), &e) != nil || e.Route != "proxy" || !e.Blocked || e.Doctor {
 			continue
 		}
 		if e.Reason != "not_on_allowlist" && e.Reason != "network_off" && e.Reason != "network_airgap" {

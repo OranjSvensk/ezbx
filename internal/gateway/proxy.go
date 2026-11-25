@@ -279,7 +279,8 @@ func (p *Proxy) done(t *tunnel) {
 // ServeHTTP handles one proxy request.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	e := entry{Time: start.UTC().Format(time.RFC3339Nano), ID: newID(), Route: "proxy", Method: r.Method}
+	e := entry{Time: start.UTC().Format(time.RFC3339Nano), ID: newID(), Route: "proxy", Method: r.Method,
+		Doctor: r.Header.Get("X-Ezbx-Doctor") == "1"}
 	defer func() {
 		e.Ms = time.Since(start).Milliseconds()
 		switch {
@@ -470,6 +471,7 @@ func (p *Proxy) forwardHTTP(w http.ResponseWriter, r *http.Request, e *entry) {
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.Out.Header.Del("Proxy-Authorization")
 			pr.Out.Header.Del("Proxy-Connection")
+			pr.Out.Header.Del("X-Ezbx-Doctor")
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 			e.Reason = reasonConnect

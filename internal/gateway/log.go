@@ -32,6 +32,7 @@ type entry struct {
 	Blocked bool   `json:"blocked,omitempty"`
 	Reason  string `json:"reason,omitempty"`
 	Closed  string `json:"closed,omitempty"` // "network_tightened" when a mode change ended a tunnel or model request
+	Doctor  bool   `json:"doctor,omitempty"` // proxy: a probe of ezbx doctor's, not the agent's
 }
 
 type logger struct {

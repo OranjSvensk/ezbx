@@ -118,6 +118,7 @@ func TestRecentBlocked(t *testing.T) {
 		`{"time":"t7","route":"model","path":"/v1/models","status":200}`,
 		`{"time":"t8","route":"proxy","method":"CONNECT","host":"registry.npmjs.org:443","status":403,"blocked":true,"reason":"network_airgap"}`,
 		`{"time":"t9","route":"model","path":"/v1/models","status":403,"blocked":true,"reason":"network_airgap"}`,
+		`{"time":"t10","route":"proxy","method":"CONNECT","host":"example.com:443","status":403,"blocked":true,"reason":"network_off","doctor":true}`,
 		`not json`,
 	}, "\n")
 	got := RecentBlocked([]byte(log))
