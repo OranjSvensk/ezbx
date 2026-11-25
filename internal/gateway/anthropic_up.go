@@ -40,7 +40,7 @@ func (g *Gateway) forwardAnthropicMessages(w http.ResponseWriter, r *http.Reques
 
 // serveAnthropicCountTokens forwards /v1/messages/count_tokens to an
 // Anthropic-compatible upstream server, falling back to the local estimate
-// when the server returns 404.
+// when the server's answer isn't a count.
 func (g *Gateway) serveAnthropicCountTokens(w http.ResponseWriter, r *http.Request, info *reqInfo) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -69,23 +69,40 @@ func (g *Gateway) serveAnthropicCountTokens(w http.ResponseWriter, r *http.Reque
 		g.errorHandler(w, r, err)
 		return
 	}
-	if resp.StatusCode == http.StatusNotFound {
-		resp.Body.Close()
+	defer resp.Body.Close()
+	// The server's answer is used only when it is a count. Servers without the
+	// endpoint answer 404 or 501, and some answer 200 with an error body (seen
+	// live on LM Studio), so everything else gets the local estimate.
+	reply, err := io.ReadAll(io.LimitReader(resp.Body, maxCountReply))
+	// A reply cut off at the cap is no longer valid JSON, so isTokenCount
+	// refuses it too.
+	if err != nil || resp.StatusCode != http.StatusOK || !isTokenCount(reply) {
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		g.serveCountTokens(w, r, info)
 		return
 	}
-	defer resp.Body.Close()
 
 	info.ttfb = time.Since(info.start)
 	g.stampHeaders(w.Header(), info)
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	} else {
-		w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(reply)
+}
+
+// maxCountReply caps how much of a count_tokens reply is read; a real one is
+// a few dozen bytes.
+const maxCountReply = 64 << 10
+
+// isTokenCount reports whether b is a count_tokens reply: a JSON object with
+// a whole, non-negative input_tokens.
+func isTokenCount(b []byte) bool {
+	var v struct {
+		InputTokens *int64 `json:"input_tokens"`
 	}
-	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
+	if json.Unmarshal(b, &v) != nil || v.InputTokens == nil {
+		return false
+	}
+	return *v.InputTokens >= 0
 }
 
 // ---- OpenAI /v1/chat/completions <-> Anthropic /v1/messages ----

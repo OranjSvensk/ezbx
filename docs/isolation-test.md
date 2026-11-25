@@ -281,6 +281,25 @@ A live run of the 0.4 commands against the fake engine (`tools/fakeengine`, Open
 
 Not covered: a real model server, harnesses using the `default` alias, translated streams against a server that refuses `stream_options`, and Linux.
 
+### The 0.4 gateway against LM Studio (same day)
+
+`ezbx gateway serve` on the host (no box or Docker), built from `521570b`, in front of LM Studio on loopback port 1234 with one small local reasoning model loaded. It ran twice, once with `--engine openai` and once with `--engine anthropic` (LM Studio serves both APIs), each with `--default-model` set. Every request was capped at 16 tokens.
+
+| Request | OpenAI kind | Anthropic kind |
+|---|---|---|
+| `GET /v1/models` | 200 | 200 |
+| Plain request (`/v1/chat/completions` or `/v1/messages`) | 200, logged 18 in / 16 out | 200, logged 11 / 11 |
+| Streamed `/v1/chat/completions` with `stream_options.include_usage` | 200; LM Studio accepts the option and sends a usage chunk; logged 18 / 16 | translated to Messages; 200, logged 11 / 10 |
+| Streamed `/v1/messages` | translated; 200, real counts in `message_delta`, logged 18 / 16 | passed through; logged 11 / 10 |
+| Streamed `/v1/responses` | translated; 200, logged 18 / 16 | translated; 200, logged 11 / 11 |
+| `"model": "default"` | rewritten; `X-Ezbx-Model` named the real model | the same |
+
+- Translated streams now carry the server's real token counts (they were 1/1 placeholders before 0.4).
+- A streamed `/v1/chat/completions` passed through without `stream_options` logged no counts, as designed: the gateway leaves such a stream as the harness asked for it.
+- **Found:** LM Studio's Anthropic API has no `/v1/messages/count_tokens` and answers it with status 200 and an error body, which the gateway passed on as a reply (its fallback looked only for 404). **Fixed the same day:** the server's answer is used only when it is a 200 with a whole, non-negative `input_tokens`; anything else gets the local estimate. 12 of 12 mutations were caught.
+
+Not covered: a harness in a box using `default` (harness configs still name the real model), a server that refuses `stream_options` with 400 (unit-tested), and servers other than LM Studio.
+
 ## Limits of this result
 
 - On the test machine, public DNS servers didn't answer even from the outside network, so the "public DNS blocked" checks prove less than they appear to. The checks against Docker Desktop's own DNS server, which did answer from the outside, are the meaningful ones.

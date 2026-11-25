@@ -180,6 +180,68 @@ func TestAnthropicCountTokensAndReady(t *testing.T) {
 	}
 }
 
+// TestAnthropicCountTokensFallback: only a 200 with a whole, non-negative
+// input_tokens is passed on; every other answer gets the local estimate.
+func TestAnthropicCountTokensFallback(t *testing.T) {
+	var status int
+	var reply string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages/count_tokens" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, reply)
+	}))
+	t.Cleanup(up.Close)
+	_, gw := startAnthropic(t, up.URL, "real-key", nil)
+
+	big := `{"input_tokens":4242,"pad":"` + strings.Repeat("x", 64<<10) + `"}`
+	cases := []struct {
+		name   string
+		status int
+		reply  string
+		want   int // -1: the local estimate
+	}{
+		{"count", http.StatusOK, `{"input_tokens":4242}`, 4242},
+		{"zero", http.StatusOK, `{"input_tokens":0}`, 0},
+		{"200 with an error body", http.StatusOK, `{"error":"Unexpected endpoint or method. (POST /v1/messages/count_tokens)"}`, -1},
+		{"404", http.StatusNotFound, `{"input_tokens":4242}`, -1},
+		{"501", http.StatusNotImplemented, `{"input_tokens":4242}`, -1},
+		{"400", http.StatusBadRequest, `{"input_tokens":4242}`, -1},
+		{"negative", http.StatusOK, `{"input_tokens":-1}`, -1},
+		{"fraction", http.StatusOK, `{"input_tokens":4.5}`, -1},
+		{"null", http.StatusOK, `{"input_tokens":null}`, -1},
+		{"not JSON", http.StatusOK, `input_tokens: 4242`, -1},
+		{"too long", http.StatusOK, big, -1},
+	}
+	for _, c := range cases {
+		status, reply = c.status, c.reply
+		resp, err := http.Post(gw.URL+"/v1/messages/count_tokens", "application/json", strings.NewReader(`{"model":"big-model","messages":[{"role":"user","content":"hi"}]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		var tok struct {
+			InputTokens *int `json:"input_tokens"`
+		}
+		_ = json.Unmarshal(raw, &tok)
+		if resp.StatusCode != http.StatusOK || tok.InputTokens == nil || resp.Header.Get("Content-Type") != "application/json" || resp.Header.Get("X-Ezbx-Engine") != "anthropic" {
+			t.Fatalf("%s: status=%d type=%q body=%.200s", c.name, resp.StatusCode, resp.Header.Get("Content-Type"), raw)
+		}
+		got := *tok.InputTokens
+		if c.want >= 0 && got != c.want {
+			t.Errorf("%s: input_tokens = %d, want the server's %d", c.name, got, c.want)
+		}
+		// The local estimate for this 67-byte body is 67/4 = 16.
+		if c.want < 0 && got != 16 {
+			t.Errorf("%s: input_tokens = %d, want the local estimate 16", c.name, got)
+		}
+	}
+}
+
 func TestChatCompletionsViaAnthropicNonStream(t *testing.T) {
 	var seenReq map[string]any
 	var seenAuth, seenXKey, seenVer string
