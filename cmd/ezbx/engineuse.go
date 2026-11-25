@@ -71,7 +71,11 @@ func runEngineUse(args []string, stdout, stderr io.Writer) int {
 	}
 
 	r := &box.Runner{Docker: dockerIn, Out: stdout}
-	if _, err := r.Admin(ctx, t.name, "engine", upstream, eng.ID); err != nil {
+	call := []string{"engine", upstream, eng.ID}
+	if d := cfg.Engine.DefaultModel; d != "" {
+		call = append(call, d)
+	}
+	if _, err := r.Admin(ctx, t.name, call...); err != nil {
 		return report(stderr, err)
 	}
 	fmt.Fprintf(stdout, "The gateway now forwards to %s at %s (%d model(s)).\n", eng.Name, eng.URL, len(eng.Models))

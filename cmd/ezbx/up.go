@@ -187,7 +187,7 @@ func makePlan(ctx context.Context, cfg *config.Config, name string, dirs paths.D
 
 	return box.Plan{
 		Box: name, Names: box.NamesFor(name), Workspace: ws, StateDir: dirs.Box(name), LogOn: cfg.LogOn(),
-		Upstream: upstream, EngineID: eng.ID, EngineName: eng.Name, UpstreamHost: cfg.Engine.Host, KeyEnv: cfg.Engine.KeyEnv,
+		Upstream: upstream, EngineID: eng.ID, EngineName: eng.Name, UpstreamHost: cfg.Engine.Host, DefaultModel: cfg.Engine.DefaultModel, KeyEnv: cfg.Engine.KeyEnv,
 		Network: b.Network, Allow: box.AllowList(b.Allow, chosen),
 		Memory: memoryLimit(ctx, b.Memory), CPUs: b.CPUsFlag(), PIDs: b.PIDs,
 		Harnesses: b.Harnesses, HomeFiles: files, Env: env,

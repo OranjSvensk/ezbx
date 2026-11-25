@@ -103,11 +103,12 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 
 // Status is the reply to GET /admin/status.
 type Status struct {
-	Engine   string        `json:"engine"`
-	Upstream string        `json:"upstream"`
-	Network  *NetworkState `json:"network,omitempty"` // nil when the proxy is not running
-	Proxy    *ProxyStats   `json:"proxy,omitempty"`
-	UptimeS  int64         `json:"uptime_s"`
+	Engine       string        `json:"engine"`
+	Upstream     string        `json:"upstream"`
+	DefaultModel string        `json:"default_model,omitempty"`
+	Network      *NetworkState `json:"network,omitempty"` // nil when the proxy is not running
+	Proxy        *ProxyStats   `json:"proxy,omitempty"`
+	UptimeS      int64         `json:"uptime_s"`
 }
 
 // NetworkState is the proxy's mode and allowlist.
@@ -118,7 +119,7 @@ type NetworkState struct {
 
 func (a *Admin) status(w http.ResponseWriter, _ *http.Request) {
 	up, engine := a.g.Upstream()
-	s := Status{Engine: engine, Upstream: up, UptimeS: int64(time.Since(a.started).Seconds())}
+	s := Status{Engine: engine, Upstream: up, DefaultModel: a.g.DefaultModel(), UptimeS: int64(time.Since(a.started).Seconds())}
 	if a.p != nil {
 		mode, allow := a.p.Network()
 		st := a.p.Stats()
@@ -129,16 +130,22 @@ func (a *Admin) status(w http.ResponseWriter, _ *http.Request) {
 
 func (a *Admin) setEngine(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Upstream string `json:"upstream"`
-		Engine   string `json:"engine"`
+		Upstream     string `json:"upstream"`
+		Engine       string `json:"engine"`
+		DefaultModel string `json:"default_model"` // "" turns the alias off: it belonged to the old server
 	}
 	if !decode(w, r, &req) {
+		return
+	}
+	if req.DefaultModel == aliasModel || headerSafe(req.DefaultModel) != req.DefaultModel {
+		writeError(w, http.StatusBadRequest, "bad_default_model", "The default model must be a model name the server lists.")
 		return
 	}
 	if err := a.g.SetUpstream(req.Upstream, headerSafe(req.Engine)); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_upstream", err.Error())
 		return
 	}
+	_ = a.g.SetDefaultModel(req.DefaultModel) // checked above
 	a.status(w, r)
 }
 

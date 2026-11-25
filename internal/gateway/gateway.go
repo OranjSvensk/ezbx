@@ -42,6 +42,9 @@ type Config struct {
 	MaxBody  int64     // largest request body accepted; 0 means 32 MiB
 	Log      io.Writer // JSON lines go here; nil turns logging off
 
+	// DefaultModel replaces the model "default" in requests; "" leaves it.
+	DefaultModel string
+
 	// MaxBuffered caps the memory used by all request bodies held at the
 	// same time. A request that would go over it gets a 503 "busy" reply.
 	// 0 means 256 MiB.
@@ -90,6 +93,7 @@ type Gateway struct {
 	idle      time.Duration
 	buffered  budget
 	target    atomic.Pointer[target]
+	alias     atomic.Pointer[string] // the model "default" stands for; "" for none
 	transport *http.Transport
 	proxy     *httputil.ReverseProxy
 	log       *logger
@@ -131,6 +135,9 @@ func New(cfg Config) (*Gateway, error) {
 		maxBody: cfg.MaxBody,
 		idle:    cfg.IdleTimeout,
 		log:     newLogger(cfg.Log),
+	}
+	if err := g.SetDefaultModel(cfg.DefaultModel); err != nil {
+		return nil, err
 	}
 	if g.maxBody <= 0 {
 		g.maxBody = defaultMaxBody
@@ -362,6 +369,39 @@ func (g *Gateway) forward(w http.ResponseWriter, r *http.Request) {
 
 var errBusy = errors.New("gateway busy")
 
+// aliasModel is the name requests use for the server's default model.
+const aliasModel = "default"
+
+// SetDefaultModel sets the model that "default" stands for; "" turns the
+// alias off, so "default" reaches the engine as it is.
+func (g *Gateway) SetDefaultModel(name string) error {
+	if name == aliasModel || headerSafe(name) != name {
+		return fmt.Errorf("default model %q: name a model the server lists", name)
+	}
+	g.alias.Store(&name)
+	return nil
+}
+
+// DefaultModel is the model "default" stands for, or "".
+func (g *Gateway) DefaultModel() string {
+	if p := g.alias.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// withModel puts another model name into a JSON request body, keeping every
+// other field as it was.
+func withModel(body []byte, model string) ([]byte, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return nil, err
+	}
+	name, _ := json.Marshal(model)
+	fields["model"] = name
+	return json.Marshal(fields)
+}
+
 // track records a model request so a change to airgap can end it. It
 // reports false, recording nothing, when the gateway is in airgap mode.
 func (g *Gateway) track(info *reqInfo) bool {
@@ -448,6 +488,20 @@ func (g *Gateway) readModel(w http.ResponseWriter, r *http.Request, info *reqInf
 		Model string `json:"model"`
 	}
 	if json.Unmarshal(body, &probe) == nil {
+		if real := g.DefaultModel(); probe.Model == aliasModel && real != "" {
+			changed, err := withModel(body, real)
+			if err != nil {
+				return held, err
+			}
+			if grow := int64(len(changed)) - held; grow > 0 && !g.buffered.take(grow) {
+				return held, errBusy
+			} else if grow < 0 {
+				g.buffered.give(-grow)
+			}
+			body, held, probe.Model = changed, int64(len(changed)), real
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			r.ContentLength = held
+		}
 		info.model = headerSafe(probe.Model)
 	}
 	return held, nil

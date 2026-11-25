@@ -144,6 +144,9 @@ func ConfigText(a Answers, now time.Time) string {
 	if e.Host != "" {
 		w("host    = %s\n", quote(e.Host))
 	}
+	if e.DefaultModel != "" {
+		w("default_model = %s   # used for requests that ask for the model \"default\"\n", quote(e.DefaultModel))
+	}
 	for _, id := range sortedKeys(a.Models) {
 		m := a.Models[id]
 		if m == (config.Model{}) {

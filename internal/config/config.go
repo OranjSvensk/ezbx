@@ -72,6 +72,11 @@ type Engine struct {
 	URL    string `toml:"url"`     // the server's address; the only one ezbx up contacts
 	KeyEnv string `toml:"key_env"` // NAME of an environment variable, never the key
 	Host   string `toml:"host"`    // Host header to send, like --upstream-host
+
+	// DefaultModel is the model the gateway uses when a request asks for
+	// the model "default", so a harness can name one model whatever the
+	// server has loaded. It belongs to this server: a new url drops it.
+	DefaultModel string `toml:"default_model"`
 }
 
 // DefaultAPI means: use the most specific API kind the server answers.
@@ -178,6 +183,21 @@ var NetworkModes = []string{"airgap", "off", "allow", "on"}
 // NetworkMode reports whether s is one of the network modes.
 func NetworkMode(s string) bool { return slices.Contains(NetworkModes, s) }
 
+// CheckDefaultModel refuses a default model the gateway couldn't use: the
+// alias itself, or a name the gateway can't put in a header (up to 200
+// printable ASCII characters, the gateway's rule).
+func CheckDefaultModel(s string) error {
+	switch {
+	case s == "default":
+		return errors.New(`can't be "default", the alias itself; name a model the server lists`)
+	case len(s) > 200:
+		return errors.New("is too long (200 characters at most)")
+	case strings.ContainsFunc(s, func(r rune) bool { return r < 0x20 || r > 0x7e }):
+		return errors.New("may hold only printable ASCII characters")
+	}
+	return nil
+}
+
 // MemoryValue reports whether s is a memory limit in Docker's form, such as
 // 4g or 512m.
 func MemoryValue(s string) bool { return memoryRE.MatchString(strings.ToLower(s)) }
@@ -221,6 +241,9 @@ func (c *Config) check() error {
 	}
 	if e.KeyEnv != "" && e.URL == "" {
 		return errors.New("engine.key_env needs url too, such as url = 'http://127.0.0.1:PORT', so the key is only ever sent to that address")
+	}
+	if err := CheckDefaultModel(e.DefaultModel); err != nil {
+		return errors.New("engine.default_model " + err.Error())
 	}
 	for id, m := range c.Models {
 		if m.ContextWindow < 0 || m.MaxTokens < 0 {

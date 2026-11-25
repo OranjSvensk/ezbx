@@ -71,6 +71,7 @@ type Plan struct {
 	EngineID     string
 	EngineName   string
 	UpstreamHost string
+	DefaultModel string // what the model "default" stands for; "" for none
 	KeyEnv       string // NAME of the variable holding the engine's key; up writes it to KeyFile
 
 	Network string
@@ -147,6 +148,9 @@ func (p Plan) GatewayArgs() []string {
 		"--upstream", p.Upstream, "--engine", p.EngineID)
 	if p.UpstreamHost != "" {
 		a = append(a, "--upstream-host", p.UpstreamHost)
+	}
+	if p.DefaultModel != "" {
+		a = append(a, "--default-model", p.DefaultModel)
 	}
 	if p.KeyEnv != "" {
 		a = append(a, "--key-file", keyInside)

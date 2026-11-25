@@ -54,6 +54,7 @@ func runGateway(args []string, stdout, stderr io.Writer) int {
 	listen := fs.String("listen", defaultModelAddr, "address for the model route")
 	upstream := fs.String("upstream", "", "engine address; empty means use the one engine that is detected")
 	engine := fs.String("engine", "", "engine id shown in replies (set automatically when detected)")
+	defaultModel := fs.String("default-model", "", `the model requests for the model "default" get (none: "default" goes to the engine as it is)`)
 	upstreamHost := fs.String("upstream-host", "", "Host header sent to the engine; empty means localhost:PORT for Docker Desktop's host alias, else the upstream address")
 	keyEnv := fs.String("key-env", "", "NAME of an environment variable holding the engine's key")
 	keyFile := fs.String("key-file", "", "file holding the engine's key (what ezbx up uses); read at start")
@@ -122,7 +123,7 @@ func runGateway(args []string, stdout, stderr io.Writer) int {
 		logOut = f
 	}
 
-	gw, err := gateway.New(gateway.Config{Upstream: *upstream, EngineID: *engine, Key: key, Log: logOut, UpstreamHost: *upstreamHost})
+	gw, err := gateway.New(gateway.Config{Upstream: *upstream, EngineID: *engine, Key: key, Log: logOut, UpstreamHost: *upstreamHost, DefaultModel: *defaultModel})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -277,15 +278,18 @@ func runAdmin(args []string, stdout, stderr io.Writer) int {
 	case "ready":
 		method, path = http.MethodGet, "/admin/ready"
 	case "engine":
-		if len(rest) < 2 || len(rest) > 3 {
-			fmt.Fprintln(stderr, "Usage: engine UPSTREAM [ID]")
+		if len(rest) < 2 || len(rest) > 4 {
+			fmt.Fprintln(stderr, "Usage: engine UPSTREAM [ID [DEFAULT_MODEL]]")
 			return 2
 		}
-		id := ""
-		if len(rest) == 3 {
+		id, def := "", ""
+		if len(rest) >= 3 {
 			id = rest[2]
 		}
-		method, path, body = http.MethodPut, "/admin/engine", map[string]string{"upstream": rest[1], "engine": id}
+		if len(rest) == 4 {
+			def = rest[3]
+		}
+		method, path, body = http.MethodPut, "/admin/engine", map[string]string{"upstream": rest[1], "engine": id, "default_model": def}
 	case "network":
 		if len(rest) < 2 {
 			fmt.Fprintln(stderr, "Usage: network airgap|off|allow|on [HOST]...")

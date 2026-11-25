@@ -642,6 +642,7 @@ func Changes(old, new Answers) []string {
 	add("api", old.Engine.API, new.Engine.API)
 	add("key_env", old.Engine.KeyEnv, new.Engine.KeyEnv)
 	add("host", old.Engine.Host, new.Engine.Host)
+	add("default_model", old.Engine.DefaultModel, new.Engine.DefaultModel)
 	add("harnesses", strings.Join(old.Harnesses, ","), strings.Join(new.Harnesses, ","))
 	add("tools", toolsSetting(old.Tools), toolsSetting(new.Tools))
 	add("workspace", old.Workspace, new.Workspace)

@@ -242,3 +242,19 @@ func TestNetworkModes(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultModel(t *testing.T) {
+	base := "version = 1\n[box.main]\nworkspace = '/w'\nharnesses = ['pi']\n[engine]\nurl = 'http://127.0.0.1:18080'\n"
+	if _, err := Parse(base + "default_model = '" + strings.Repeat("m", 200) + "'\n"); err != nil {
+		t.Errorf("200 characters: %v", err)
+	}
+	c, err := Parse(base + "default_model = 'org/big-model'\n")
+	if err != nil || c.Engine.DefaultModel != "org/big-model" {
+		t.Fatalf("%+v %v", c, err)
+	}
+	for _, bad := range []string{"'default'", "\"a\tb\"", "'" + strings.Repeat("m", 201) + "'", "'modèle'"} {
+		if _, err := Parse(base + "default_model = " + bad + "\n"); err == nil || !strings.Contains(err.Error(), "engine.default_model") {
+			t.Errorf("%s: %v", bad, err)
+		}
+	}
+}

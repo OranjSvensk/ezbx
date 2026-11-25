@@ -84,6 +84,7 @@ func TestGatewayArgs(t *testing.T) {
 	p := testPlan(t)
 	p.KeyEnv = "ENGINE_KEY"
 	p.UpstreamHost = "localhost:18080"
+	p.DefaultModel = "big-model"
 	a := p.GatewayArgs()
 	for _, w := range [][]string{
 		{"--name", "ezbx-t-gateway"}, {"--network", "ezbx-t-outside"},
@@ -94,7 +95,7 @@ func TestGatewayArgs(t *testing.T) {
 		{"-v", p.KeyFile() + ":/run/ezbx/engine-key:ro"},
 		{"ezbx-gateway:aaa", "gateway", "serve", "--listen", "0.0.0.0:8000"},
 		{"--upstream", "http://host.docker.internal:18080"}, {"--engine", "openai"},
-		{"--upstream-host", "localhost:18080"}, {"--key-file", "/run/ezbx/engine-key"},
+		{"--upstream-host", "localhost:18080"}, {"--key-file", "/run/ezbx/engine-key"}, {"--default-model", "big-model"},
 		{"--proxy", "0.0.0.0:3128"}, {"--network", "allow"}, {"--allow", "registry.npmjs.org"},
 		{"--admin", "127.0.0.1:8099"}, {"--admin-token-file", "/run/ezbx/admin-token"},
 		{"--log", "/var/log/ezbx/gateway.log"},
@@ -112,10 +113,10 @@ func TestGatewayArgs(t *testing.T) {
 		}
 	}
 
-	p.LogOn, p.KeyEnv, p.UpstreamHost, p.Allow = false, "", "", nil
+	p.LogOn, p.KeyEnv, p.UpstreamHost, p.Allow, p.DefaultModel = false, "", "", nil, ""
 	a = p.GatewayArgs()
 	for _, x := range a {
-		if x == "--log" || x == "--key-file" || x == "--upstream-host" || x == "--allow" || strings.Contains(x, "/var/log/ezbx") || strings.Contains(x, "engine-key") || x == "-e" {
+		if x == "--log" || x == "--key-file" || x == "--upstream-host" || x == "--default-model" || x == "--allow" || strings.Contains(x, "/var/log/ezbx") || strings.Contains(x, "engine-key") || x == "-e" {
 			t.Errorf("unexpected %q when off: %v", x, a)
 		}
 	}

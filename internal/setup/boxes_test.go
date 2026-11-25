@@ -184,3 +184,32 @@ func TestGatherAirgap(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// default_model is kept by a rewrite, named in the review, and dropped with
+// a new server address.
+func TestDefaultModelKept(t *testing.T) {
+	f := facts(t)
+	c, err := config.Parse("version = 1\n[box.main]\nworkspace = '" + filepath.Join(f.Home, "w") + "'\nharnesses = ['pi']\n[engine]\nurl = 'http://127.0.0.1:18080'\ndefault_model = 'big-model'\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := config.Parse(ConfigText(FromConfig(c), time.Now()))
+	if err != nil || back.Engine.DefaultModel != "big-model" {
+		t.Fatalf("rewrite: %+v %v", back, err)
+	}
+	b := FromConfig(c)
+	b.Engine.DefaultModel = "small"
+	if got := strings.Join(Changes(FromConfig(c), b), "\n"); !strings.Contains(got, "default_model big-model -> small") {
+		t.Errorf("review: %s", got)
+	}
+	f.Existing = c
+	p, _ := prompter("")
+	p.Auto = true
+	res, err := Gather(f, Options{URL: "http://127.0.0.1:53000"}, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Answers.Engine.DefaultModel != "" {
+		t.Error("a new address kept the old server's default model")
+	}
+}
