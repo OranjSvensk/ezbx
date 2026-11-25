@@ -39,6 +39,10 @@ func runEngineUse(args []string, stdout, stderr io.Writer) int {
 	if t.cfg == nil {
 		return report(stderr, fmt.Errorf("engine use needs the box's ezbx.toml, for its harnesses and model settings. See: ezbx up"))
 	}
+	b, err := t.needBox()
+	if err != nil {
+		return report(stderr, err)
+	}
 	cfg, err := engineChoice(t.cfg, *url, *api)
 	if err != nil {
 		return report(stderr, err)
@@ -57,7 +61,6 @@ func runEngineUse(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return report(stderr, err)
 	}
-	_, b := cfg.Only()
 	chosen, err := boxHarnesses(b)
 	if err != nil {
 		return report(stderr, err)

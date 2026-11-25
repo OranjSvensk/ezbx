@@ -29,11 +29,13 @@ type Facts struct {
 	Own          []string // ezbx's config and state folders
 	System       []string // folders that may never be the workspace
 	Existing     *config.Config
+	known        bool // Existing has the box being set up (set by Gather)
 }
 
 // Options are the answers given as flags. Empty means "ask".
 type Options struct {
-	Profile   string // starter profile id; empty prompts for a new config
+	Box       string // the box to set up; "" means the config's only box, else main
+	Profile   string // starter profile id; empty prompts for a new box
 	API       string // an API kind or "auto"; "" keeps what the config has
 	URL       string // the server's address, if the scan doesn't find it
 	Later     bool   // no server now: write the config without choosing one
@@ -57,9 +59,23 @@ type Result struct {
 // Gather asks every question in order, using flags first, then the
 // existing config, then what was detected, as defaults.
 func Gather(f Facts, o Options, p *Prompter) (Result, error) {
-	a := Answers{Box: "main", Network: "off", Engine: config.Engine{API: config.DefaultAPI}, Models: map[string]config.Model{}}
+	name := o.Box
+	if name == "" && f.Existing != nil {
+		n, err := f.Existing.Default()
+		if err != nil {
+			return Result{}, err
+		}
+		name = n
+	}
+	if name == "" {
+		name = "main"
+	}
+	if !config.BoxName(name) {
+		return Result{}, fmt.Errorf("box name %q: use up to 32 lowercase letters, digits and dashes", name)
+	}
+	a := Answers{Box: name, Network: "off", Engine: config.Engine{API: config.DefaultAPI}, Models: map[string]config.Model{}}
 	if f.Existing != nil {
-		a = FromConfig(f.Existing)
+		a, f.known = FromConfigBox(f.Existing, name)
 		if a.Models == nil {
 			a.Models = map[string]config.Model{}
 		}
@@ -102,8 +118,11 @@ func Gather(f Facts, o Options, p *Prompter) (Result, error) {
 	}
 	fmt.Fprintln(p.Out, "\nThe workspace is the only folder the agent can change. It is created if missing.")
 	ws, err := p.Ask("Workspace folder", def, func(s string) error {
-		_, err := cleanWorkspace(s, f)
-		return err
+		c, err := cleanWorkspace(s, f)
+		if err != nil {
+			return err
+		}
+		return otherWorkspace(c, a.Others, f.Home)
 	})
 	if err != nil {
 		return res, err
@@ -161,6 +180,18 @@ func cleanWorkspace(s string, f Facts) (string, error) {
 		return "", err
 	}
 	return ws, nil
+}
+
+// otherWorkspace refuses a workspace that is, holds or sits inside another
+// box's: each box snapshots and rewinds its own workspace.
+func otherWorkspace(ws string, others map[string]config.Box, home string) error {
+	for _, n := range sortedKeys(others) {
+		o := filepath.Clean(paths.ExpandHome(others[n].Workspace, home))
+		if paths.Within(ws, o) || paths.Within(o, ws) {
+			return fmt.Errorf("%s overlaps box %s's workspace %s; give each box its own folder", ws, n, o)
+		}
+	}
+	return nil
 }
 
 // speaks reports whether e answers as the API kind api: its best match, or
@@ -339,7 +370,7 @@ func askProfile(f Facts, o Options, a *Answers, p *Prompter) (bool, error) {
 		}
 		return true, nil
 	}
-	if f.Existing != nil {
+	if f.known {
 		return false, nil
 	}
 	ids := f.Catalog.ProfileIDs()
@@ -474,7 +505,7 @@ func askTools(f Facts, o Options, a *Answers, p *Prompter) error {
 		def = o.Tools
 	case a.Tools != nil:
 		def = a.Tools
-	case f.Existing != nil:
+	case f.known:
 		def = a.Tools
 	}
 	var chosen []string
@@ -494,7 +525,7 @@ func askTools(f Facts, o Options, a *Answers, p *Prompter) error {
 	if err != nil {
 		return err
 	}
-	if len(chosen) == 0 && a.Tools == nil && o.Tools == nil && f.Existing != nil {
+	if len(chosen) == 0 && a.Tools == nil && o.Tools == nil && f.known {
 		return nil // still not set, as before
 	}
 	a.Tools = chosen
@@ -599,6 +630,9 @@ func Changes(old, new Answers) []string {
 		}
 	}
 	add("box", old.Box, new.Box)
+	if old.Workspace == "" && new.Workspace != "" && old.Box == new.Box {
+		out = append(out, fmt.Sprintf("%-10s %s (added beside the other boxes)", "new box", new.Box))
+	}
 	add("engine", old.Engine.URL, new.Engine.URL)
 	add("api", old.Engine.API, new.Engine.API)
 	add("key_env", old.Engine.KeyEnv, new.Engine.KeyEnv)

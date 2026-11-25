@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -73,12 +74,14 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	cfgFlag := fs.String("config", "", "config file; its tools setting decides what goes into the box image")
 	prune := fs.Bool("prune", false, "then remove ezbx's older images, keeping the current ones and the ones before them")
+	boxFlag := fs.String("box", "", "build only this box's image (default: every box in ezbx.toml)")
 	yes := fs.Bool("yes", false, "with --prune, remove without asking")
-	if err := fs.Parse(args); err != nil {
+	words, _, err := parseInterleaved(fs, args)
+	if err != nil {
 		return 2
 	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx build [--config FILE] [--prune [--yes]]")
+	if len(words) != 0 {
+		fmt.Fprintln(stderr, "Usage: ezbx build [--box NAME] [--config FILE] [--prune [--yes]]")
 		return 2
 	}
 	dirs, err := paths.Default()
@@ -86,15 +89,20 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 		return report(stderr, err)
 	}
 	cfgFile := dirs.ConfigFile(*cfgFlag, os.Getenv)
-	var chosen, hs []string
-	switch cfg, err := config.Load(cfgFile); {
+	var cfg *config.Config
+	switch c, err := config.Load(cfgFile); {
 	case err == nil:
-		_, b := cfg.Only()
-		chosen, hs = b.Tools, b.Harnesses
+		cfg = c
 		fmt.Fprintln(stdout, "config:", cfgFile)
+	case *boxFlag != "":
+		return report(stderr, err)
 	case *cfgFlag == "" && os.Getenv("EZBX_CONFIG") == "" && errors.Is(statErr(cfgFile), os.ErrNotExist):
 		fmt.Fprintln(stdout, "No config yet, so the box image gets every verified harness and only their own tools. Run ezbx init to choose.")
 	default:
+		return report(stderr, err)
+	}
+	build, current, err := buildSets(cfg, *boxFlag)
+	if err != nil {
 		return report(stderr, err)
 	}
 
@@ -104,17 +112,56 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 	if err := r.CheckDocker(ctx); err != nil {
 		return report(stderr, err)
 	}
-	gw, bx, err := imageSpecs(chosen, hs)
-	if err != nil {
-		return report(stderr, err)
-	}
-	if err := buildImages(ctx, dirs, stdout, gw, bx); err != nil {
+	if err := buildImages(ctx, dirs, stdout, build...); err != nil {
 		return report(stderr, err)
 	}
 	if *prune {
-		return pruneImages(ctx, dirs, stdout, stderr, *yes, gw, bx)
+		return pruneImages(ctx, dirs, stdout, stderr, *yes, current...)
 	}
 	return 0
+}
+
+// buildSets works out which images ezbx build builds (the gateway and every
+// box's image, or only the named box's) and which are current, the ones
+// --prune keeps: the gateway's and every box's, even when only one box was
+// built, so pruning never removes another box's image. Without a config
+// (cfg nil) the box image gets every verified harness.
+func buildSets(cfg *config.Config, only string) (build, current []images.Spec, err error) {
+	boxes := []config.Box{{}}
+	if cfg != nil {
+		boxes = nil
+		if only != "" {
+			b, ok := cfg.Get(only)
+			if !ok {
+				return nil, nil, fmt.Errorf("box %q isn't in ezbx.toml (it has %s)", only, strings.Join(cfg.Names(), ", "))
+			}
+			boxes = append(boxes, *b) // first, so build can be cut from the front
+		}
+		for _, n := range cfg.Names() {
+			b, _ := cfg.Get(n)
+			boxes = append(boxes, *b)
+		}
+	}
+	seen := map[string]bool{}
+	for i, b := range boxes {
+		gw, bx, err := imageSpecs(b.Tools, b.Harnesses)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, s := range []images.Spec{gw, bx} {
+			if !seen[s.Tag()] {
+				seen[s.Tag()] = true
+				current = append(current, s)
+			}
+		}
+		if i == 0 && only != "" {
+			build = slices.Clone(current)
+		}
+	}
+	if only == "" {
+		build = current
+	}
+	return build, current, nil
 }
 
 // buildImages builds each image that isn't built yet and records it.

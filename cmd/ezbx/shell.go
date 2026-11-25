@@ -97,8 +97,7 @@ func shellArgs(t target, id string, extra []string, tty bool) ([]string, error) 
 	if !ok {
 		return nil, usageError(fmt.Sprintf("Unknown harness %q.", id))
 	}
-	if t.cfg != nil {
-		_, b := t.cfg.Only()
+	if b := t.box(); b != nil {
 		in := false
 		for _, h := range b.Harnesses {
 			in = in || h == id

@@ -1,8 +1,11 @@
 package main
 
 import (
+	"errors"
 	"flag"
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/OranjSvensk/ezbx/internal/config"
 	"github.com/OranjSvensk/ezbx/internal/paths"
@@ -15,8 +18,30 @@ type target struct {
 	dirs paths.Dirs
 }
 
+// box is this box's settings, or nil when the config doesn't have it.
+func (t target) box() *config.Box {
+	if t.cfg == nil {
+		return nil
+	}
+	b, _ := t.cfg.Get(t.name)
+	return b
+}
+
+// needBox returns the box's settings, or says why there are none.
+func (t target) needBox() (*config.Box, error) {
+	if t.cfg == nil {
+		return nil, errors.New("no ezbx.toml was found, so the workspace isn't known. Run ezbx init, or pass --config FILE")
+	}
+	b := t.box()
+	if b == nil {
+		return nil, fmt.Errorf("box %q isn't in ezbx.toml (it has %s). Add it with ezbx init --box %s, or pick another with --box", t.name, strings.Join(t.cfg.Names(), ", "), t.name)
+	}
+	return b, nil
+}
+
 // resolveBox finds the box: --box if given, else the one box in the config,
-// else "main". A config named with --config must load.
+// else "main". A config named with --config must load. A config with
+// several boxes needs --box.
 func resolveBox(cfgFlag, boxFlag string) (target, error) {
 	dirs, err := paths.Default()
 	if err != nil {
@@ -30,7 +55,9 @@ func resolveBox(cfgFlag, boxFlag string) (target, error) {
 	if err == nil {
 		t.cfg = cfg
 		if t.name == "" {
-			t.name, _ = cfg.Only()
+			if t.name, err = cfg.Default(); err != nil {
+				return target{}, usageError(err.Error())
+			}
 		}
 	}
 	if t.name == "" {

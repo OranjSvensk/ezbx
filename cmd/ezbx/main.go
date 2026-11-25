@@ -39,14 +39,14 @@ const usage = `ezbx - boxed-up local AI agents
 
 Usage:
   ezbx [--version] [help]
-  ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--profile NAME]
+  ezbx init [--plan] [--yes] [--no-start] [--box NAME] [--config FILE] [--profile NAME]
             [--list-profiles] [--url ADDRESS | --later]
             [--api auto|openai|lmstudio|anthropic] [--key-env NAME] [--reasoning]
             [--harness pi,opencode,omp,codex,claude,hermes,openclaw]
             [--tools pack:coding,ffmpeg|none] [--workspace PATH]
             [--network off|allow|on] [--memory 8g]
-  ezbx build [--config FILE] [--prune [--yes]]
-  ezbx up [--config FILE] [--no-doctor]
+  ezbx build [--box NAME] [--config FILE] [--prune [--yes]]
+  ezbx up [--box NAME] [--config FILE] [--no-doctor]
   ezbx down [--box NAME] [--config FILE]
   ezbx shell [HARNESS] [--box NAME] [--no-snapshot] [-- HARNESS ARGS...]
   ezbx snapshot [-m NOTE] | ezbx snapshot list | ezbx snapshot remove ID [--yes]

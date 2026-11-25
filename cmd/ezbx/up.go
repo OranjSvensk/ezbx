@@ -33,12 +33,14 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("up", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfgFlag := fs.String("config", "", "config file; default EZBX_CONFIG, then ezbx.toml in the config folder")
+	boxFlag := fs.String("box", "", "box to start; needed when ezbx.toml has several")
 	noDoctor := fs.Bool("no-doctor", false, "skip the doctor's checks at the end")
-	if err := fs.Parse(args); err != nil {
+	words, _, err := parseInterleaved(fs, args)
+	if err != nil {
 		return 2
 	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx up [--config FILE] [--no-doctor]")
+	if len(words) != 0 {
+		fmt.Fprintln(stderr, "Usage: ezbx up [--box NAME] [--config FILE] [--no-doctor]")
 		return 2
 	}
 	dirs, err := paths.Default()
@@ -52,11 +54,17 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	name := *boxFlag
+	if name == "" {
+		if name, err = cfg.Default(); err != nil {
+			return report(stderr, usageError(err.Error()))
+		}
+	}
 	fmt.Fprintln(stdout, "config:", cfgFile)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	plan, err := makePlan(ctx, cfg, dirs, stdout)
+	plan, err := makePlan(ctx, cfg, name, dirs, stdout)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -109,8 +117,11 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 
 // makePlan turns the config into a plan: it checks the workspace, finds the
 // engine and renders each harness's config. Nothing is changed yet.
-func makePlan(ctx context.Context, cfg *config.Config, dirs paths.Dirs, stdout io.Writer) (box.Plan, error) {
-	name, b := cfg.Only()
+func makePlan(ctx context.Context, cfg *config.Config, name string, dirs paths.Dirs, stdout io.Writer) (box.Plan, error) {
+	b, ok := cfg.Get(name)
+	if !ok {
+		return box.Plan{}, fmt.Errorf("box %q isn't in ezbx.toml (it has %s). Add it with ezbx init --box %s", name, strings.Join(cfg.Names(), ", "), name)
+	}
 	home, _ := os.UserHomeDir()
 
 	ws := paths.ExpandHome(b.Workspace, home)

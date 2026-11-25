@@ -136,6 +136,27 @@ func TestResolveBox(t *testing.T) {
 	if _, err = resolveBox(filepath.Join(home, "missing.toml"), ""); err == nil {
 		t.Error("a named config must load")
 	}
+	if b := tg.box(); b != nil {
+		t.Errorf("box other isn't in the config: %+v", b)
+	}
+	if _, err := tg.needBox(); err == nil || !strings.Contains(err.Error(), `box "other" isn't in ezbx.toml (it has work)`) {
+		t.Errorf("needBox for a box the config lacks: %v", err)
+	}
+
+	// With several boxes, the box is never guessed.
+	os.WriteFile(filepath.Join(home, "ezbx.toml"), []byte("version = 1\n[box.work]\nworkspace = '/w'\nharnesses = ['pi']\n[box.play]\nworkspace = '/p'\nnetwork = 'on'\nharnesses = ['pi']\n"), 0o600)
+	if _, err = resolveBox("", ""); err == nil || !strings.Contains(err.Error(), "--box NAME") {
+		t.Errorf("two boxes, no --box: %v", err)
+	} else if _, ok := err.(usageError); !ok {
+		t.Errorf("two boxes, no --box, is a usage mistake: %T", err)
+	}
+	tg, err = resolveBox("", "play")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, err := tg.needBox(); err != nil || b.Network != "on" || configMode(tg) != "on" {
+		t.Errorf("play: %+v %v", b, err)
+	}
 }
 
 func TestWithAllowFile(t *testing.T) {

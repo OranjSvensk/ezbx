@@ -37,7 +37,7 @@ func TestParseGood(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	name, b := c.Only()
+	name, b := only(c)
 	if name != "main" || b.Workspace != "~/ezbx/workspace" || b.Memory != "8g" || b.CPUsFlag() != "2.5" || b.PIDs != DefaultPIDs {
 		t.Errorf("box: %s %+v", name, b)
 	}
@@ -61,7 +61,7 @@ func TestDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, b := c.Only()
+	_, b := only(c)
 	if b.Memory != "" || b.PIDs != DefaultPIDs || b.Network != "off" || b.CPUsFlag() != "" {
 		t.Errorf("defaults: %+v", b)
 	}
@@ -72,7 +72,7 @@ func TestDefaults(t *testing.T) {
 		t.Errorf("no tools key means not set: %#v", b.Tools)
 	}
 	c, err = Parse("version = 1\n[box.main]\nworkspace = '/w'\nharnesses = [\"pi\"]\ntools = ['pack:coding', 'ffmpeg']\n")
-	if _, b = c.Only(); err != nil || strings.Join(b.Tools, ",") != "pack:coding,ffmpeg" {
+	if _, b = only(c); err != nil || strings.Join(b.Tools, ",") != "pack:coding,ffmpeg" {
 		t.Errorf("tools: %v %v", b.Tools, err)
 	}
 }
@@ -88,7 +88,7 @@ func TestExampleFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("example: %v", err)
 	}
-	if _, b := c.Only(); len(b.ReadOnly) != 0 {
+	if _, b := only(c); len(b.ReadOnly) != 0 {
 		t.Fatalf("the example's read-only folder must stay commented out: %+v", b.ReadOnly)
 	}
 	// The commented read-only folder is valid once its lines are uncommented.
@@ -100,7 +100,7 @@ func TestExampleFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("example with its read-only folder: %v", err)
 	}
-	if _, b := c.Only(); len(b.ReadOnly) != 1 || b.ReadOnly[0].Name != "projects" || len(b.ReadOnly[0].Mask) != 2 || b.ReadOnly[0].Unmask[0] != ".npmrc" {
+	if _, b := only(c); len(b.ReadOnly) != 1 || b.ReadOnly[0].Name != "projects" || len(b.ReadOnly[0].Mask) != 2 || b.ReadOnly[0].Unmask[0] != ".npmrc" {
 		t.Fatalf("example's read-only folder: %+v", b.ReadOnly)
 	}
 }
@@ -111,7 +111,7 @@ func TestReadOnlyEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, b := c.Only()
+	_, b := only(c)
 	if len(b.ReadOnly) != 2 || b.ReadOnly[0].Name != "docs" || b.ReadOnly[0].Mask[0] != "private/" || b.ReadOnly[0].Unmask[0] != ".npmrc" || b.ReadOnly[1].Path != "/b" {
 		t.Fatalf("%+v", b.ReadOnly)
 	}
@@ -127,7 +127,9 @@ func TestRefused(t *testing.T) {
 		"typo in gateway":   {base + "[gateway]\nlogs = true\n", "unknown setting: gateway.logs"},
 		"wrong version":     {strings.Replace(base, "version = 1", "version = 2", 1), "version must be 1"},
 		"no box":            {"version = 1\n", "no box"},
-		"two boxes":         {base + "[box.other]\nworkspace = '/x'\nharnesses = ['pi']\n", "this version runs one box"},
+		"same workspace":    {base + "[box.other]\nworkspace = '/w'\nharnesses = ['pi']\n", "overlapping workspaces"},
+		"nested workspace":  {base + "[box.other]\nworkspace = '/w/sub'\nharnesses = ['pi']\n", "overlapping workspaces"},
+		"holds a workspace": {base + "[box.other]\nworkspace = '/'\nharnesses = ['pi']\n", "overlapping workspaces"},
 		"bad box name":      {strings.Replace(base, "box.main", "box.Main", 1), "box name"},
 		"no workspace":      {strings.Replace(base, "workspace = '/w'", "", 1), "workspace is required"},
 		"bad memory":        {strings.Replace(base, "workspace", "memory = 'lots'\nworkspace", 1), "memory"},
@@ -185,4 +187,40 @@ func TestHostName(t *testing.T) {
 			t.Errorf("%q should be refused", h)
 		}
 	}
+}
+
+func TestSeveralBoxes(t *testing.T) {
+	c, err := Parse("version = 1\n[box.main]\nworkspace = '/w1'\nharnesses = ['pi']\n[box.agent-ada]\nworkspace = '/w2'\nnetwork = 'allow'\nharnesses = ['opencode']\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(c.Names(), ","); got != "agent-ada,main" {
+		t.Fatalf("names: %s", got)
+	}
+	if b, ok := c.Get("agent-ada"); !ok || b.Network != "allow" || b.Harnesses[0] != "opencode" {
+		t.Fatalf("agent-ada: %+v %v", b, ok)
+	}
+	if _, ok := c.Get("other"); ok {
+		t.Fatal("found a box that isn't there")
+	}
+	if _, err := c.Default(); err == nil || !strings.Contains(err.Error(), "--box NAME") || !strings.Contains(err.Error(), "agent-ada, main") {
+		t.Fatalf("default with two boxes: %v", err)
+	}
+	one, _ := Parse("version = 1\n[box.solo]\nworkspace = '/w'\nharnesses = ['pi']\n")
+	if n, err := one.Default(); err != nil || n != "solo" {
+		t.Fatalf("default with one box: %q %v", n, err)
+	}
+	// Workspaces that only share a prefix are separate folders.
+	if _, err := Parse("version = 1\n[box.a]\nworkspace = '/w'\nharnesses = ['pi']\n[box.b]\nworkspace = '/w2'\nharnesses = ['pi']\n"); err != nil {
+		t.Fatalf("/w and /w2: %v", err)
+	}
+}
+
+// only is the one box of a config made for a test.
+func only(c *Config) (string, *Box) {
+	n, err := c.Default()
+	if err != nil {
+		panic(err)
+	}
+	return n, c.Box[n]
 }

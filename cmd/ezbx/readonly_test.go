@@ -52,7 +52,7 @@ func TestUpChecksReadOnlyFirst(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = makePlan(context.Background(), cfg, dirs, io.Discard)
+		_, err = makePlan(context.Background(), cfg, "vt", dirs, io.Discard)
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: got %v, want %q", strings.TrimSpace(extra), err, want)
 		}

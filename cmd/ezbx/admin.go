@@ -45,10 +45,10 @@ func runAdminShell(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return report(stderr, err)
 	}
-	if t.cfg == nil {
-		return report(stderr, errors.New("no ezbx.toml was found, so the workspace isn't known. Run ezbx init, or pass --config FILE"))
+	b, err := t.needBox()
+	if err != nil {
+		return report(stderr, err)
 	}
-	_, b := t.cfg.Only()
 	root, err := workspaceOf(b)
 	if err != nil {
 		return report(stderr, err)
@@ -196,8 +196,7 @@ func stateDirFor(t target) (string, error) {
 	if !paths.Within(dir, t.dirs.State) || filepath.Clean(dir) == filepath.Clean(t.dirs.State) {
 		return "", fmt.Errorf("internal error: the state folder %s is not inside %s", dir, t.dirs.State)
 	}
-	if t.cfg != nil {
-		_, b := t.cfg.Only()
+	if b := t.box(); b != nil {
 		if ws, err := workspaceOf(b); err == nil && (paths.Within(ws, dir) || paths.Within(dir, ws)) {
 			return "", fmt.Errorf("the workspace %s and the state folder %s overlap, so ezbx won't remove the state folder. Move one of them", ws, dir)
 		}
@@ -309,8 +308,7 @@ func runDestroy(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "  "+l)
 	}
 	fmt.Fprintln(stdout, "Kept:")
-	if t.cfg != nil {
-		_, b := t.cfg.Only()
+	if b := t.box(); b != nil {
 		if ws, err := workspaceOf(b); err == nil {
 			fmt.Fprintf(stdout, "  the workspace %s (never touched)\n", ws)
 		}
@@ -599,11 +597,11 @@ func runReset(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	if t.cfg == nil {
-		return report(stderr, errors.New("no ezbx.toml was found. Run ezbx init, or pass --config FILE"))
+	b, err := t.needBox()
+	if err != nil {
+		return report(stderr, err)
 	}
 	cfgFile := t.dirs.ConfigFile(*cfgFlag, os.Getenv)
-	_, b := t.cfg.Only()
 	if *restore != "" {
 		if !backupID.MatchString(*restore) || !fileExists(filepath.Join(backupsDir(t), *restore, "home.tar")) {
 			return report(stderr, fmt.Errorf("no backup %q with the agent's home; ezbx reset --list shows them", *restore))
@@ -684,7 +682,7 @@ func runReset(args []string, stdout, stderr io.Writer) int {
 	}
 	pruneBackups(t, id, *restore)
 	fmt.Fprintln(stdout)
-	upArgs := []string{"--config", cfgFile}
+	upArgs := []string{"--config", cfgFile, "--box", t.name}
 	if *noDoctor {
 		upArgs = append(upArgs, "--no-doctor")
 	}

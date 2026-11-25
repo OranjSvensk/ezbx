@@ -42,6 +42,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	noStart := fs.Bool("no-start", false, "write the config, but don't start the box")
 	listProfiles := fs.Bool("list-profiles", false, "list starter profiles and exit")
 	var o setup.Options
+	fs.StringVar(&o.Box, "box", "", "the box to set up: one in ezbx.toml, or a new one to add beside the others")
 	fs.StringVar(&o.Profile, "profile", "", "starter profile: offline, open, python-ml, research or web-dev")
 	fs.StringVar(&o.URL, "url", "", "the model server's address, such as http://127.0.0.1:1234, if it isn't found")
 	fs.StringVar(&o.API, "api", "", "the server's API kind: auto, openai, lmstudio or anthropic")
@@ -66,7 +67,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--config FILE] [--profile NAME] [--list-profiles] [--url ADDRESS] [--api auto|openai|lmstudio|anthropic] [--key-env NAME] [--later] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--readonly PATH]... [--network off|allow|on] [--memory 8g]")
+		fmt.Fprintln(stderr, "Usage: ezbx init [--plan] [--yes] [--no-start] [--box NAME] [--config FILE] [--profile NAME] [--list-profiles] [--url ADDRESS] [--api auto|openai|lmstudio|anthropic] [--key-env NAME] [--later] [--harness pi,opencode,omp,codex,claude,hermes,openclaw] [--tools pack:coding] [--workspace PATH] [--readonly PATH]... [--network off|allow|on] [--memory 8g]")
 		return 2
 	}
 	if *listProfiles {
@@ -160,7 +161,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		Images: imagesPresent(ctx, gw, bx), Tools: bx.Tools.Chosen, Harnesses: facts.Harnesses, NoStart: *noStart,
 	}
 	if existing != nil {
-		old := setup.FromConfig(existing)
+		old, _ := setup.FromConfigBox(existing, res.Answers.Box)
 		pl.Old = &old
 	}
 	pl.BoxUp = boxExists(ctx, res.Answers.Box)
@@ -217,7 +218,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	fmt.Fprintln(stdout)
-	if code := runUp([]string{"--config", cfgFile}, stdout, stderr); code != 0 {
+	if code := runUp([]string{"--config", cfgFile, "--box", res.Answers.Box}, stdout, stderr); code != 0 {
 		fmt.Fprintln(stderr, "The config is written. Fix what is shown above, then run ezbx up (or ezbx init again).")
 		return code
 	}

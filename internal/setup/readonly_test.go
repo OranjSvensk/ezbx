@@ -43,7 +43,7 @@ func TestReadOnlyRoundTrip(t *testing.T) {
 	}
 	// The answers are a copy: changing them leaves the config alone.
 	back.ReadOnly[1].Mask[0] = "changed"
-	if _, b := c.Only(); b.ReadOnly[1].Mask[0] != "./k.txt" {
+	if _, b := onlyBox(c); b.ReadOnly[1].Mask[0] != "./k.txt" {
 		t.Error("FromConfig shares the config's lists")
 	}
 	if ch := Changes(a, Answers{Box: "main", Workspace: "/w", Memory: "4g", Network: "off", Harnesses: []string{"pi"}, Engine: config.Engine{API: "auto"}}); len(ch) != 1 || !strings.HasPrefix(ch[0], "readonly") {

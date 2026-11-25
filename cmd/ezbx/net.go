@@ -74,11 +74,10 @@ func report(stderr io.Writer, err error) int {
 }
 
 func configMode(t target) string {
-	if t.cfg == nil {
-		return ""
+	if b := t.box(); b != nil {
+		return b.Network
 	}
-	_, b := t.cfg.Only()
-	return b.Network
+	return ""
 }
 
 func showNet(ctx context.Context, r *box.Runner, t target, w io.Writer) error {
@@ -236,8 +235,7 @@ func removeHosts(ctx context.Context, r *box.Runner, t target, file string, host
 		fmt.Fprintf(w, ", and closed %d open connection(s) to it", closed)
 	}
 	fmt.Fprintln(w, ".")
-	if t.cfg != nil {
-		_, b := t.cfg.Only()
+	if b := t.box(); b != nil {
 		for _, h := range b.Allow {
 			if drop[strings.ToLower(h)] {
 				fmt.Fprintf(w, "Note: %s is also in ezbx.toml (allow), so it comes back at the next ezbx up unless you remove it there.\n", h)

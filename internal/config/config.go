@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/OranjSvensk/ezbx/internal/paths"
 	"github.com/OranjSvensk/ezbx/internal/readonly"
 )
 
@@ -194,8 +196,8 @@ func (c *Config) check() error {
 		c.names = append(c.names, name)
 	}
 	sort.Strings(c.names)
-	if len(c.names) > 1 {
-		return fmt.Errorf("found %d boxes (%s); this version runs one box", len(c.names), strings.Join(c.names, ", "))
+	if err := c.checkWorkspaces(); err != nil {
+		return err
 	}
 	e := &c.Engine
 	if e.API == "" {
@@ -306,8 +308,40 @@ func (b *Box) check(name string) error {
 	return nil
 }
 
-// Only returns the one box, with its name.
-func (c *Config) Only() (string, *Box) { return c.names[0], c.Box[c.names[0]] }
+// checkWorkspaces refuses two boxes whose workspaces are the same folder or
+// one inside the other: each box snapshots and rewinds its own workspace,
+// so a shared one would let one box's rewind undo another agent's work.
+func (c *Config) checkWorkspaces() error {
+	home, _ := os.UserHomeDir()
+	ws := func(n string) string { return filepath.Clean(paths.ExpandHome(c.Box[n].Workspace, home)) }
+	for i, a := range c.names {
+		for _, b := range c.names[i+1:] {
+			wa, wb := ws(a), ws(b)
+			if paths.Within(wa, wb) || paths.Within(wb, wa) {
+				return fmt.Errorf("boxes %s and %s have overlapping workspaces (%s and %s); give each box its own folder", a, b, wa, wb)
+			}
+		}
+	}
+	return nil
+}
+
+// Names lists the boxes, sorted.
+func (c *Config) Names() []string { return append([]string(nil), c.names...) }
+
+// Get returns the box with this name, if the config has it.
+func (c *Config) Get(name string) (*Box, bool) {
+	b, ok := c.Box[name]
+	return b, ok
+}
+
+// Default is the box a command acts on when none is named: the only one.
+// With several boxes, the command must be told which.
+func (c *Config) Default() (string, error) {
+	if len(c.names) == 1 {
+		return c.names[0], nil
+	}
+	return "", fmt.Errorf("ezbx.toml has %d boxes (%s); say which with --box NAME", len(c.names), strings.Join(c.names, ", "))
+}
 
 // LogOn reports whether the gateway keeps a request log.
 func (c *Config) LogOn() bool { return c.Gateway.Log == nil || *c.Gateway.Log }

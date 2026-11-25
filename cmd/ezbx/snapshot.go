@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -33,13 +32,11 @@ type snapBox struct {
 // openSnapshots finds the box's workspace, its snapshot store (in the box's
 // state folder, never mounted into the box) and its rules from ezbx.toml.
 func openSnapshots(t target) (snapBox, error) {
-	if t.cfg == nil {
-		return snapBox{}, errors.New("no ezbx.toml was found, so the workspace isn't known. Run ezbx init, or pass --config FILE")
+	b, err := t.needBox()
+	if err != nil {
+		return snapBox{}, err
 	}
-	name, b := t.cfg.Only()
-	if t.name != name {
-		return snapBox{}, fmt.Errorf("box %q is not the one in ezbx.toml (%q)", t.name, name)
-	}
+	name := t.name
 	root, err := workspaceOf(b)
 	if err != nil {
 		return snapBox{}, err

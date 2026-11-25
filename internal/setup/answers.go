@@ -28,25 +28,66 @@ type Answers struct {
 	Harnesses []string
 	Tools     []string          // tool ids and "pack:" names; nil when not set
 	ReadOnly  []config.ReadOnly // read-only folders, as in ezbx.toml
+	Snapshots config.Snapshots  // kept as it is; init doesn't ask about it
 	Engine    config.Engine     // api, url, key_env, host
 	Models    map[string]config.Model
 	Log       *bool
+	Others    map[string]config.Box // the config's other boxes, written back unchanged
 }
 
-// FromConfig turns an existing config into answers, so running init again
-// starts from what is there and keeps what init doesn't ask about.
+// FromConfig turns an existing config with one box into answers, so running
+// init again starts from what is there and keeps what init doesn't ask about.
 func FromConfig(c *config.Config) Answers {
-	name, b := c.Only()
-	a := Answers{
-		Box: name, Workspace: b.Workspace, Memory: b.Memory, CPUs: b.CPUs, PIDs: b.PIDs,
-		Network: b.Network, Allow: append([]string(nil), b.Allow...), Harnesses: append([]string(nil), b.Harnesses...),
-		Tools: slices.Clone(b.Tools), ReadOnly: cloneReadOnly(b.ReadOnly),
-		Engine: c.Engine, Models: maps.Clone(c.Models), Log: c.Gateway.Log,
+	a, _ := FromConfigBox(c, c.Names()[0])
+	return a
+}
+
+// FromConfigBox is FromConfig for the named box. When the config doesn't
+// have that box yet, the answers start a new one that shares the config's
+// engine and model settings, and found is false. Every other box is kept in
+// Others, so writing the answers back never drops one.
+func FromConfigBox(c *config.Config, name string) (a Answers, found bool) {
+	a = Answers{Box: name, Network: config.DefaultNetwork, Engine: c.Engine, Models: maps.Clone(c.Models), Log: c.Gateway.Log}
+	for _, n := range c.Names() {
+		if n == name {
+			continue
+		}
+		if a.Others == nil {
+			a.Others = map[string]config.Box{}
+		}
+		o, _ := c.Get(n)
+		a.Others[n] = cloneBox(*o)
 	}
+	b, found := c.Get(name)
+	if !found {
+		return a, false
+	}
+	a.Workspace, a.Memory, a.CPUs, a.PIDs = b.Workspace, b.Memory, b.CPUs, b.PIDs
+	a.Network, a.Allow, a.Harnesses = b.Network, slices.Clone(b.Allow), slices.Clone(b.Harnesses)
+	a.Tools, a.ReadOnly, a.Snapshots = slices.Clone(b.Tools), cloneReadOnly(b.ReadOnly), cloneSnapshots(b.Snapshots)
 	if a.PIDs == config.DefaultPIDs {
 		a.PIDs = 0 // the default, so not written
 	}
-	return a
+	return a, true
+}
+
+// box is the answers' own box, in the config's form.
+func (a Answers) box() config.Box {
+	return config.Box{
+		Workspace: a.Workspace, Memory: a.Memory, CPUs: a.CPUs, PIDs: a.PIDs, Network: a.Network,
+		Allow: a.Allow, Harnesses: a.Harnesses, Tools: a.Tools, ReadOnly: a.ReadOnly, Snapshots: a.Snapshots,
+	}
+}
+
+func cloneBox(b config.Box) config.Box {
+	b.Allow, b.Harnesses, b.Tools = slices.Clone(b.Allow), slices.Clone(b.Harnesses), slices.Clone(b.Tools)
+	b.ReadOnly, b.Snapshots = cloneReadOnly(b.ReadOnly), cloneSnapshots(b.Snapshots)
+	return b
+}
+
+func cloneSnapshots(s config.Snapshots) config.Snapshots {
+	s.Skip = slices.Clone(s.Skip)
+	return s
 }
 
 // MemoryFor is the default memory limit: half of what Docker has, rounded
@@ -73,25 +114,16 @@ func ConfigText(a Answers, now time.Time) string {
 	w("# Edit it by hand, or run ezbx init again. Unknown settings are refused.\n")
 	w("version = 1\n\n")
 
-	w("[box.%s]\n", a.Box)
-	w("workspace = %s   # the ONLY folder the agent can write to\n", quote(a.Workspace))
-	w("memory    = %s\n", quote(a.Memory))
-	if a.CPUs > 0 {
-		w("cpus      = %s\n", strconv.FormatFloat(a.CPUs, 'f', -1, 64))
+	boxes := maps.Clone(a.Others)
+	if boxes == nil {
+		boxes = map[string]config.Box{}
 	}
-	if a.PIDs > 0 {
-		w("pids      = %d\n", a.PIDs)
+	boxes[a.Box] = a.box() // the answers win over any old copy
+
+	for _, n := range sortedKeys(boxes) {
+		b.WriteString(boxText(n, boxes[n]))
+		w("\n")
 	}
-	w("network   = %s   # off | allow | on\n", quote(a.Network))
-	if len(a.Allow) > 0 {
-		w("allow     = %s   # hosts for allow mode, besides the harnesses' own\n", list(a.Allow))
-	}
-	w("harnesses = %s\n", list(a.Harnesses))
-	if a.Tools != nil {
-		w("tools     = %s   # tool packs (pack:NAME) and single tools; after a change, ezbx build\n", list(a.Tools))
-	}
-	b.WriteString(readOnlyText(a.Box, a.ReadOnly))
-	w("\n")
 
 	e := a.Engine
 	if e.API == "" {
@@ -133,6 +165,46 @@ func ConfigText(a Answers, now time.Time) string {
 	}
 	log := a.Log == nil || *a.Log
 	w("\n[gateway]\nlog = %t   # keep a request log in the state folder\n", log)
+	return b.String()
+}
+
+// boxText writes one [box.NAME] section with its read-only folders and
+// snapshot settings.
+func boxText(name string, x config.Box) string {
+	var b strings.Builder
+	w := func(format string, v ...any) { fmt.Fprintf(&b, format, v...) }
+	w("[box.%s]\n", name)
+	w("workspace = %s   # the ONLY folder the agent can write to\n", quote(x.Workspace))
+	if x.Memory != "" {
+		w("memory    = %s\n", quote(x.Memory))
+	}
+	if x.CPUs > 0 {
+		w("cpus      = %s\n", strconv.FormatFloat(x.CPUs, 'f', -1, 64))
+	}
+	if x.PIDs > 0 && x.PIDs != config.DefaultPIDs {
+		w("pids      = %d\n", x.PIDs)
+	}
+	w("network   = %s   # off | allow | on\n", quote(x.Network))
+	if len(x.Allow) > 0 {
+		w("allow     = %s   # hosts for allow mode, besides the harnesses' own\n", list(x.Allow))
+	}
+	w("harnesses = %s\n", list(x.Harnesses))
+	if x.Tools != nil {
+		w("tools     = %s   # tool packs (pack:NAME) and single tools; after a change, ezbx build\n", list(x.Tools))
+	}
+	b.WriteString(readOnlyText(name, x.ReadOnly))
+	if s := x.Snapshots; s.Skip != nil || s.MaxFile != "" || s.Keep > 0 {
+		w("\n[box.%s.snapshots]\n", name)
+		if s.Skip != nil {
+			w("skip     = %s\n", list(s.Skip))
+		}
+		if s.MaxFile != "" {
+			w("max_file = %s\n", quote(s.MaxFile))
+		}
+		if s.Keep > 0 {
+			w("keep     = %d\n", s.Keep)
+		}
+	}
 	return b.String()
 }
 

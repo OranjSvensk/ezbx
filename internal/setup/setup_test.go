@@ -572,3 +572,13 @@ func TestReviewWarnsAboutFileNamedModels(t *testing.T) {
 		t.Errorf("no warning:\n%s", text)
 	}
 }
+
+// onlyBox is the one box of a config made for a test.
+func onlyBox(c *config.Config) (string, *config.Box) {
+	n, err := c.Default()
+	if err != nil {
+		panic(err)
+	}
+	b, _ := c.Get(n)
+	return n, b
+}
