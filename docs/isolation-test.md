@@ -310,7 +310,9 @@ A second box with all seven harnesses and `network = 'off'` used the same OpenAI
 
 The [Ubuntu 24.04 amd64 CI run](https://github.com/OranjSvensk/ezbx/actions/runs/45875263990) used Docker Engine 28.0.4, Pi, and a keyed OpenAI-compatible fake engine on the host's Docker bridge. The gateway read its key from a private read-only file and stayed unprivileged. The fixture checked a writable workspace, a masked read-only file, the isolated inside network, and `doctor`'s direct route checks. It also exercised the `default` model alias, engine-free `airgap` startup, exec timeouts, snapshot creation, and event replay through destroy.
 
-The test used a temporary workspace writable by the container agent. Coverage is limited to the CI runner, Pi, and the fake engine. See [native Linux setup](getting-started.md#native-linux-pilot) for the supported pilot configuration.
+The [v0.6.1 pilot run](https://github.com/OranjSvensk/ezbx/actions/runs/45892591230) passed the fixture with Pi and OpenCode in separate jobs. Both checked gateway activity events and replay. The OpenCode job also ran a completion through the keyed fake engine using the generated harness configuration.
+
+Both jobs used temporary workspaces writable by the container agent. See [native Linux setup](getting-started.md#native-linux-pilot) for the verified setup and its limits.
 
 ## Limits of this result
 

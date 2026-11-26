@@ -16,7 +16,7 @@ You need three things on your computer:
 
 ### Native Linux pilot
 
-The pilot is verified in CI on Ubuntu 24.04 `amd64` with Docker Engine 28.0.4, Pi, and the fake engine. Install the Linux `amd64` release archive or use the Go command below. The pilot uses a local Docker Engine daemon running as root, with the ezbx CLI running as a regular account that can access Docker. The gateway uses that account's numeric user and group IDs to read its private state files. The agent in the box still runs as user 1000.
+The pilot is verified in CI on Ubuntu 24.04 `amd64` with local Docker Engine, Pi, OpenCode, and a fake model server. Install the Linux `amd64` release archive or use the Go command below. The pilot uses a local Docker Engine daemon running as root, with the ezbx CLI running as a regular account that can access Docker. The gateway uses that account's numeric user and group IDs to read its private state files. The agent in the box still runs as user 1000.
 
 - Choose a workspace user 1000 can write to. When your Linux account has a different user ID, use a workspace with an appropriate filesystem permission or access control entry for user 1000. ezbx leaves existing workspace ownership and permissions alone.
 - Bind the model server to an address that both the host and the Docker bridge can reach. Use that address for `[engine].url` or pass it to `ezbx init --url`. Use the bridge-facing address on native Linux.
@@ -24,7 +24,7 @@ The pilot is verified in CI on Ubuntu 24.04 `amd64` with Docker Engine 28.0.4, P
 
 The pilot covers the local Docker context with user namespace remapping and rootless mode disabled. The [isolation results](isolation-test.md#native-linux-pilot) describe what CI verifies.
 
-The upcoming `v0.6.1` pilot workflow runs the fake-engine fixture separately for Pi and OpenCode on Ubuntu 24.04 `amd64`. The OpenCode job checks that the installed harness can answer through the gateway using its generated configuration. Run the same fixture with `python3 scripts/test-runtime-events.py --harness opencode` on the pilot setup. A fresh build can fetch pinned Docker and harness inputs.
+The pilot workflow runs the fake-engine fixture separately for Pi and OpenCode on Ubuntu 24.04 `amd64`. The OpenCode job checks that the installed harness can answer through the gateway using its generated configuration. Run the same fixture with `python3 scripts/test-runtime-events.py --harness opencode` on the pilot setup. A fresh build can fetch pinned Docker and harness inputs.
 
 ---
 
@@ -48,7 +48,7 @@ Or download a release archive from [GitHub Releases](https://github.com/OranjSve
 Or install with Go 1.27 or later:
 
 ```text
-go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.6.0
+go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.6.1
 ```
 
 You can also build directly from a clone:

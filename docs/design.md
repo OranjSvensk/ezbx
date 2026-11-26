@@ -1,6 +1,6 @@
 # ezbx design (draft 0.1)
 
-Status: `v0.6.0` early release with a native Linux pilot (section 12). Windows 11 with Docker Desktop and a local model server is verified across all seven harnesses. The Linux CI pilot covers Ubuntu 24.04 `amd64`, local Docker Engine, Pi, and the fake engine. See [isolation-test.md](isolation-test.md) for the test scope.
+Status: `v0.6.1` early release with a native Linux pilot (section 12). Windows 11 with Docker Desktop and a local model server is verified across all seven harnesses. The Linux CI pilot covers Ubuntu 24.04 `amd64`, local Docker Engine, Pi, OpenCode, and the fake engine. See [isolation-test.md](isolation-test.md) for the test scope.
 
 ## 1. Goal
 
@@ -156,7 +156,8 @@ The full threat model is in [threat-model.md](threat-model.md): what is protecte
 4. **0.4 (done, `v0.4.0`):** the runtime contract's phase 1 for programs that drive ezbx ([runtime-contract.md](runtime-contract.md): `version --json`, `status`, `create`, `start`, `exec`, `stop`, `destroy --json`), several boxes in one `ezbx.toml` (decision 23), the `airgap` mode (decision 24), token counts in the gateway's log (decision 25), the `default` model alias (decision 26), `ezbx harness add|remove|list`, and `destroy` limited to its box (decision 27).
 5. **0.5 (done, `v0.5.0`):** `ezbx events --jsonl` with bounded replay and a destroy receipt (decision 28), harness selection of the `default` alias, and repeatable Windows Docker acceptance testing with the fake engine.
 6. **0.6 (`v0.6.0`):** native Linux pilot with a repeatable Ubuntu `amd64` Docker test covering gateway credentials, workspace permissions, read-only masks, model routing, isolation, and the runtime contract.
-7. **Later:** broader Linux and macOS coverage, cloud API keys (decision 8), tray or GUI front end, other container runtimes, a tool-calling self-test for models.
+7. **0.6.1:** first-run and recovery diagnostics, gateway activity events, and an OpenCode job in the Ubuntu pilot.
+8. **Later:** broader Linux and macOS coverage, cloud API keys (decision 8), tray or GUI front end, other container runtimes, a tool-calling self-test for models.
 
 **Before `1.0.0`**, keep the seven established harnesses and prioritize improvements to the ezbx runtime, platform support, and reliability. Maintain and verify the existing integrations as the runtime changes. Individual release scope is decided separately.
 
