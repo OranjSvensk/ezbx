@@ -118,8 +118,8 @@ type NetworkState struct {
 }
 
 func (a *Admin) status(w http.ResponseWriter, _ *http.Request) {
-	up, engine := a.g.Upstream()
-	s := Status{Engine: engine, Upstream: up, DefaultModel: a.g.DefaultModel(), UptimeS: int64(time.Since(a.started).Seconds())}
+	t := a.g.target.Load()
+	s := Status{Engine: t.engine, Upstream: t.url.String(), DefaultModel: t.defaultModel, UptimeS: int64(time.Since(a.started).Seconds())}
 	if a.p != nil {
 		mode, allow := a.p.Network()
 		st := a.p.Stats()
@@ -137,15 +137,14 @@ func (a *Admin) setEngine(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	if req.DefaultModel == aliasModel || headerSafe(req.DefaultModel) != req.DefaultModel {
+	if !validDefaultModel(req.DefaultModel) {
 		writeError(w, http.StatusBadRequest, "bad_default_model", "The default model must be a model name the server lists.")
 		return
 	}
-	if err := a.g.SetUpstream(req.Upstream, headerSafe(req.Engine)); err != nil {
+	if err := a.g.setUpstream(req.Upstream, headerSafe(req.Engine), req.DefaultModel); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_upstream", err.Error())
 		return
 	}
-	_ = a.g.SetDefaultModel(req.DefaultModel) // checked above
 	a.status(w, r)
 }
 

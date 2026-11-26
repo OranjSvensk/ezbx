@@ -41,7 +41,7 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 | Setup | `ezbx init` finds the model server, asks the questions (or takes a starter profile, [docs/profiles.md](docs/profiles.md)), writes `ezbx.toml` and shows the plan first |
 | Images | `ezbx build` builds from pinned versions in `ezbx.lock`, with the tool packs you chose ([docs/build.md](docs/build.md)) |
 | The box | `ezbx up` / `down`, `ezbx shell [harness]`; new in 0.4: `ezbx harness add\|remove\|list` |
-| Model servers | Any server with an OpenAI- or Anthropic-compatible API, or LM Studio's own (`openai`, `anthropic`, `lmstudio`; [docs/engine-adapters.md](docs/engine-adapters.md)); `ezbx engine detect` / `use`; new in 0.4: a `default` model alias |
+| Model servers | Any server with an OpenAI- or Anthropic-compatible API, or LM Studio's own (`openai`, `anthropic`, `lmstudio`; [docs/engine-adapters.md](docs/engine-adapters.md)); `ezbx engine detect` / `use`; new in 0.4: a `default` model alias. On current `main`, [harnesses can select the alias](docs/getting-started.md#choosing-the-default-model). |
 | Network | `ezbx net off\|allow\|on`, `ezbx net allow HOST`; the box's only way out is the gateway; new in 0.4: `airgap` |
 | Read-only folders | Host folders the agent may read at `/readonly/<name>`, with secret files masked ([docs/readonly.md](docs/readonly.md)) |
 | Undo | `ezbx snapshot` / `review` / `rewind`; `ezbx shell` takes a snapshot first ([docs/snapshots.md](docs/snapshots.md)) |
@@ -59,7 +59,6 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 
 ## What's next
 
-- Harness configs that use the `default` model alias, so a harness follows the model you choose.
 - `ezbx events --jsonl`, the runtime contract's second phase (a live stream of box, network and gateway events).
 - Linux and macOS: tested support, and a Linux end-to-end job in CI.
 - Cloud API keys through the gateway, kept out of the box like local keys.

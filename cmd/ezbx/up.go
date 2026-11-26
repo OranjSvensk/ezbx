@@ -22,6 +22,7 @@ import (
 	"github.com/OranjSvensk/ezbx/internal/box"
 	"github.com/OranjSvensk/ezbx/internal/config"
 	"github.com/OranjSvensk/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/gateway"
 	"github.com/OranjSvensk/ezbx/internal/harness"
 	"github.com/OranjSvensk/ezbx/internal/paths"
 	"github.com/OranjSvensk/ezbx/internal/setup"
@@ -265,10 +266,19 @@ func renderHome(cfg *config.Config, chosen []harness.Manifest, eng detect.Engine
 	if len(models) == 0 {
 		return nil, fmt.Errorf("the server at %s lists no models. Load a model, then try again", eng.URL)
 	}
+	values := harness.Values{GatewayBaseURL: box.GatewayBaseURL, GatewayKey: gatewayKey, Models: models}
+	if cfg.Engine.DefaultModel != "" && len(chosen) != 0 {
+		var err error
+		values.Models, err = modelsWithAlias(models, cfg.Engine.DefaultModel)
+		if err != nil {
+			return nil, err
+		}
+		values.Default = gateway.ModelAlias
+	}
 	var files []harness.File
 	seen := map[string]string{}
 	for _, m := range chosen {
-		out, err := harness.Render(m, harness.Values{GatewayBaseURL: box.GatewayBaseURL, GatewayKey: gatewayKey, Models: models})
+		out, err := harness.Render(m, values)
 		if err != nil {
 			return nil, err
 		}
@@ -281,6 +291,24 @@ func renderHome(cfg *config.Config, chosen []harness.Manifest, eng detect.Engine
 		files = append(files, out...)
 	}
 	return files, nil
+}
+
+func modelsWithAlias(models []harness.Model, target string) ([]harness.Model, error) {
+	withAlias := make([]harness.Model, 0, len(models)+1)
+	var alias harness.Model
+	for _, model := range models {
+		if model.ID == target {
+			alias = model
+		}
+		if model.ID != gateway.ModelAlias {
+			withAlias = append(withAlias, model)
+		}
+	}
+	if alias.ID == "" {
+		return nil, fmt.Errorf("default model %q is not one the engine reports. Update default_model in ezbx.toml or make that model available", target)
+	}
+	alias.ID, alias.Name = gateway.ModelAlias, gateway.ModelAlias
+	return append(withAlias, alias), nil
 }
 
 // kindsFS holds the API kind files. Tests replace it.

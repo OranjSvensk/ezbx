@@ -55,7 +55,7 @@ Responses that stream (server-sent events) are forwarded as they arrive, with no
 
 ### Model list
 
-`GET /v1/models` returns what the engine reports, as is. The CLI reads the same list to generate harness configs (see `harness-manifest.md`).
+`GET /v1/models` returns the engine's model list. With `default_model` set, the gateway can add one entry named `default` to a JSON model list up to 1 MiB. It adds the entry on the page that includes the configured model, copying its capabilities and keeping the upstream pagination cursors. The alias takes precedence over an upstream entry with that ID. The CLI uses the configured model's facts to generate the alias in harness configs (see `harness-manifest.md`).
 
 **The `default` alias** (design decision 26). With `default_model` under `[engine]` in `ezbx.toml` (`--default-model` on `ezbx gateway serve`), a request for the model `default` is sent to the engine with that model's name instead, on every route, translated or not; every other field of the body is kept. The log and `X-Ezbx-Model` name the real model. Without it, `default` reaches the engine as it is. The name follows the header rule: up to 200 printable ASCII characters, and not `default` itself. `ezbx engine use` sends the setting again with the new upstream, and a new address drops it, since another server may not have that model.
 

@@ -1,13 +1,98 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/OranjSvensk/ezbx/internal/config"
+	"github.com/OranjSvensk/ezbx/internal/detect"
 	"github.com/OranjSvensk/ezbx/internal/harness"
 )
+
+func TestRenderPiDefaultAlias(t *testing.T) {
+	chosen, err := boxHarnesses(&config.Box{Harnesses: []string{"pi"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eng := detect.Engine{Models: []detect.Model{{ID: "small"}, {ID: "large", ContextWindow: 65536, Input: []string{"text", "image"}}, {ID: "default"}}}
+	cfg := &config.Config{Engine: config.Engine{DefaultModel: "large"}, Models: map[string]config.Model{"large": {MaxTokens: 4096}}}
+	files, err := renderHome(cfg, chosen, eng)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings struct{ DefaultProvider, DefaultModel string }
+	var catalog struct {
+		Providers map[string]struct{ Models []harness.Model }
+	}
+	for _, f := range files {
+		switch f.Path {
+		case ".pi/agent/settings.json":
+			err = json.Unmarshal(f.Data, &settings)
+		case ".pi/agent/models.json":
+			err = json.Unmarshal(f.Data, &catalog)
+		}
+		if err != nil {
+			t.Fatalf("%s: %v", f.Path, err)
+		}
+	}
+	models := catalog.Providers["ezbx"].Models
+	if settings.DefaultProvider != "ezbx" || settings.DefaultModel != "default" || len(models) != 3 || models[0].ID != "small" || models[1].ID != "large" {
+		t.Fatalf("settings %+v, models %+v", settings, models)
+	}
+	if alias := models[2]; alias.ID != "default" || alias.ContextWindow != 65536 || alias.MaxTokens != 4096 || strings.Join(alias.Input, ",") != "text,image" {
+		t.Errorf("alias did not inherit the target's facts: %+v", alias)
+	}
+	cfg.Engine.DefaultModel = "missing"
+	if _, err := renderHome(cfg, chosen, eng); err == nil || !strings.Contains(err.Error(), `default model "missing" is not one the engine reports`) {
+		t.Errorf("missing target: %v", err)
+	}
+	cfg.Engine.DefaultModel = ""
+	files, err = renderHome(cfg, chosen, eng)
+	if err != nil || !strings.Contains(string(files[1].Data), `"defaultModel": "small"`) {
+		t.Errorf("alias disabled: %v %v", files, err)
+	}
+}
+
+func TestRenderDefaultAliasForOtherHarnesses(t *testing.T) {
+	for _, tc := range []struct {
+		id, path string
+		want     []string
+	}{
+		{"opencode", ".config/opencode/opencode.json", []string{`"model": "ezbx/default"`, `"default": {`, `"large": {`}},
+		{"omp", ".omp/agent/config.yml", []string{`defaultModel: "default"`}},
+		{"codex", ".codex/config.toml", []string{`model = "default"`}},
+		{"claude", ".claude/settings.json", []string{`"model": "default"`, `"ANTHROPIC_MODEL": "default"`, `"ANTHROPIC_DEFAULT_HAIKU_MODEL": "default"`, `"ANTHROPIC_DEFAULT_SONNET_MODEL": "default"`, `"ANTHROPIC_DEFAULT_OPUS_MODEL": "default"`}},
+		{"hermes", ".hermes/config.yaml", []string{`default: "default"`, `default_model: "default"`}},
+		{"openclaw", ".openclaw/openclaw.json", []string{`"model": "ezbx/default"`, `"ezbx/default": {}`, `"ezbx/large": {}`}},
+	} {
+		t.Run(tc.id, func(t *testing.T) {
+			chosen, err := boxHarnesses(&config.Box{Harnesses: []string{tc.id}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg := &config.Config{Engine: config.Engine{DefaultModel: "large"}}
+			eng := detect.Engine{Models: []detect.Model{{ID: "small"}, {ID: "large"}}}
+			files, err := renderHome(cfg, chosen, eng)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, file := range files {
+				if file.Path == tc.path {
+					for _, want := range tc.want {
+						if !strings.Contains(string(file.Data), want) {
+							t.Errorf("%s lacks %q", file.Path, want)
+						}
+					}
+					return
+				}
+			}
+			t.Errorf("missing %s", tc.path)
+		})
+	}
+}
 
 func TestHarnessEnv(t *testing.T) {
 	a := harness.Manifest{ID: "a", Env: map[string]string{"A_QUIET": "1", "SHARED": "x"}}

@@ -76,9 +76,10 @@ var hostAliases = map[string]bool{
 // target is an engine address and name. It is swapped as one unit so a
 // request never sees half of an old target and half of a new one.
 type target struct {
-	url    *url.URL
-	engine string
-	host   string // Host header for the engine; "" means the url's host
+	url          *url.URL
+	engine       string
+	host         string // Host header for the engine; "" means the url's host
+	defaultModel string // the model "default" stands for; "" for none
 }
 
 func (t *target) isAnthropic() bool {
@@ -93,7 +94,6 @@ type Gateway struct {
 	idle      time.Duration
 	buffered  budget
 	target    atomic.Pointer[target]
-	alias     atomic.Pointer[string] // the model "default" stands for; "" for none
 	transport *http.Transport
 	proxy     *httputil.ReverseProxy
 	log       *logger
@@ -109,14 +109,15 @@ type Gateway struct {
 // used by the one goroutine that serves the request, except idleHit, which
 // an idle timer may set from its own goroutine.
 type reqInfo struct {
-	t       *target
-	id      string
-	model   string
-	start   time.Time
-	ttfb    time.Duration
-	cancel  context.CancelFunc
-	idleHit atomic.Bool
-	cut     atomic.Bool // ended by a change to airgap
+	t          *target
+	id         string
+	model      string
+	start      time.Time
+	ttfb       time.Duration
+	cancel     context.CancelFunc
+	idleHit    atomic.Bool
+	cut        atomic.Bool // ended by a change to airgap
+	listBudget int64       // shared memory reserved for rewriting the model list
 
 	// Token counts the reply reported (usage.go); 0 when it didn't.
 	tokensIn, tokensOut int
@@ -135,9 +136,6 @@ func New(cfg Config) (*Gateway, error) {
 		maxBody: cfg.MaxBody,
 		idle:    cfg.IdleTimeout,
 		log:     newLogger(cfg.Log),
-	}
-	if err := g.SetDefaultModel(cfg.DefaultModel); err != nil {
-		return nil, err
 	}
 	if g.maxBody <= 0 {
 		g.maxBody = defaultMaxBody
@@ -162,7 +160,7 @@ func New(cfg Config) (*Gateway, error) {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: headerTimeout,
 	}
-	if err := g.SetUpstream(cfg.Upstream, cfg.EngineID); err != nil {
+	if err := g.setUpstream(cfg.Upstream, cfg.EngineID, cfg.DefaultModel); err != nil {
 		return nil, err
 	}
 
@@ -180,6 +178,13 @@ func New(cfg Config) (*Gateway, error) {
 // finish on the old one. Only http and https addresses are accepted, so the
 // route can never be turned into a relay to other kinds of destination.
 func (g *Gateway) SetUpstream(raw, engineID string) error {
+	return g.setUpstream(raw, engineID, g.DefaultModel())
+}
+
+func (g *Gateway) setUpstream(raw, engineID, defaultModel string) error {
+	if !validDefaultModel(defaultModel) {
+		return fmt.Errorf("default model %q: name a model the server lists", defaultModel)
+	}
 	u, err := url.Parse(raw)
 	if err != nil {
 		return fmt.Errorf("upstream: %w", err)
@@ -197,7 +202,7 @@ func (g *Gateway) SetUpstream(raw, engineID string) error {
 	if engineID == "" {
 		engineID = "unknown"
 	}
-	t := &target{url: &url.URL{Scheme: u.Scheme, Host: u.Host}, engine: engineID, host: g.hostSet}
+	t := &target{url: &url.URL{Scheme: u.Scheme, Host: u.Host}, engine: engineID, host: g.hostSet, defaultModel: defaultModel}
 	if t.host == "" && hostAliases[strings.ToLower(u.Hostname())] {
 		port := u.Port()
 		if port == "" {
@@ -364,30 +369,38 @@ func (g *Gateway) forward(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	defer func() { g.buffered.give(info.listBudget) }()
 	g.proxy.ServeHTTP(rec, r.WithContext(ctx))
 }
 
 var errBusy = errors.New("gateway busy")
 
-// aliasModel is the name requests use for the server's default model.
-const aliasModel = "default"
+// ModelAlias is the name requests use for the server's default model.
+const ModelAlias = "default"
+
+func validDefaultModel(name string) bool {
+	return name != ModelAlias && headerSafe(name) == name
+}
 
 // SetDefaultModel sets the model that "default" stands for; "" turns the
 // alias off, so "default" reaches the engine as it is.
 func (g *Gateway) SetDefaultModel(name string) error {
-	if name == aliasModel || headerSafe(name) != name {
+	if !validDefaultModel(name) {
 		return fmt.Errorf("default model %q: name a model the server lists", name)
 	}
-	g.alias.Store(&name)
-	return nil
+	for {
+		current := g.target.Load()
+		updated := *current
+		updated.defaultModel = name
+		if g.target.CompareAndSwap(current, &updated) {
+			return nil
+		}
+	}
 }
 
 // DefaultModel is the model "default" stands for, or "".
 func (g *Gateway) DefaultModel() string {
-	if p := g.alias.Load(); p != nil {
-		return *p
-	}
-	return ""
+	return g.target.Load().defaultModel
 }
 
 // withModel puts another model name into a JSON request body, keeping every
@@ -488,7 +501,7 @@ func (g *Gateway) readModel(w http.ResponseWriter, r *http.Request, info *reqInf
 		Model string `json:"model"`
 	}
 	if json.Unmarshal(body, &probe) == nil {
-		if real := g.DefaultModel(); probe.Model == aliasModel && real != "" {
+		if real := info.t.defaultModel; probe.Model == ModelAlias && real != "" {
 			changed, err := withModel(body, real)
 			if err != nil {
 				return held, err
@@ -536,6 +549,12 @@ func (g *Gateway) rewrite(pr *httputil.ProxyRequest) {
 
 	// The box's own key is a placeholder and must never reach the engine.
 	g.setUpstreamAuth(pr.Out.Header, info.t)
+	if info.t.defaultModel != "" && modelListRequest(pr.In) {
+		pr.Out.Header.Set("Accept-Encoding", "identity")
+		pr.Out.Header.Del("Range")
+		pr.Out.Header.Del("If-None-Match")
+		pr.Out.Header.Del("If-Modified-Since")
+	}
 	// Rewrite (unlike the older Director) adds no X-Forwarded-For and removes
 	// any Forwarded or X-Forwarded-* headers the box sent.
 }
@@ -560,6 +579,9 @@ func (g *Gateway) modifyResponse(resp *http.Response) error {
 		info.idleHit.Store(true)
 		info.cancel()
 	})
+	if info.t.defaultModel != "" && modelListRequest(resp.Request) && resp.StatusCode == http.StatusOK {
+		return g.advertiseModelAlias(resp, info)
+	}
 	return nil
 }
 
@@ -574,6 +596,11 @@ func (g *Gateway) errorHandler(w http.ResponseWriter, r *http.Request, err error
 		if rec, ok := w.(*statusRecorder); ok {
 			rec.status = 499
 		}
+		return
+	}
+	if errors.Is(err, errBusy) {
+		w.Header().Set("Retry-After", "1")
+		writeError(w, http.StatusServiceUnavailable, "gateway_busy", "The gateway is holding too many large requests. Try again shortly.")
 		return
 	}
 	var opErr *net.OpError

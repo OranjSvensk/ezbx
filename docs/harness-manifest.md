@@ -58,6 +58,8 @@ Each entry creates one file inside the box, owned by the unprivileged `agent` us
 | `${gateway.key}` | A placeholder key for the gateway. Not a real credential. |
 | `${models.default.id}` | The model chosen as default. |
 
+When a box starts with `[engine].default_model` set, `${models.default.id}` is `default`. Templates that enumerate models also get one `default` entry with the target's resolved context window, token limit, input types, and reasoning setting. The target must appear in the engine's model list at startup.
+
 A value that is exactly one placeholder keeps its type, so a number stays a number and a list stays a list. A placeholder inside a longer string is substituted as text.
 
 **Repeating a block for each model**

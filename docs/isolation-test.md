@@ -300,6 +300,12 @@ Not covered: a real model server, harnesses using the `default` alias, translate
 
 Not covered: a harness in a box using `default` (harness configs still name the real model), a server that refuses `stream_options` with 400 (unit-tested), and servers other than LM Studio.
 
+### Harnesses using the `default` alias (2026-11-25, after v0.4.0)
+
+On Windows 11 with Docker Desktop, a Pi-only box started with `default_model = 'fake-model'` and its generated settings selected `default`. From inside the box, `GET /v1/models` showed `fake-model` and `default`. Pi answered a short prompt through `ezbx shell pi`, and the gateway log recorded the concrete model `fake-model` with HTTP 200.
+
+A second box with all seven harnesses and `network = 'off'` used the same OpenAI-compatible fake engine. All seven answered through the gateway. Codex CLI used `/v1/responses`, Claude Code used `/v1/messages`, and Pi, OpenCode, oh-my-pi, Hermes Agent and OpenClaw used `/v1/chat/completions`. The gateway logged `fake-model` and HTTP 200 for each. These checks covered text replies.
+
 ## Limits of this result
 
 - On the test machine, public DNS servers didn't answer even from the outside network, so the "public DNS blocked" checks prove less than they appear to. The checks against Docker Desktop's own DNS server, which did answer from the outside, are the meaningful ones.
