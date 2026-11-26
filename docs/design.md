@@ -155,6 +155,10 @@ The full threat model is in [threat-model.md](threat-model.md): what is protecte
 4. **0.4 (done, `v0.4.0`):** the runtime contract's phase 1 for programs that drive ezbx ([runtime-contract.md](runtime-contract.md): `version --json`, `status`, `create`, `start`, `exec`, `stop`, `destroy --json`), several boxes in one `ezbx.toml` (decision 23), the `airgap` mode (decision 24), token counts in the gateway's log (decision 25), the `default` model alias (decision 26), `ezbx harness add|remove|list`, and `destroy` limited to its box (decision 27).
 5. **Later:** `ezbx events --jsonl`, cloud API keys (decision 8), Linux and macOS, tray or GUI front end, other container runtimes, a tool-calling self-test for models.
 
+**Before `1.0.0`**, keep the seven established harnesses and prioritize improvements to the ezbx runtime, platform support, and reliability. Maintain and verify the existing integrations as the runtime changes. Individual release scope is decided separately.
+
+**After `1.0.0`**, revisit adding more built-in harnesses and letting people register custom harnesses.
+
 ## 13. Decisions
 
 | # | Question | Decision |

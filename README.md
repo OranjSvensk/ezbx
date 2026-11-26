@@ -59,6 +59,8 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 
 ## What's next
 
+Before `1.0.0`, the focus is the ezbx runtime, platform support, and reliability for the seven established harnesses. New built-in harnesses and support for registering custom harnesses are planned for after `1.0.0`.
+
 - `ezbx events --jsonl`, the runtime contract's second phase (a live stream of box, network and gateway events).
 - Linux and macOS: tested support, and a Linux end-to-end job in CI.
 - Cloud API keys through the gateway, kept out of the box like local keys.
