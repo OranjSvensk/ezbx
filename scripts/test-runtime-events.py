@@ -155,8 +155,30 @@ def exercise(folder):
                 images = json.loads(image_record.read_text(encoding="utf-8"))["images"]
                 built = {image["tag"] for image in images.values()} - before
         needs_cleanup = True
-        started = result("start")
-        check(started["ok"] and started["data"]["state"] == "running", "box didn't start")
+        try:
+            started = result("start")
+            check(started["ok"] and started["data"]["state"] == "running", "box didn't start")
+        except (RuntimeError, AssertionError):
+            gateway = f"ezbx-{name}-gateway"
+            if linux:
+                print(f"Host account: uid={os.getuid()} gid={os.getgid()}", flush=True)
+                state = folder / "home" / "state" / name
+                for filename in ("admin-token", "engine-key", "approved-hosts", "logs"):
+                    try:
+                        details = (state / filename).stat()
+                    except FileNotFoundError:
+                        continue
+                    print(f"{filename}: uid={details.st_uid} gid={details.st_gid} mode={details.st_mode & 0o777:o}",
+                          flush=True)
+            for args in (
+                ["inspect", "--format", "Gateway: user={{.Config.User}} state={{.State.Status}} exit={{.State.ExitCode}}", gateway],
+                ["logs", "--tail", "30", gateway],
+            ):
+                try:
+                    subprocess.run(["docker", *args], cwd=ROOT, check=False, timeout=10)
+                except (OSError, subprocess.TimeoutExpired) as error:
+                    print(f"Could not collect gateway diagnostics: {error}", file=sys.stderr)
+            raise
         check(result("status")["data"]["state"] == "running", "status didn't report running")
         stream.expect("box.started", name)
 
