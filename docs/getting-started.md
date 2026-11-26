@@ -36,7 +36,7 @@ Or download a release archive from [GitHub Releases](https://github.com/OranjSve
 Or install with Go 1.27 or later:
 
 ```text
-go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.4.0
+go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.5.0
 ```
 
 You can also build directly from a clone:
@@ -183,13 +183,13 @@ Temporary mode switches reset to `ezbx.toml` on the next `ezbx up`, so a forgott
 
 ### Choosing the default model
 
-On current `main`, set `default_model` under `[engine]` in `ezbx.toml` to a model ID the server lists. When a box starts, its harnesses select `default`, and the gateway routes requests for that name to the configured model. Harnesses with a model picker can still choose a concrete model.
+Set `default_model` under `[engine]` in `ezbx.toml` to a model ID the server lists. When a box starts, its harnesses select `default`, and the gateway routes requests for that name to the configured model. Harnesses with a model picker can still choose a concrete model.
 
 If you change `default_model`, restart the box with `ezbx down` and `ezbx up` to refresh the harnesses' model information. When you switch to a different server address, choose a `default_model` listed by that server before starting the box again.
 
 ### Watching box activity
 
-In development builds with the `events-jsonl` feature, run `ezbx events --jsonl --box NAME` in another terminal to watch lifecycle events, exec results, network mode changes, and snapshots. Add `--since` with an RFC3339 timestamp to catch up on recent activity. The [runtime contract](runtime-contract.md) covers replay and the removal receipt.
+Run `ezbx events --jsonl --box NAME` in another terminal to watch lifecycle events, exec results, network mode changes, and snapshots. Add `--since` with an RFC3339 timestamp to catch up on recent activity. The [runtime contract](runtime-contract.md) covers replay and the removal receipt.
 
 ### Several boxes
 

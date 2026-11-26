@@ -1,6 +1,6 @@
 # Runtime contract for external callers
 
-> **Status:** v0.4.0 shipped phase 1 with lifecycle commands, status, several boxes and four network modes. The current development build adds `events --jsonl` (section 2).
+> **Status:** v0.4.0 shipped phase 1 with lifecycle commands, status, several boxes and four network modes. v0.5.0 adds `events --jsonl` (section 2).
 
 This document defines the stable CLI and JSON contract between `ezbx` (the sandbox runtime) and external desktop or orchestration programs that drive it. `ezbx` owns container isolation, gateway routing, network enforcement, and snapshots; the caller owns Git worktrees, per-agent branch governance, prompt assembly, and human approvals.
 
@@ -152,9 +152,9 @@ ezbx version --json
 ```json
 {
   "ok": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "contractVersion": 1,
-  "features": ["lifecycle-v1", "net-four-modes", "readonly-masks", "status-v1"],
+  "features": ["events-jsonl", "lifecycle-v1", "net-four-modes", "readonly-masks", "status-v1"],
   "platform": "windows/amd64"
 }
 ```

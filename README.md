@@ -9,7 +9,7 @@
 
 ezbx is a one-command setup for running AI coding and agent tools inside a sandboxed container, while the model itself keeps running on your own machine.
 
-> **Status: early release (`v0.4.0`), usable on Windows.** Setup, the box, the gateway, the network switch, snapshots and the admin tools all work, and all seven harnesses (Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw) are verified end to end on Windows 11 with Docker Desktop and a local model server. Since 0.4, one `ezbx.toml` can hold several boxes, there is an `airgap` network mode, and other programs can drive ezbx through a JSON contract ([docs/runtime-contract.md](docs/runtime-contract.md)). Linux and macOS builds are published but untested. Test results are in [docs/isolation-test.md](docs/isolation-test.md) and designs in [docs/](docs/).
+> **Status: early release (`v0.5.0`), usable on Windows.** Setup, the box, the gateway, the network switch, snapshots and the admin tools all work, and all seven harnesses (Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw) are verified end to end on Windows 11 with Docker Desktop and a local model server. One `ezbx.toml` can hold several boxes. Other programs can drive ezbx through a JSON contract and follow box activity with live events and recent replay ([docs/runtime-contract.md](docs/runtime-contract.md)). Linux and macOS builds are published but untested. Test results are in [docs/isolation-test.md](docs/isolation-test.md) and designs in [docs/](docs/).
 
 ```text
 # Scoop (Windows):
@@ -17,7 +17,7 @@ scoop bucket add ezbx https://github.com/OranjSvensk/scoop-bucket
 scoop install ezbx
 
 # Or install with Go 1.27+ (or download a binary from Releases):
-go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.4.0
+go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.5.0
 ezbx --version
 ezbx init                 # asks the questions, shows the plan, builds and starts the box
 ezbx shell pi             # opens Pi in the box (or opencode, omp, codex, claude, hermes, openclaw)
@@ -41,13 +41,13 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 | Setup | `ezbx init` finds the model server, asks the questions (or takes a starter profile, [docs/profiles.md](docs/profiles.md)), writes `ezbx.toml` and shows the plan first |
 | Images | `ezbx build` builds from pinned versions in `ezbx.lock`, with the tool packs you chose ([docs/build.md](docs/build.md)) |
 | The box | `ezbx up` / `down`, `ezbx shell [harness]`; new in 0.4: `ezbx harness add\|remove\|list` |
-| Model servers | Any server with an OpenAI- or Anthropic-compatible API, or LM Studio's own (`openai`, `anthropic`, `lmstudio`; [docs/engine-adapters.md](docs/engine-adapters.md)); `ezbx engine detect` / `use`; new in 0.4: a `default` model alias. On current `main`, [harnesses can select the alias](docs/getting-started.md#choosing-the-default-model). |
+| Model servers | Any server with an OpenAI- or Anthropic-compatible API, or LM Studio's own (`openai`, `anthropic`, `lmstudio`; [docs/engine-adapters.md](docs/engine-adapters.md)); `ezbx engine detect` / `use`. All seven harnesses [select the `default` alias](docs/getting-started.md#choosing-the-default-model) when a default model is configured. |
 | Network | `ezbx net off\|allow\|on`, `ezbx net allow HOST`; the box's only way out is the gateway; new in 0.4: `airgap` |
 | Read-only folders | Host folders the agent may read at `/readonly/<name>`, with secret files masked ([docs/readonly.md](docs/readonly.md)) |
 | Undo | `ezbx snapshot` / `review` / `rewind`; `ezbx shell` takes a snapshot first ([docs/snapshots.md](docs/snapshots.md)) |
 | For the human | `ezbx admin shell` (a separate root container), `ezbx reset` (with a backup), `ezbx destroy` (never the workspace), `ezbx doctor` ([docs/admin.md](docs/admin.md)) |
 | Several boxes (new in 0.4) | `[box.<name>]` sections in one `ezbx.toml`, sharing the model server; `--box NAME` |
-| For other programs (new in 0.4) | `ezbx version --json`, `create`, `start`, `exec`, `status`, `stop`, `destroy --json`. Current development builds add `ezbx events --jsonl` for live events and recent replay. ([docs/runtime-contract.md](docs/runtime-contract.md)) |
+| For other programs | `ezbx version --json`, `create`, `start`, `exec`, `status`, `stop`, `destroy --json`, and `ezbx events --jsonl` for live events and recent replay. ([docs/runtime-contract.md](docs/runtime-contract.md)) |
 | Logging | The gateway logs every request without its content ([docs/gateway.md](docs/gateway.md)); new in 0.4: token counts |
 
 ### Where it runs
@@ -67,7 +67,7 @@ Before `1.0.0`, the focus is the ezbx runtime, platform support, and reliability
 
 ## Releases
 
-`v0.1.0`/`v0.1.1` (setup, the gateway and network switch, snapshots, the harnesses), `v0.2.0` (`allow` mode, more model servers, `reset` with backup), `v0.3.0`/`v0.3.1` (read-only folders with secret masking, model servers by API kind, starter profiles), `v0.4.0` (several boxes, `airgap`, the runtime contract). The milestones are in [docs/design.md](docs/design.md), section 12. Notes and downloads: [Releases](https://github.com/OranjSvensk/ezbx/releases).
+`v0.1.0`/`v0.1.1` (setup, the gateway and network switch, snapshots, the harnesses), `v0.2.0` (`allow` mode, more model servers, `reset` with backup), `v0.3.0`/`v0.3.1` (read-only folders with secret masking, model servers by API kind, starter profiles), `v0.4.0` (several boxes, `airgap`, the runtime contract), `v0.5.0` (runtime events, replay, and harness selection of the `default` alias). The milestones are in [docs/design.md](docs/design.md), section 12. See [Releases](https://github.com/OranjSvensk/ezbx/releases) for notes and downloads.
 
 ## Safety note
 
