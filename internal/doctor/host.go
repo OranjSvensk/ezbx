@@ -222,7 +222,7 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 	default:
 		r.add(gg, "running", Pass, "healthy", "")
 	}
-	r.add(gg, "locked down", lockStatus(gw, true), lockDetail(gw, true), "Recreate it with --read-only --cap-drop ALL --security-opt no-new-privileges --user 65532:65532.")
+	r.add(gg, "locked down", lockStatus(gw, true), lockDetail(gw, true), "Recreate it with ezbx down and ezbx up.")
 	if st, detail := keyStatus(gw, args); st != "" {
 		r.add(gg, "engine key", st, detail, "Run ezbx down, then ezbx up: this version gives the gateway its key in a read-only file, which docker inspect doesn't show.")
 	}

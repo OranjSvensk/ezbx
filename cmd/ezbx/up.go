@@ -87,6 +87,10 @@ func startBox(cfgFlag, name string, doctorToo bool, stdout, stderr io.Writer) (b
 	if err != nil {
 		return plan, err
 	}
+	plan.GatewayUser, err = gatewayUserFor(ctx, dockerIn, runtime.GOOS, os.Geteuid(), os.Getegid())
+	if err != nil {
+		return plan, err
+	}
 	r := &box.Runner{Docker: dockerIn, Out: stdout}
 	if err := r.Up(ctx, plan); err != nil {
 		return plan, err
@@ -420,6 +424,11 @@ func dockerIn(ctx context.Context, stdin []byte, args ...string) ([]byte, error)
 			msg = err.Error()
 		}
 		return out.Bytes(), errors.New(msg)
+	}
+	if len(args) != 0 && args[0] == "logs" {
+		// docker logs sends the container's stderr to the CLI's stderr,
+		// even when the command succeeds.
+		out.Write(errOut.Bytes())
 	}
 	return out.Bytes(), nil
 }

@@ -61,11 +61,12 @@ func NamesFor(box string) Names {
 
 // Plan is everything ezbx up will do for one box.
 type Plan struct {
-	Box       string
-	Names     Names
-	Workspace string // full host path
-	StateDir  string // this box's state folder on the host
-	LogOn     bool
+	Box         string
+	Names       Names
+	Workspace   string // full host path
+	StateDir    string // this box's state folder on the host
+	LogOn       bool
+	GatewayUser string // optional user and group owning the gateway's host bind mounts
 
 	Upstream     string // engine address as the gateway sees it
 	EngineID     string
@@ -129,8 +130,12 @@ func (p Plan) HomeVolumeArgs() []string {
 // API listens only on the container's own loopback.
 func (p Plan) GatewayArgs() []string {
 	a := append([]string{"create"}, labels(p.Box)...)
+	user := p.GatewayUser
+	if user == "" {
+		user = gatewayUser
+	}
 	a = append(a, "--name", p.Names.Gateway, "--network", p.Names.Outside,
-		"--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", gatewayUser,
+		"--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", user,
 		"--restart", "unless-stopped",
 		// Check health every second while starting, so up doesn't wait 30s.
 		"--health-start-period", "15s", "--health-start-interval", "1s",

@@ -134,7 +134,13 @@ def exercise(folder):
         reference.mkdir()
         (reference / "visible.txt").write_text("reference\n", encoding="utf-8")
         (reference / ".env").write_text("example placeholder\n", encoding="utf-8")
-        check(result("create", "--workspace", folder / "work", "--url", f"http://{address}:{port}",
+        workspace = folder / "work"
+        if linux and os.geteuid() != 1000:
+            # Only the temporary fixture is shared with the container agent.
+            # The containing temporary directory remains private to the runner.
+            workspace.mkdir(mode=0o700)
+            workspace.chmod(0o707)
+        check(result("create", "--workspace", workspace, "--url", f"http://{address}:{port}",
                      "--api", "openai", "--readonly", reference, *key_args, *create)["ok"], "create failed")
         cli("create", "--box", other, "--workspace", folder / "other", *create)
         config = folder / "home" / "ezbx.toml"
