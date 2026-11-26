@@ -205,7 +205,11 @@ func (r *Runner) Up(ctx context.Context, p Plan) error {
 	if _, err := r.run(ctx, "start", p.Names.Gateway); err != nil {
 		return fmt.Errorf("starting the gateway: %w%s", err, cleanupHint)
 	}
-	r.say("started %s (engine %s at %s, network %s)", p.Names.Gateway, p.EngineName, p.Upstream, p.Network)
+	if p.Upstream == "" {
+		r.say("started %s (network %s)", p.Names.Gateway, p.Network)
+	} else {
+		r.say("started %s (engine %s at %s, network %s)", p.Names.Gateway, p.EngineName, p.Upstream, p.Network)
+	}
 	if err := r.waitHealthy(ctx, p.Names.Gateway); err != nil {
 		return err
 	}

@@ -14,10 +14,15 @@ import (
 	"github.com/OranjSvensk/ezbx/internal/config"
 	"github.com/OranjSvensk/ezbx/internal/detect"
 	"github.com/OranjSvensk/ezbx/internal/doctor"
+	"github.com/OranjSvensk/ezbx/internal/gateway"
 )
 
 // runDoctor checks a box from the host and from inside its network.
 func runDoctor(args []string, stdout, stderr io.Writer) int {
+	return runDoctorChecks(args, stdout, stderr, false)
+}
+
+func runDoctorChecks(args []string, stdout, stderr io.Writer, skipEngine bool) int {
 	if len(args) > 0 && args[0] == "inside" {
 		return runDoctorInside(args[1:], stdout, stderr)
 	}
@@ -38,16 +43,21 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	find, err := doctorDetect(t.cfg)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+	if b := t.box(); b != nil && b.Network == gateway.ModeAirgap {
+		skipEngine = true
 	}
 	cfg := doctor.HostConfig{
 		Box:        t.name,
 		Docker:     dockerCLI,
-		Detect:     find,
+		SkipEngine: skipEngine,
 		LocalAddrs: localAddrs,
+	}
+	if !skipEngine {
+		cfg.Detect, err = doctorDetect(t.cfg)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
 	}
 	cfg.Images, cfg.ImagesNote = expectedImages(t)
 	cfg.ReadOnly, cfg.ReadOnlyNote = doctorReadOnly(t.dirs.Box(t.name))

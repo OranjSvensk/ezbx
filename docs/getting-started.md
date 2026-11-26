@@ -36,7 +36,7 @@ Or download a release archive from [GitHub Releases](https://github.com/OranjSve
 Or install with Go 1.27 or later:
 
 ```text
-go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.5.0
+go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.5.1
 ```
 
 You can also build directly from a clone:

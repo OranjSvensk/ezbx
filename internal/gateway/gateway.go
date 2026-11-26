@@ -36,6 +36,7 @@ const (
 
 // Config holds the gateway's settings.
 type Config struct {
+	Airgap   bool      // start with the model route closed; Upstream may be empty
 	Upstream string    // engine address, for example http://127.0.0.1:8080
 	EngineID string    // engine id shown in X-Ezbx-Engine
 	Key      string    // key added to engine requests; empty means none
@@ -136,6 +137,7 @@ func New(cfg Config) (*Gateway, error) {
 		maxBody: cfg.MaxBody,
 		idle:    cfg.IdleTimeout,
 		log:     newLogger(cfg.Log),
+		airgap:  cfg.Airgap,
 	}
 	if g.maxBody <= 0 {
 		g.maxBody = defaultMaxBody
@@ -160,7 +162,9 @@ func New(cfg Config) (*Gateway, error) {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: headerTimeout,
 	}
-	if err := g.setUpstream(cfg.Upstream, cfg.EngineID, cfg.DefaultModel); err != nil {
+	if cfg.Upstream == "" && cfg.Airgap {
+		g.target.Store(&target{url: &url.URL{}})
+	} else if err := g.setUpstream(cfg.Upstream, cfg.EngineID, cfg.DefaultModel); err != nil {
 		return nil, err
 	}
 
@@ -321,7 +325,15 @@ func (g *Gateway) forward(w http.ResponseWriter, r *http.Request) {
 		g.log.write(e)
 	}()
 	if !open {
+		if info.t.url.Host == "" {
+			writeError(rec, http.StatusForbidden, reasonAirgap, "The network is in airgap mode. Configure a model server before using a model-enabled network mode.")
+			return
+		}
 		writeError(rec, http.StatusForbidden, reasonAirgap, "The network is in airgap mode: the box may not reach the model either. On the host, ezbx net off (or allow, on) opens the model route again.")
+		return
+	}
+	if info.t.url.Host == "" {
+		writeError(rec, http.StatusServiceUnavailable, "engine_unconfigured", "No model server is configured for this gateway. Use ezbx engine use, or configure the engine and restart the box in a model-enabled network mode.")
 		return
 	}
 
@@ -617,6 +629,13 @@ func (g *Gateway) errorHandler(w http.ResponseWriter, r *http.Request, err error
 // ready reports whether the engine answers and lists at least one model.
 func (g *Gateway) ready(w http.ResponseWriter, r *http.Request) {
 	t := g.target.Load()
+	notReady := func(reason string) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ready": false, "engine": t.engine, "reason": reason})
+	}
+	if t.url.Host == "" {
+		notReady("no model server configured")
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
@@ -630,9 +649,6 @@ func (g *Gateway) ready(w http.ResponseWriter, r *http.Request) {
 	var resp *http.Response
 	if err == nil {
 		resp, err = (&http.Client{Transport: g.transport}).Do(req)
-	}
-	notReady := func(reason string) {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ready": false, "engine": t.engine, "reason": reason})
 	}
 	if err != nil {
 		notReady("engine not reachable")

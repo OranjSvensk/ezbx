@@ -96,7 +96,7 @@ func startBox(cfgFlag, name string, doctorToo bool, stdout, stderr io.Writer) (b
 		return plan, nil
 	}
 	fmt.Fprintln(stdout)
-	if code := runDoctor([]string{"--config", cfgFile, "--box", plan.Box}, stdout, stderr); code != 0 {
+	if code := runDoctorChecks([]string{"--config", cfgFile, "--box", plan.Box}, stdout, stderr, plan.Network == gateway.ModeAirgap); code != 0 {
 		return plan, errDoctorFound
 	}
 	return plan, nil
@@ -172,6 +172,22 @@ func makePlan(ctx context.Context, cfg *config.Config, name string, dirs paths.D
 	if err != nil {
 		return box.Plan{}, err
 	}
+	env, err := harnessEnv(chosen)
+	if err != nil {
+		return box.Plan{}, err
+	}
+	plan := box.Plan{
+		Box: name, Names: box.NamesFor(name), Workspace: ws, StateDir: dirs.Box(name), LogOn: cfg.LogOn(),
+		Network: b.Network, Allow: box.AllowList(b.Allow, chosen),
+		Memory: memoryLimit(ctx, b.Memory), CPUs: b.CPUsFlag(), PIDs: b.PIDs,
+		Harnesses: b.Harnesses, Env: env,
+		ReadOnly:     ro,
+		GatewayImage: planImage(gw), BoxImage: planImage(bx),
+	}
+	if b.Network == gateway.ModeAirgap {
+		fmt.Fprintln(stdout, "network: airgap (model server skipped)")
+		return plan, nil
+	}
 	eng, err := chooseEngine(ctx, cfg)
 	if err != nil {
 		return box.Plan{}, err
@@ -188,20 +204,10 @@ func makePlan(ctx context.Context, cfg *config.Config, name string, dirs paths.D
 	if err != nil {
 		return box.Plan{}, err
 	}
-	env, err := harnessEnv(chosen)
-	if err != nil {
-		return box.Plan{}, err
-	}
-
-	return box.Plan{
-		Box: name, Names: box.NamesFor(name), Workspace: ws, StateDir: dirs.Box(name), LogOn: cfg.LogOn(),
-		Upstream: upstream, EngineID: eng.ID, EngineName: eng.Name, UpstreamHost: cfg.Engine.Host, DefaultModel: cfg.Engine.DefaultModel, KeyEnv: cfg.Engine.KeyEnv,
-		Network: b.Network, Allow: box.AllowList(b.Allow, chosen),
-		Memory: memoryLimit(ctx, b.Memory), CPUs: b.CPUsFlag(), PIDs: b.PIDs,
-		Harnesses: b.Harnesses, HomeFiles: files, Env: env,
-		ReadOnly:     ro,
-		GatewayImage: planImage(gw), BoxImage: planImage(bx),
-	}, nil
+	plan.Upstream, plan.EngineID, plan.EngineName = upstream, eng.ID, eng.Name
+	plan.UpstreamHost, plan.DefaultModel, plan.KeyEnv = cfg.Engine.Host, cfg.Engine.DefaultModel, cfg.Engine.KeyEnv
+	plan.HomeFiles = files
+	return plan, nil
 }
 
 // memoryLimit is the configured limit, or, when there is none, half of

@@ -134,6 +134,44 @@ func TestAirgapRefusesTheModelRoute(t *testing.T) {
 }
 
 // The other modes leave the model route open.
+func TestAirgapCanStartWithoutAnUpstream(t *testing.T) {
+	g, err := New(Config{Airgap: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := g.NewProxy(ProxyConfig{Mode: ModeAirgap})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := func(path string, status int, body string) {
+		t.Helper()
+		w := httptest.NewRecorder()
+		g.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != status || !strings.Contains(w.Body.String(), body) {
+			t.Fatalf("%s: %d %s", path, w.Code, w.Body)
+		}
+	}
+	check("/healthz", http.StatusOK, "")
+	check("/v1/models", http.StatusForbidden, "network_airgap")
+	w := httptest.NewRecorder()
+	g.ready(w, httptest.NewRequest(http.MethodGet, "/admin/ready", nil))
+	if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "no model server configured") {
+		t.Fatalf("engine readiness: %d %s", w.Code, w.Body)
+	}
+	if _, err := p.SetNetwork(ModeOff, nil); err != nil {
+		t.Fatal(err)
+	}
+	check("/v1/models", http.StatusServiceUnavailable, "engine_unconfigured")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		io.WriteString(w, `{"data":[{"id":"fake-model"}]}`)
+	}))
+	defer upstream.Close()
+	if err := g.SetUpstream(upstream.URL, "openai"); err != nil {
+		t.Fatal(err)
+	}
+	check("/v1/models", http.StatusOK, "fake-model")
+}
+
 func TestModelRouteOpenOutsideAirgap(t *testing.T) {
 	for _, m := range []string{ModeOff, ModeAllow, ModeOn} {
 		env := newAirgapEnv(t, m)

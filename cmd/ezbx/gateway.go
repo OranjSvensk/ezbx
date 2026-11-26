@@ -100,7 +100,8 @@ func runGateway(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	if *upstream == "" {
+	airgap := *network == gateway.ModeAirgap
+	if *upstream == "" && !airgap {
 		eng, err := onlyEngine()
 		if err != nil {
 			fmt.Fprintln(stderr, err)
@@ -123,7 +124,7 @@ func runGateway(args []string, stdout, stderr io.Writer) int {
 		logOut = f
 	}
 
-	gw, err := gateway.New(gateway.Config{Upstream: *upstream, EngineID: *engine, Key: key, Log: logOut, UpstreamHost: *upstreamHost, DefaultModel: *defaultModel})
+	gw, err := gateway.New(gateway.Config{Upstream: *upstream, EngineID: *engine, Key: key, Log: logOut, UpstreamHost: *upstreamHost, DefaultModel: *defaultModel, Airgap: airgap})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -211,7 +212,11 @@ func runGateway(args []string, stdout, stderr io.Writer) int {
 		}(s)
 	}
 
-	fmt.Fprintf(stderr, "gateway listening on %s, forwarding to %s (engine %q)\n", *listen, *upstream, *engine)
+	if *upstream == "" {
+		fmt.Fprintf(stderr, "gateway listening on %s, no model server configured\n", *listen)
+	} else {
+		fmt.Fprintf(stderr, "gateway listening on %s, forwarding to %s (engine %q)\n", *listen, *upstream, *engine)
+	}
 	if proxy != nil {
 		mode, list := proxy.Network()
 		fmt.Fprintf(stderr, "proxy listening on %s, network %s, allowlist %d entries\n", *proxyAddr, mode, len(list))

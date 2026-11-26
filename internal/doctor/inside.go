@@ -25,6 +25,7 @@ type InsideConfig struct {
 	Proxy     string   // host:port of the egress proxy; empty if none
 	Mode      string   // network mode the gateway reports: airgap, off, allow or on
 	Engine    string   // engine id the gateway should stamp on replies
+	SkipModel bool     // skip model traffic if an airgap startup sees another live mode
 	OpenPorts []int    // every gateway port the box may reach
 	Deny      []string // host:port addresses the box must not reach directly
 	Local     []string // addresses the proxy must refuse (host:port)
@@ -123,15 +124,19 @@ func RunInside(ctx context.Context, cfg InsideConfig) Report {
 
 	// 1. The model route works and names the engine.
 	model := ""
-	resp, err := client.Get("http://" + cfg.Gateway + "/v1/models")
-	if err != nil {
-		r.add(g, "model list through the gateway", Fail, shortErr(err), "Check that the gateway is running and attached to the inside network as \"gateway\".")
+	if cfg.SkipModel {
+		r.add(g, "model list through the gateway", Skip, "the box is configured for airgap", "")
 	} else {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		resp.Body.Close()
-		var c Check
-		c, model = judgeModelList(cfg, resp.StatusCode, resp.Header.Get("X-Ezbx-Engine"), body)
-		r.add(g, c.Name, c.Status, c.Detail, c.Fix)
+		resp, err := client.Get("http://" + cfg.Gateway + "/v1/models")
+		if err != nil {
+			r.add(g, "model list through the gateway", Fail, shortErr(err), "Check that the gateway is running and attached to the inside network as \"gateway\".")
+		} else {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			resp.Body.Close()
+			var c Check
+			c, model = judgeModelList(cfg, resp.StatusCode, resp.Header.Get("X-Ezbx-Engine"), body)
+			r.add(g, c.Name, c.Status, c.Detail, c.Fix)
+		}
 	}
 
 	// 2. A one-token completion goes through and is stamped with the model.

@@ -1,5 +1,6 @@
 """Run the Windows Docker runtime acceptance test with ezbx's fake engine."""
 
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
@@ -70,6 +71,62 @@ class EventStream:
         self.reader.join(timeout=10)
         self.process.stdout.close()
         self.process.stderr.close()
+
+
+def exercise_airgap_start(cli, folder, name):
+    config = folder / "airgap.toml"
+
+    def offline(command, *args):
+        return cli(command, "--config", config, "--box", name, *args)
+
+    def model_reply():
+        probe = ("fetch('http://gateway:8000/v1/models').then(async res => "
+                 "console.log(JSON.stringify([res.status, (await res.json()).error.code])))")
+        result = json.loads(offline("exec", "--json", "--", "node", "-e", probe))
+        check(result["ok"] and result["data"]["exitCode"] == 0, "exec failed in the airgap box")
+        return json.loads(result["data"]["stdout"])
+
+    offline("create", "--workspace", folder / "offline", "--harness", "pi",
+            "--tools", "none", "--memory", "2g", "--network", "airgap")
+    try:
+        state = json.loads(offline("start", "--doctor", "--json"))["data"]
+        check(state["state"] == "running" and state["networkMode"] == "airgap",
+              "engine-free start did not report a running airgap box")
+        check(model_reply() == [403, "network_airgap"], "airgap model route did not refuse the request")
+        offline("net", "off")
+        check(model_reply() == [503, "engine_unconfigured"], "model route without an engine was not unavailable")
+        offline("stop", "--json")
+
+        requests = queue.Queue()
+
+        class Decoy(BaseHTTPRequestHandler):
+            def do_GET(self):
+                requests.put(self.path)
+                payload = b'{"data":[{"id":"fake-model"}]}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            do_POST = do_GET
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), Decoy) as server:
+            port = server.server_address[1]
+            config.write_text(config.read_text(encoding="utf-8").replace(
+                "[engine]\n", f"[engine]\nurl = 'http://127.0.0.1:{port}'\n", 1
+            ), encoding="utf-8")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                offline("up")
+                check(model_reply() == [403, "network_airgap"], "airgap up opened the model route")
+                check(requests.empty(), "airgap up or its doctor contacted the configured model server")
+            finally:
+                server.shutdown()
+                thread.join(timeout=10)
+    finally:
+        offline("destroy", "--yes", "--remove-config", "--json")
 
 
 def exercise(folder):
@@ -181,6 +238,7 @@ const settings = JSON.parse(fs.readFileSync(process.env.HOME + '/.pi/agent/setti
         cli("snapshot", "--box", name, "-m", "a note excluded from events")
         snap = stream.expect("snapshot.created", name)["data"]
         check(set(snap) == {"snapshotId", "kind"} and snap["kind"] == "manual", "incorrect snapshot metadata")
+        exercise_airgap_start(cli, folder, f"{name}-offline")
         check(result("stop")["data"]["state"] == "stopped", "box didn't stop")
         stream.expect("box.stopped", name)
 
@@ -196,7 +254,7 @@ const settings = JSON.parse(fs.readFileSync(process.env.HOME + '/.pi/agent/setti
         replay = cli("events", "--jsonl", "--box", name, "--since", since, expected=1)
         check([json.loads(line) for line in replay.splitlines()] == [destroyed], "destroy left prior history in replay")
         check(json.loads(cli("status", "--box", other, "--json"))["data"]["state"] == "stopped", "second box changed")
-        print("Passed runtime events, replay, destroy, alias, timeout, and airgap checks", flush=True)
+        print("Passed runtime events, replay, destroy, alias, timeout, and engine-free airgap startup", flush=True)
     finally:
         try:
             if stream is not None:

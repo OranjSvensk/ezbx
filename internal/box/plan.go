@@ -144,8 +144,10 @@ func (p Plan) GatewayArgs() []string {
 		// environment in plain text, but not what is in its mounted files.
 		a = append(a, "-v", p.KeyFile()+":"+keyInside+":ro")
 	}
-	a = append(a, p.GatewayImage.Tag, "gateway", "serve", "--listen", modelAddr,
-		"--upstream", p.Upstream, "--engine", p.EngineID)
+	a = append(a, p.GatewayImage.Tag, "gateway", "serve", "--listen", modelAddr)
+	if p.Upstream != "" {
+		a = append(a, "--upstream", p.Upstream, "--engine", p.EngineID)
+	}
 	if p.UpstreamHost != "" {
 		a = append(a, "--upstream-host", p.UpstreamHost)
 	}

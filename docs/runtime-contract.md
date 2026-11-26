@@ -1,6 +1,6 @@
 # Runtime contract for external callers
 
-> **Status:** v0.4.0 shipped phase 1 with lifecycle commands, status, several boxes and four network modes. v0.5.0 adds `events --jsonl` (section 2).
+> **Status:** v0.4.0 shipped phase 1 with lifecycle commands, status, several boxes and four network modes. v0.5.0 adds `events --jsonl` (section 2). v0.5.1 adds engine-free startup for airgap boxes.
 
 This document defines the stable CLI and JSON contract between `ezbx` (the sandbox runtime) and external desktop or orchestration programs that drive it. `ezbx` owns container isolation, gateway routing, network enforcement, and snapshots; the caller owns Git worktrees, per-agent branch governance, prompt assembly, and human approvals.
 
@@ -41,6 +41,7 @@ Every command takes `--box NAME`. With one box in `ezbx.toml` it may be left out
   - `data`: `configFile`, `workspace`, `network`, `allow`, `harnesses`, `tools`, `readonly`.
 - **`ezbx start --box NAME [--doctor] [--json]`**
   - Refuses images that aren't built from the current inputs (`image_mismatch`) and a box that is already up (`box_already_running`). Waits until the gateway's health check passes. `data` is the box's state, as `status` reports it.
+  - A box configured with `network = "airgap"` can start with no `[engine].url`. Both `start` and `up` skip model-server discovery and harness model configuration for this startup, including when they run the doctor. Boxes configured for `off`, `allow` or `on` still require a reachable model server at startup.
 - **`ezbx exec --box NAME [--cwd DIR] [--timeout 10m] [--env NAME=VALUE]... [--snapshot] [--json] -- COMMAND [ARGS...]`**
   - Runs as the unprivileged `agent` user (uid 1000) in `/workspace` (or `--cwd`, a clean full path inside the box). Standard input is passed through.
   - `--timeout` ends the command inside the box (coreutils `timeout`, killed 5 seconds later if it hasn't ended), so nothing keeps running there after `ezbx` gives up.
@@ -137,6 +138,7 @@ From the repository root on Windows with Go, Python, and Docker Desktop, run `py
 
 - The same four words are used in `ezbx.toml`, `ezbx create --network`, `ezbx init --network` and `ezbx net`. A config written before 0.4 keeps its meaning: `off` has always been "the model only".
 - In `airgap` the gateway refuses every model request with 403 (`network_airgap`) and its proxy refuses everything. Switching a running box to `airgap` ends model requests in flight, streams included, and cancels them at the engine. The box still reaches the gateway's two ports, which refuse it.
+- A box started in `airgap` has no model server attached. If you change its network mode while it runs, model requests return 503 (`engine_unconfigured`) until you attach an unkeyed server with `ezbx engine use` or restart using an engine and a model-enabled mode in `ezbx.toml`. A box started in a model-enabled mode keeps its engine when switched into and out of `airgap`.
 - **No silent escalation:** `ezbx net` changes the mode only when asked, and the next `start` goes back to the mode in `ezbx.toml`.
 
 ---
@@ -152,7 +154,7 @@ ezbx version --json
 ```json
 {
   "ok": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "contractVersion": 1,
   "features": ["events-jsonl", "lifecycle-v1", "net-four-modes", "readonly-masks", "status-v1"],
   "platform": "windows/amd64"

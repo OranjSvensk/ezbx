@@ -23,6 +23,7 @@ type Docker func(ctx context.Context, args ...string) ([]byte, error)
 type HostConfig struct {
 	Box        string // box name; containers are ezbx-<box>-gateway and so on
 	Docker     Docker
+	SkipEngine bool                                                    // the box is configured to start in airgap
 	Detect     func(ctx context.Context, extra []string) detect.Result // finds engines on this computer, also checking the extra addresses
 	LocalAddrs func() []string                                         // this computer's own non-loopback addresses
 	// Images are the images the box needs now, by kind ("gateway", "box"),
@@ -139,7 +140,9 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 	const ge = "Engine"
 	var engines []detect.Engine
 	var refused []detect.Refusal // addresses that asked for a key
-	if cfg.Detect != nil {
+	if cfg.SkipEngine {
+		r.add(ge, "an engine is running", Skip, "the box is configured for airgap", "")
+	} else if cfg.Detect != nil {
 		// Also look where the gateway was started to forward, so an engine on
 		// an unusual port is found too.
 		var extra []string
@@ -283,18 +286,22 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 		}
 		r.add(gg, "admin API", Pass, fmt.Sprintf("engine %s, network %s", status.Engine, joinOr([]string{mode}, "(no proxy)")), "")
 
-		ready := struct {
-			Ready  bool   `json:"ready"`
-			Reason string `json:"reason"`
-		}{}
-		out, _ := cfg.Docker(ctx, "exec", gwName, "/ezbx", "gateway", "admin", "--addr", args["--admin"], "ready")
-		if json.Unmarshal(out, &ready) == nil && ready.Ready {
-			r.add(gg, "engine ready", Pass, "", "")
+		if cfg.SkipEngine {
+			r.add(gg, "engine ready", Skip, "the box is configured for airgap", "")
 		} else {
-			r.add(gg, "engine ready", Fail, joinOr([]string{ready.Reason}, "no answer"), "Check that the engine is running and that the gateway's --upstream points at it.")
+			ready := struct {
+				Ready  bool   `json:"ready"`
+				Reason string `json:"reason"`
+			}{}
+			out, _ := cfg.Docker(ctx, "exec", gwName, "/ezbx", "gateway", "admin", "--addr", args["--admin"], "ready")
+			if json.Unmarshal(out, &ready) == nil && ready.Ready {
+				r.add(gg, "engine ready", Pass, "", "")
+			} else {
+				r.add(gg, "engine ready", Fail, joinOr([]string{ready.Reason}, "no answer"), "Check that the engine is running and that the gateway's --upstream points at it.")
+			}
+			s, detail, fix := upstreamMatches(status.Upstream, engines, refused)
+			r.add(gg, "forwards to the running engine", s, detail, fix)
 		}
-		s, detail, fix := upstreamMatches(status.Upstream, engines, refused)
-		r.add(gg, "forwards to the running engine", s, detail, fix)
 	}
 
 	// The box container, if there is one yet.
@@ -335,7 +342,7 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 		r.add("From inside the box", "inside checks", Skip, "the inside network is missing", "")
 		return r
 	}
-	ic := InsideConfig{Gateway: "gateway:" + portOf(args["--listen"], "8000"), Mode: mode, Engine: status.Engine}
+	ic := InsideConfig{Gateway: "gateway:" + portOf(args["--listen"], "8000"), Mode: mode, Engine: status.Engine, SkipModel: cfg.SkipEngine && mode != "airgap"}
 	ic.OpenPorts = []int{atoi(portOf(args["--listen"], "8000"))}
 	if p := args["--proxy"]; p != "" {
 		ic.Proxy = "gateway:" + portOf(p, "3128")
