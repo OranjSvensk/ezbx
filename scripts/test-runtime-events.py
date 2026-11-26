@@ -1,11 +1,13 @@
-"""Run the Windows Docker runtime acceptance test with ezbx's fake engine."""
+"""Run the Docker runtime acceptance test with ezbx's fake engine."""
 
+from ipaddress import IPv4Address
 import json
 import os
 from pathlib import Path
 import queue
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -41,6 +43,18 @@ def image_tags():
     }
 
 
+def engine_address():
+    if sys.platform == "win32":
+        return "127.0.0.1"
+    info = run(["docker", "info", "--format", "{{.OperatingSystem}}"]).strip()
+    check("Docker Desktop" not in info, "the Linux test needs native Docker Engine")
+    bridge = json.loads(run(["docker", "network", "inspect", "bridge"]))[0]
+    addresses = [IPv4Address(item["Gateway"]) for item in bridge["IPAM"]["Config"]
+                 if item.get("Gateway") and ":" not in item["Gateway"]]
+    check(len(addresses) == 1, "the default Docker bridge must have one IPv4 gateway")
+    return str(addresses[0])
+
+
 class EventStream:
     def __init__(self, args, env):
         self.process = subprocess.Popen(
@@ -73,15 +87,25 @@ class EventStream:
 
 
 def exercise(folder):
+    linux = sys.platform == "linux"
     env = {**os.environ, "EZBX_HOME": str(folder / "home"), "EZBX_CONFIG": ""}
-    ezbx, fake = folder / "ezbx.exe", folder / "fakeengine.exe"
+    suffix = ".exe" if sys.platform == "win32" else ""
+    ezbx, fake = folder / ("ezbx" + suffix), folder / ("fakeengine" + suffix)
     run(["go", "build", "-o", ezbx, "./cmd/ezbx"])
     run(["go", "build", "-o", fake, "./tools/fakeengine"])
     check("events-jsonl" in json.loads(run([ezbx, "version", "--json"], env))["features"], "missing feature")
+    address = engine_address()
     with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 0))
+        listener.bind((address, 0))
         port = listener.getsockname()[1]
-    engine = subprocess.Popen([fake, "--listen", f"127.0.0.1:{port}"], cwd=ROOT)
+    engine_args = [fake, "--listen", f"{address}:{port}"]
+    key_args = []
+    if linux:
+        key_env = "EZBX_RUNTIME_TEST_KEY"
+        env[key_env] = uuid4().hex
+        engine_args += ["--key-env", key_env, "--key-on-models"]
+        key_args += ["--key-env", key_env]
+    engine = subprocess.Popen(engine_args, cwd=ROOT, env=env)
     name = f"vt-{uuid4().hex[:8]}"
     other = f"{name}-other"
     stream = None
@@ -98,7 +122,7 @@ def exercise(folder):
         for _ in range(50):
             check(engine.poll() is None, "fake engine exited")
             try:
-                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                with socket.create_connection((address, port), timeout=0.1):
                     break
             except OSError:
                 time.sleep(0.1)
@@ -106,8 +130,12 @@ def exercise(folder):
             raise RuntimeError("fake engine didn't listen")
         since = datetime.now(timezone.utc).isoformat()
         create = ["--tools", "none", "--harness", "pi", "--network", "off", "--memory", "2g"]
-        check(result("create", "--workspace", folder / "work", "--url", f"http://127.0.0.1:{port}",
-                     "--api", "openai", *create)["ok"], "create failed")
+        reference = folder / "reference"
+        reference.mkdir()
+        (reference / "visible.txt").write_text("reference\n", encoding="utf-8")
+        (reference / ".env").write_text("example placeholder\n", encoding="utf-8")
+        check(result("create", "--workspace", folder / "work", "--url", f"http://{address}:{port}",
+                     "--api", "openai", "--readonly", reference, *key_args, *create)["ok"], "create failed")
         cli("create", "--box", other, "--workspace", folder / "other", *create)
         config = folder / "home" / "ezbx.toml"
         config.write_text(config.read_text(encoding="utf-8").replace(
@@ -140,9 +168,15 @@ def exercise(folder):
               {item["Name"] for item in isolation["Containers"].values()} ==
               {f"ezbx-{name}-box", f"ezbx-{name}-gateway"}, "unexpected inside network members")
 
+        cli("doctor", "--box", name, capture=False)
         probe = """
 const fs = require('node:fs');
 const settings = JSON.parse(fs.readFileSync(process.env.HOME + '/.pi/agent/settings.json'));
+if (fs.readFileSync('/readonly/reference/visible.txt', 'utf8').trim() !== 'reference' ||
+    fs.readFileSync('/readonly/reference/.env', 'utf8') !== '') {
+  throw new Error('unexpected read-only mount contents');
+}
+fs.writeFileSync('/workspace/created.txt', 'workspace is writable');
 (async () => {
   const url = 'http://gateway:8000/v1/';
   const modelList = await (await fetch(url + 'models')).json();
@@ -212,7 +246,7 @@ const settings = JSON.parse(fs.readFileSync(process.env.HOME + '/.pi/agent/setti
 
 
 if __name__ == "__main__":
-    if os.name != "nt":
-        raise SystemExit("Run this acceptance test on Windows with Docker Desktop.")
+    if sys.platform not in ("win32", "linux"):
+        raise SystemExit("Use Docker Desktop on Windows or native Docker Engine on Linux.")
     with tempfile.TemporaryDirectory(prefix="ezbx-runtime-") as scratch:
         exercise(Path(scratch))
