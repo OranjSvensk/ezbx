@@ -47,3 +47,20 @@ func TestGatewayUserForNativeLinux(t *testing.T) {
 		})
 	}
 }
+
+func TestNativeGatewayAddress(t *testing.T) {
+	for _, address := range []string{"http://localhost:18080", "http://127.0.0.2:18080", "http://[::1]:18080",
+		"http://HOST.DOCKER.INTERNAL:18080", "http://gateway.docker.internal:18080"} {
+		if err := checkGatewayAddress("1001:1001", address); err == nil || !strings.Contains(err.Error(), "Docker bridge") {
+			t.Errorf("native Linux accepted %s: %v", address, err)
+		}
+		if err := checkGatewayAddress("", address); err != nil {
+			t.Errorf("Docker Desktop refused %s: %v", address, err)
+		}
+	}
+	for _, address := range []string{"", "http://192.0.2.10:18080", "https://models.example.com"} {
+		if err := checkGatewayAddress("1001:1001", address); err != nil {
+			t.Errorf("native Linux refused %q: %v", address, err)
+		}
+	}
+}

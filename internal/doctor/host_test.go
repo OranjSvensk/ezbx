@@ -183,6 +183,29 @@ func TestHostSide(t *testing.T) {
 	}
 }
 
+func TestAirgapDoctorSkipsEngineProbes(t *testing.T) {
+	f := goodDocker()
+	f.exec["status"] = `{"engine":"","upstream":"","network":{"mode":"airgap","allow":[]}}`
+	r := Run(t.Context(), HostConfig{
+		Box: "t", Docker: f.run, SkipEngine: true, Images: goodImages,
+		Detect: func(context.Context, []string) detect.Result {
+			t.Fatal("airgap doctor probed an engine from the host")
+			return detect.Result{}
+		},
+	})
+	for _, args := range f.ran {
+		if args[0] == "exec" && args[len(args)-1] == "ready" {
+			t.Fatal("airgap doctor probed engine readiness through the gateway")
+		}
+	}
+	if c := find(t, r, "engine ready"); c.Status != Skip {
+		t.Fatalf("engine readiness: %+v", c)
+	}
+	if r.Failed() {
+		t.Fatalf("airgap checks failed: %+v", r)
+	}
+}
+
 func find(t *testing.T, r Report, name string) Check {
 	t.Helper()
 	for _, c := range r.Checks {

@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -53,6 +55,13 @@ func runEngineUse(args []string, stdout, stderr io.Writer) int {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+	user, err := gatewayUserFor(ctx, dockerIn, runtime.GOOS, os.Geteuid(), os.Getegid())
+	if err != nil {
+		return report(stderr, err)
+	}
+	if err := checkGatewayAddress(user, cfg.Engine.URL); err != nil {
+		return report(stderr, err)
+	}
 	eng, err := chooseEngine(ctx, cfg)
 	if err != nil {
 		return report(stderr, err)

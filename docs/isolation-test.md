@@ -306,6 +306,12 @@ On Windows 11 with Docker Desktop, a Pi-only box started with `default_model = '
 
 A second box with all seven harnesses and `network = 'off'` used the same OpenAI-compatible fake engine. All seven answered through the gateway. Codex CLI used `/v1/responses`, Claude Code used `/v1/messages`, and Pi, OpenCode, oh-my-pi, Hermes Agent and OpenClaw used `/v1/chat/completions`. The gateway logged `fake-model` and HTTP 200 for each. These checks covered text replies.
 
+## Native Linux pilot
+
+The [Ubuntu 24.04 amd64 CI run](https://github.com/OranjSvensk/ezbx/actions/runs/45871890353) used Docker Engine 28.0.4, Pi, and a keyed OpenAI-compatible fake engine on the host's Docker bridge. The gateway read its key from a private read-only file and stayed unprivileged. The fixture checked a writable workspace, a masked read-only file, the isolated inside network, and `doctor`'s direct route checks. It also exercised the `default` model alias, `airgap`, exec timeouts, snapshot creation, and event replay through destroy.
+
+The test used a temporary workspace writable by the container agent. Coverage is limited to the CI runner, Pi, and the fake engine. See [native Linux setup](getting-started.md#native-linux-pilot) for the supported pilot configuration.
+
 ## Limits of this result
 
 - On the test machine, public DNS servers didn't answer even from the outside network, so the "public DNS blocked" checks prove less than they appear to. The checks against Docker Desktop's own DNS server, which did answer from the outside, are the meaningful ones.

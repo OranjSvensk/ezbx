@@ -2,7 +2,7 @@
 
 This guide walks through installing ezbx, setting up your first sandboxed box with `ezbx init`, running AI agent harnesses inside it, undoing workspace changes with snapshots, and keeping things healthy.
 
-> **Current platform scope:** ezbx is built and verified on **Windows 11 with Docker Desktop** (Docker Engine 28 or later). Linux and macOS support is planned next.
+> **Current platform scope:** ezbx is verified on **Windows 11 with Docker Desktop** (Docker Engine 28 or later). The development branch has a [native Linux pilot](#native-linux-pilot) on Ubuntu 24.04 `amd64`.
 
 ---
 
@@ -13,6 +13,16 @@ You need three things on your computer:
 1. **Docker Desktop** (with Docker Engine 28 or later), running. ezbx never installs or starts Docker for you.
 2. **Go 1.27 or later**, to build `ezbx` from source.
 3. **A local model server** running on your computer with at least one model loaded. Any program that serves an OpenAI- or Anthropic-compatible API works ([engine-adapters.md](engine-adapters.md)). You can still run setup without one and start the model later.
+
+### Native Linux pilot
+
+Build from the pilot branch checkout with `go install ./cmd/ezbx`. The pilot is verified in CI on Ubuntu 24.04 `amd64` with Docker Engine 28.0.4, Pi, and the fake engine. It uses a local Docker Engine daemon running as root, with the ezbx CLI running as a regular account that can access Docker. The gateway uses that account's numeric user and group IDs to read its private state files. The agent in the box still runs as user 1000.
+
+- Choose a workspace user 1000 can write to. When your Linux account has a different user ID, use a workspace with an appropriate filesystem permission or access control entry for user 1000. ezbx leaves existing workspace ownership and permissions alone.
+- Use a model server address reachable from the host and the Docker bridge. Bind your model server to a Docker-reachable interface and use that address for `[engine].url`. Loopback addresses and Docker Desktop host aliases require Docker Desktop in the verified setup.
+- For a model-free box, use `network = "airgap"`. With the box configured, run `ezbx build --box NAME` and `ezbx start --box NAME --doctor`. The [runtime contract](runtime-contract.md) describes engine-free startup.
+
+The pilot covers the local Docker context with user namespace remapping and rootless mode disabled. The [isolation results](isolation-test.md#native-linux-pilot) describe what CI verifies.
 
 ---
 
@@ -36,7 +46,7 @@ Or download a release archive from [GitHub Releases](https://github.com/OranjSve
 Or install with Go 1.27 or later:
 
 ```text
-go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.5.0
+go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.5.1
 ```
 
 You can also build directly from a clone:

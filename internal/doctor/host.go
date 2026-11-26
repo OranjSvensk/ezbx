@@ -23,6 +23,8 @@ type Docker func(ctx context.Context, args ...string) ([]byte, error)
 type HostConfig struct {
 	Box        string // box name; containers are ezbx-<box>-gateway and so on
 	Docker     Docker
+	SkipEngine bool                                                    // the box is configured to start in airgap
+	LinuxHost  bool                                                    // give host-side permissions guidance on Linux
 	Detect     func(ctx context.Context, extra []string) detect.Result // finds engines on this computer, also checking the extra addresses
 	LocalAddrs func() []string                                         // this computer's own non-loopback addresses
 	// Images are the images the box needs now, by kind ("gateway", "box"),
@@ -124,7 +126,7 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 	const gd = "Docker"
 	out, err := cfg.Docker(ctx, "version", "--format", "{{.Server.Version}}")
 	if err != nil {
-		r.add(gd, "Docker engine answers", Fail, shortErr(err), "Start Docker Desktop, then run ezbx doctor again.")
+		r.add(gd, "Docker engine answers", Fail, shortErr(err), "Start Docker and check your active context, then run ezbx doctor again.")
 		return r
 	}
 	version := strings.TrimSpace(string(out))
@@ -132,14 +134,16 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 	if major >= 28 {
 		r.add(gd, "Docker engine version", Pass, version, "")
 	} else {
-		r.add(gd, "Docker engine version", Fail, version, "ezbx needs Docker Engine 28 or later, for the isolated network option. Update Docker Desktop.")
+		r.add(gd, "Docker engine version", Fail, version, "ezbx needs Docker Engine 28 or later for the isolated network option. Update Docker.")
 	}
 
 	// The engine on this computer.
 	const ge = "Engine"
 	var engines []detect.Engine
 	var refused []detect.Refusal // addresses that asked for a key
-	if cfg.Detect != nil {
+	if cfg.SkipEngine {
+		r.add(ge, "an engine is running", Skip, "the box is configured for airgap", "")
+	} else if cfg.Detect != nil {
 		// Also look where the gateway was started to forward, so an engine on
 		// an unusual port is found too.
 		var extra []string
@@ -283,18 +287,22 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 		}
 		r.add(gg, "admin API", Pass, fmt.Sprintf("engine %s, network %s", status.Engine, joinOr([]string{mode}, "(no proxy)")), "")
 
-		ready := struct {
-			Ready  bool   `json:"ready"`
-			Reason string `json:"reason"`
-		}{}
-		out, _ := cfg.Docker(ctx, "exec", gwName, "/ezbx", "gateway", "admin", "--addr", args["--admin"], "ready")
-		if json.Unmarshal(out, &ready) == nil && ready.Ready {
-			r.add(gg, "engine ready", Pass, "", "")
+		if cfg.SkipEngine {
+			r.add(gg, "engine ready", Skip, "the box is configured for airgap", "")
 		} else {
-			r.add(gg, "engine ready", Fail, joinOr([]string{ready.Reason}, "no answer"), "Check that the engine is running and that the gateway's --upstream points at it.")
+			ready := struct {
+				Ready  bool   `json:"ready"`
+				Reason string `json:"reason"`
+			}{}
+			out, _ := cfg.Docker(ctx, "exec", gwName, "/ezbx", "gateway", "admin", "--addr", args["--admin"], "ready")
+			if json.Unmarshal(out, &ready) == nil && ready.Ready {
+				r.add(gg, "engine ready", Pass, "", "")
+			} else {
+				r.add(gg, "engine ready", Fail, joinOr([]string{ready.Reason}, "no answer"), "Check that the engine is running and that the gateway's --upstream points at it.")
+			}
+			s, detail, fix := upstreamMatches(status.Upstream, engines, refused)
+			r.add(gg, "forwards to the running engine", s, detail, fix)
 		}
-		s, detail, fix := upstreamMatches(status.Upstream, engines, refused)
-		r.add(gg, "forwards to the running engine", s, detail, fix)
 	}
 
 	// The box container, if there is one yet.
@@ -335,7 +343,7 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 		r.add("From inside the box", "inside checks", Skip, "the inside network is missing", "")
 		return r
 	}
-	ic := InsideConfig{Gateway: "gateway:" + portOf(args["--listen"], "8000"), Mode: mode, Engine: status.Engine}
+	ic := InsideConfig{Gateway: "gateway:" + portOf(args["--listen"], "8000"), Mode: mode, Engine: status.Engine, SkipModel: cfg.SkipEngine && mode != "airgap"}
 	ic.OpenPorts = []int{atoi(portOf(args["--listen"], "8000"))}
 	if p := args["--proxy"]; p != "" {
 		ic.Proxy = "gateway:" + portOf(p, "3128")
@@ -583,8 +591,11 @@ func writableStatus(ctx context.Context, cfg HostConfig, boxName string) (Status
 		flag = " --box " + cfg.Box
 	}
 	owner, mode, _ := strings.Cut(got, " ")
-	return Fail, "/workspace is owned by " + owner + " with mode " + mode + ", so the agent (user 1000) can't change anything",
-		"Docker probably created the folder itself. Fix it with: ezbx admin shell" + flag + " -- chown 1000:1000 /workspace"
+	detail := "/workspace is owned by " + owner + " with mode " + mode + ", so the agent (user 1000) can't change anything"
+	if cfg.LinuxHost {
+		return Fail, detail, "Choose a workspace writable by user 1000 or grant this user access to the workspace on the host."
+	}
+	return Fail, detail, "Docker probably created the folder itself. Fix it with: ezbx admin shell" + flag + " -- chown 1000:1000 /workspace"
 }
 
 // imageStatus checks that a container runs the image the box needs now: the

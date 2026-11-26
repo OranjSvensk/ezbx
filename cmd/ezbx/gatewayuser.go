@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 
@@ -45,4 +47,23 @@ func gatewayUserFor(ctx context.Context, docker box.Docker, goos string, uid, gi
 		return "", fmt.Errorf("native Linux needs a local Docker context so containers can mount ezbx's files")
 	}
 	return fmt.Sprintf("%d:%d", uid, gid), nil
+}
+
+// checkGatewayAddress catches Desktop-only addresses before a native Linux
+// start or engine change asks the server for its model list.
+func checkGatewayAddress(user, raw string) error {
+	if user == "" || raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return err
+	}
+	host := strings.ToLower(u.Hostname())
+	ip := net.ParseIP(host)
+	if host == "localhost" || host == "host.docker.internal" || host == "gateway.docker.internal" ||
+		(ip != nil && ip.IsLoopback()) {
+		return fmt.Errorf("native Linux needs a model server address reachable from the Docker bridge. Change [engine].url to that address, or use airgap for a box without a model")
+	}
+	return nil
 }

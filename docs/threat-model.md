@@ -1,6 +1,8 @@
 # Threat model
 
-What ezbx protects, against whom, how, and what it leaves to you. It covers ezbx `v0.3.1` on Windows 11 with Docker Desktop, the only verified setup. Each claim points to where it is tested; [isolation-test.md](isolation-test.md) holds the live results, including the end-to-end test of read-only folders ([readonly.md](readonly.md)).
+What ezbx protects, against whom, and what it leaves to you. The full verification covers Windows 11 with Docker Desktop. [isolation-test.md](isolation-test.md) holds the live results, including the end-to-end test of read-only folders ([readonly.md](readonly.md)).
+
+The [native Linux pilot](isolation-test.md#native-linux-pilot) verifies a narrower Ubuntu setup in CI. The Docker daemon's host is the Linux host, so the same kernel runs the containers. The unprivileged gateway uses the invoking account's numeric user and group IDs to access its private bind mounts. The box still runs as user 1000 and has no access to those mounts.
 
 The short version: ezbx assumes the agent may misbehave, through a bad model, a prompt injection or a hostile file it reads, and limits what it can reach. It doesn't protect against a container escape, against malware already on your PC, or against you running, outside the box, something the agent wrote.
 
@@ -79,7 +81,7 @@ These are real and not solved by ezbx. Most have a habit that helps.
 - Malware or other people with access to your Windows account. They can control Docker, read the state folder and change ezbx itself.
 - Attacks on the inference engine through the model files you load.
 - Use on a shared or multi-user machine. ezbx is built for one person's PC.
-- Linux and macOS hosts, until they're verified. The design doesn't assume Windows, but none of the results above were measured there.
+- macOS and Linux setups outside the documented [native Linux pilot](getting-started.md#native-linux-pilot).
 - Cloud API keys. Not built yet (design decision 8); this page will cover them when they are.
 
 ## Reporting

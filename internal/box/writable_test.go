@@ -57,6 +57,19 @@ func TestUpIsQuietWhenTheWorkspaceIsWritable(t *testing.T) {
 	}
 }
 
+func TestNativeWorkspaceGuidancePreservesOwnership(t *testing.T) {
+	f := newFake()
+	p := testPlan(t)
+	p.GatewayUser = "1001:1001"
+	r := runner(f)
+	r.Docker = answering(f, "1001:1001 700\n", nil)
+	got := r.WorkspaceProblem(t.Context(), p)
+	if !strings.Contains(got, "owned by 1001:1001 with mode 700") ||
+		!strings.Contains(got, "writable by user 1000") || strings.Contains(got, "chown") {
+		t.Fatal(got)
+	}
+}
+
 func TestWorkspaceFix(t *testing.T) {
 	if got := WorkspaceFix("main", "0:0 755"); !strings.Contains(got, "ezbx admin shell -- chown 1000:1000 /workspace") || strings.Contains(got, "--box") {
 		t.Error(got)

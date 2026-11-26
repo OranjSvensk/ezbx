@@ -1,5 +1,6 @@
 """Run the Docker runtime acceptance test with ezbx's fake engine."""
 
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipaddress import IPv4Address
 import json
 import os
@@ -55,6 +56,15 @@ def engine_address():
     return str(addresses[0])
 
 
+def test_workspace(path):
+    if sys.platform == "linux" and os.geteuid() != 1000:
+        # Share only this fixture with the agent inside the container.
+        # The containing temporary folder remains private to the runner.
+        path.mkdir(mode=0o700)
+        path.chmod(0o707)
+    return path
+
+
 class EventStream:
     def __init__(self, args, env):
         self.process = subprocess.Popen(
@@ -84,6 +94,62 @@ class EventStream:
         self.reader.join(timeout=10)
         self.process.stdout.close()
         self.process.stderr.close()
+
+
+def exercise_airgap_start(cli, folder, name, address):
+    config = folder / "airgap.toml"
+
+    def offline(command, *args):
+        return cli(command, "--config", config, "--box", name, *args)
+
+    def model_reply():
+        probe = ("fetch('http://gateway:8000/v1/models').then(async res => "
+                 "console.log(JSON.stringify([res.status, (await res.json()).error.code])))")
+        result = json.loads(offline("exec", "--json", "--", "node", "-e", probe))
+        check(result["ok"] and result["data"]["exitCode"] == 0, "exec failed in the airgap box")
+        return json.loads(result["data"]["stdout"])
+
+    offline("create", "--workspace", test_workspace(folder / "offline"), "--harness", "pi",
+            "--tools", "none", "--memory", "2g", "--network", "airgap")
+    try:
+        state = json.loads(offline("start", "--doctor", "--json"))["data"]
+        check(state["state"] == "running" and state["networkMode"] == "airgap",
+              "engine-free start did not report a running airgap box")
+        check(model_reply() == [403, "network_airgap"], "airgap model route did not refuse the request")
+        offline("net", "off")
+        check(model_reply() == [503, "engine_unconfigured"], "model route without an engine was not unavailable")
+        offline("stop", "--json")
+
+        requests = queue.Queue()
+
+        class Decoy(BaseHTTPRequestHandler):
+            def do_GET(self):
+                requests.put(self.path)
+                payload = b'{"data":[{"id":"fake-model"}]}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            do_POST = do_GET
+
+        with ThreadingHTTPServer((address, 0), Decoy) as server:
+            port = server.server_address[1]
+            config.write_text(config.read_text(encoding="utf-8").replace(
+                "[engine]\n", f"[engine]\nurl = 'http://{address}:{port}'\n", 1
+            ), encoding="utf-8")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                offline("up")
+                check(model_reply() == [403, "network_airgap"], "airgap up opened the model route")
+                check(requests.empty(), "airgap up or its doctor contacted the configured model server")
+            finally:
+                server.shutdown()
+                thread.join(timeout=10)
+    finally:
+        offline("destroy", "--yes", "--remove-config", "--json")
 
 
 def exercise(folder):
@@ -134,12 +200,7 @@ def exercise(folder):
         reference.mkdir()
         (reference / "visible.txt").write_text("reference\n", encoding="utf-8")
         (reference / ".env").write_text("example placeholder\n", encoding="utf-8")
-        workspace = folder / "work"
-        if linux and os.geteuid() != 1000:
-            # Only the temporary fixture is shared with the container agent.
-            # The containing temporary directory remains private to the runner.
-            workspace.mkdir(mode=0o700)
-            workspace.chmod(0o707)
+        workspace = test_workspace(folder / "work")
         check(result("create", "--workspace", workspace, "--url", f"http://{address}:{port}",
                      "--api", "openai", "--readonly", reference, *key_args, *create)["ok"], "create failed")
         cli("create", "--box", other, "--workspace", folder / "other", *create)
@@ -243,6 +304,7 @@ fs.writeFileSync('/workspace/created.txt', 'workspace is writable');
         cli("snapshot", "--box", name, "-m", "a note excluded from events")
         snap = stream.expect("snapshot.created", name)["data"]
         check(set(snap) == {"snapshotId", "kind"} and snap["kind"] == "manual", "incorrect snapshot metadata")
+        exercise_airgap_start(cli, folder, f"{name}-offline", address)
         check(result("stop")["data"]["state"] == "stopped", "box didn't stop")
         stream.expect("box.stopped", name)
 
@@ -258,7 +320,7 @@ fs.writeFileSync('/workspace/created.txt', 'workspace is writable');
         replay = cli("events", "--jsonl", "--box", name, "--since", since, expected=1)
         check([json.loads(line) for line in replay.splitlines()] == [destroyed], "destroy left prior history in replay")
         check(json.loads(cli("status", "--box", other, "--json"))["data"]["state"] == "stopped", "second box changed")
-        print("Passed runtime events, replay, destroy, alias, timeout, and airgap checks", flush=True)
+        print("Passed runtime events, replay, destroy, alias, timeout, and engine-free airgap startup", flush=True)
     finally:
         try:
             if stream is not None:

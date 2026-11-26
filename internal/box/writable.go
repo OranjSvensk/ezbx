@@ -26,6 +26,10 @@ func (r *Runner) WorkspaceProblem(ctx context.Context, p Plan) string {
 	if got == "" || got == "writable" {
 		return ""
 	}
+	if p.GatewayUser != "" {
+		owner, mode, _ := strings.Cut(got, " ")
+		return fmt.Sprintf("the agent (user %d) can't write to the workspace: it is owned by %s with mode %s. Choose a workspace writable by user %d or grant this user access to the workspace on the host", agentUID, owner, mode, agentUID)
+	}
 	return WorkspaceFix(p.Box, got)
 }
 

@@ -288,7 +288,7 @@ func preflight(ctx context.Context, w io.Writer) error {
 		return fmt.Errorf("ezbx doesn't support %s/%s yet", runtime.GOOS, runtime.GOARCH)
 	}
 	if _, err := exec.LookPath("docker"); err != nil {
-		return errors.New("the docker command isn't installed. Install Docker Desktop (https://docs.docker.com/desktop/), then run ezbx init again. ezbx doesn't install it for you")
+		return errors.New("the docker command isn't installed. Install Docker Engine or Docker Desktop, then run ezbx init again. See docs/getting-started.md")
 	}
 	r := &box.Runner{Docker: dockerIn}
 	err := r.CheckDocker(ctx)
@@ -299,7 +299,7 @@ func preflight(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	// Never start Docker: say so and wait (decided in docs/init-flow.md).
-	fmt.Fprintln(w, "Docker isn't answering. Start Docker Desktop; this waits up to 5 minutes (Ctrl+C to stop).")
+	fmt.Fprintln(w, "Docker isn't answering. Start Docker, then this will continue (waits up to 5 minutes, Ctrl+C to stop).")
 	deadline := time.Now().Add(5 * time.Minute)
 	for time.Now().Before(deadline) {
 		select {

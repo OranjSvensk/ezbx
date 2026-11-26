@@ -135,7 +135,7 @@ func ConfigText(a Answers, now time.Time) string {
 	if e.URL != "" {
 		w("url     = %s\n", quote(e.URL))
 	} else {
-		w("# url   = \"http://127.0.0.1:PORT\"   # needed before ezbx up; see ezbx engine detect\n")
+		w("# url   = \"http://127.0.0.1:PORT\"   # needed for off, allow and on; see ezbx engine detect\n")
 	}
 	w("api     = %s   # auto | openai | lmstudio | anthropic\n", quote(e.API))
 	if e.KeyEnv != "" {

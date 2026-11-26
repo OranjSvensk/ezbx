@@ -74,12 +74,12 @@ func (r *Runner) lookup(ctx context.Context, kind, name string) (found, error) {
 func (r *Runner) CheckDocker(ctx context.Context) error {
 	out, err := r.run(ctx, "version", "--format", "{{.Server.Version}}")
 	if err != nil {
-		return coded(CodeDockerUnavailable, "the Docker engine doesn't answer (%v). Start Docker Desktop, then try again", firstLine(err))
+		return coded(CodeDockerUnavailable, "the Docker engine doesn't answer (%v). Start Docker and check your active context, then try again", firstLine(err))
 	}
 	v := strings.TrimSpace(string(out))
 	major, _ := strconv.Atoi(strings.SplitN(v, ".", 2)[0])
 	if major < 28 {
-		return coded(CodeDockerUnavailable, "Docker Engine %s is too old: ezbx needs 28 or later for the isolated network option. Update Docker Desktop", v)
+		return coded(CodeDockerUnavailable, "Docker Engine %s is too old: ezbx needs 28 or later for the isolated network option. Update Docker", v)
 	}
 	return nil
 }
@@ -205,7 +205,11 @@ func (r *Runner) Up(ctx context.Context, p Plan) error {
 	if _, err := r.run(ctx, "start", p.Names.Gateway); err != nil {
 		return fmt.Errorf("starting the gateway: %w%s", err, cleanupHint)
 	}
-	r.say("started %s (engine %s at %s, network %s)", p.Names.Gateway, p.EngineName, p.Upstream, p.Network)
+	if p.Upstream == "" {
+		r.say("started %s (network %s)", p.Names.Gateway, p.Network)
+	} else {
+		r.say("started %s (engine %s at %s, network %s)", p.Names.Gateway, p.EngineName, p.Upstream, p.Network)
+	}
 	if err := r.waitHealthy(ctx, p.Names.Gateway); err != nil {
 		return err
 	}
