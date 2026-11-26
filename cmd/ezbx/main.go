@@ -156,7 +156,8 @@ Commands:
   status          Whether a box is missing, stopped, running or unhealthy,
                   with its network mode and image. --json for programs.
   events          Watch runtime events with --jsonl. --since replays recent
-                  events before following new ones.
+                  events before following new ones. --gateway watches model
+                  request outcomes and blocked hosts.
   version         Print the ezbx version (same as --version or -v). --json
                   adds the contract version and features, for programs that
                   run ezbx (docs/runtime-contract.md).

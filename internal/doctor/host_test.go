@@ -533,3 +533,34 @@ func TestImageIsCurrent(t *testing.T) {
 		t.Errorf("want 2 skipped image checks, got %d", n)
 	}
 }
+
+func TestFirstRunRecovery(t *testing.T) {
+	f := goodDocker()
+	clear(f.ctrs)
+	clear(f.networks)
+	docker := func(ctx context.Context, args ...string) ([]byte, error) {
+		if args[0] == "image" && args[len(args)-1] == goodImages["gateway"].Tag {
+			return []byte("old-inputs"), nil
+		}
+		return f.run(ctx, args...)
+	}
+	cfg := HostConfig{
+		Box: "t", Docker: docker, Images: goodImages, LinuxHost: true,
+		EngineURL: "http://127.0.0.1:53000",
+		Detect:    func(context.Context, []string) detect.Result { return detect.Result{} },
+	}
+	r := Run(t.Context(), cfg)
+	for _, name := range []string{"box image is available", "gateway image is available"} {
+		c := find(t, r, name)
+		if c.Status != Fail || !strings.Contains(c.Fix, "ezbx build --box t") {
+			t.Errorf("%s: %+v", name, c)
+		}
+	}
+	if c := find(t, r, "ezbx-t-gateway"); c.Status != Fail || !strings.Contains(c.Fix, "ezbx up --box t") {
+		t.Errorf("missing gateway: %+v", c)
+	}
+	if c := find(t, r, "an engine is running"); !strings.Contains(c.Detail, cfg.EngineURL) ||
+		!strings.Contains(c.Fix, "Docker's bridge") {
+		t.Errorf("unreachable engine: %+v", c)
+	}
+}

@@ -161,7 +161,7 @@ func TestVersionJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !v.OK || v.ContractVersion != 1 || v.Version == "" || strings.HasPrefix(v.Version, "v") || !strings.Contains(v.Platform, "/") ||
-		strings.Join(v.Features, ",") != "events-jsonl,lifecycle-v1,net-four-modes,readonly-masks,status-v1" {
+		strings.Join(v.Features, ",") != "events-jsonl,gateway-events-jsonl,lifecycle-v1,net-four-modes,readonly-masks,status-v1" {
 		t.Errorf("%+v", v)
 	}
 	for _, args := range [][]string{{"version"}, {"--version"}, {"-v"}} {

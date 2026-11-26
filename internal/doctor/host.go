@@ -25,6 +25,7 @@ type HostConfig struct {
 	Docker     Docker
 	SkipEngine bool                                                    // the box is configured to start in airgap
 	LinuxHost  bool                                                    // give host-side permissions guidance on Linux
+	EngineURL  string                                                  // configured address, if any
 	Detect     func(ctx context.Context, extra []string) detect.Result // finds engines on this computer, also checking the extra addresses
 	LocalAddrs func() []string                                         // this computer's own non-loopback addresses
 	// Images are the images the box needs now, by kind ("gateway", "box"),
@@ -137,6 +138,10 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 		r.add(gd, "Docker engine version", Fail, version, "ezbx needs Docker Engine 28 or later for the isolated network option. Update Docker.")
 	}
 
+	var gw, box containerInfo
+	gwErr := cfg.inspect(ctx, "container", gwName, &gw)
+	boxErr := cfg.inspect(ctx, "container", boxName, &box)
+
 	// The engine on this computer.
 	const ge = "Engine"
 	var engines []detect.Engine
@@ -147,9 +152,8 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 		// Also look where the gateway was started to forward, so an engine on
 		// an unusual port is found too.
 		var extra []string
-		var pre containerInfo
-		if cfg.inspect(ctx, "container", gwName, &pre) == nil {
-			if a := hostSide(cmdFlags(pre.Config.Cmd)["--upstream"]); a != "" {
+		if gwErr == nil {
+			if a := hostSide(cmdFlags(gw.Config.Cmd)["--upstream"]); a != "" {
 				extra = append(extra, a)
 			}
 		}
@@ -165,7 +169,16 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 			}
 			r.add(ge, "an engine is running", Pass, "an engine at "+strings.Join(asks, ", ")+" asks for a key (the gateway's engine ready check uses it)", "")
 		} else if len(engines) == 0 {
-			r.add(ge, "an engine is running", Warn, "none found", "Start your inference engine. The box works without one, but has no model.")
+			detail := "no model server address is configured"
+			fix := "Set [engine].url in ezbx.toml, or choose network = \"airgap\" for a box that needs no model."
+			if cfg.EngineURL != "" {
+				detail = "no compatible model server answered at " + cfg.EngineURL
+				fix = "Check [engine].url and [engine].api in ezbx.toml, and confirm the server is running at that address."
+				if cfg.LinuxHost {
+					fix += " On native Linux, use an address reachable from Docker's bridge."
+				}
+			}
+			r.add(ge, "an engine is running", Warn, detail, fix)
 		} else {
 			var found []string
 			for _, e := range engines {
@@ -176,11 +189,22 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 	}
 
 	// Networks.
+	start := "Start with ezbx up --box " + cfg.Box + "."
+	if gwErr != nil {
+		checkLocalImage(ctx, &r, cfg, "gateway")
+	}
+	if boxErr != nil {
+		checkLocalImage(ctx, &r, cfg, "box")
+	}
+	if gwErr == nil || boxErr == nil {
+		start = "Run ezbx down --box " + cfg.Box + ", then ezbx up --box " + cfg.Box + " to recreate the box."
+	}
+
 	const gn = "Networks"
 	var inside, outside networkInfo
 	insideOK := cfg.inspect(ctx, "network", insideNet, &inside) == nil
 	if !insideOK {
-		r.add(gn, insideNet, Fail, "missing", "Create it: docker network create --internal -o "+isolatedOption+"=isolated -o com.docker.network.enable_ipv6=false --label ezbx.managed=true "+insideNet)
+		r.add(gn, insideNet, Fail, "missing", start)
 	} else {
 		var problems []string
 		if !inside.Internal {
@@ -200,7 +224,7 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 		}
 	}
 	if err := cfg.inspect(ctx, "network", outsideNet, &outside); err != nil {
-		r.add(gn, outsideNet, Fail, "missing", "Create it: docker network create --label ezbx.managed=true "+outsideNet)
+		r.add(gn, outsideNet, Fail, "missing", start)
 	} else if outside.Internal {
 		r.add(gn, outsideNet, Fail, "internal, so the gateway can't reach the engine or the internet", "Recreate it without --internal.")
 	} else {
@@ -209,16 +233,15 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 
 	// The gateway container.
 	const gg = "Gateway"
-	var gw containerInfo
-	if err := cfg.inspect(ctx, "container", gwName, &gw); err != nil {
-		r.add(gg, gwName, Fail, "missing", "Start the gateway container as shown in docs/isolation-test.md.")
+	if gwErr != nil {
+		r.add(gg, gwName, Fail, "missing", start)
 		r.add("From inside the box", "inside checks", Skip, "the gateway is missing", "")
 		return r
 	}
 	args := cmdFlags(gw.Config.Cmd)
 	switch {
 	case !gw.State.Running:
-		r.add(gg, "running", Fail, "stopped", "Start it: docker start "+gwName)
+		r.add(gg, "running", Fail, "stopped", start)
 	case gw.State.Health == nil:
 		r.add(gg, "running", Warn, "running, with no healthcheck", "Run ezbx build, then ezbx down and ezbx up: the gateway image has a healthcheck built in.")
 	case gw.State.Health.Status != "healthy":
@@ -298,7 +321,15 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 			if json.Unmarshal(out, &ready) == nil && ready.Ready {
 				r.add(gg, "engine ready", Pass, "", "")
 			} else {
-				r.add(gg, "engine ready", Fail, joinOr([]string{ready.Reason}, "no answer"), "Check that the engine is running and that the gateway's --upstream points at it.")
+				detail := ready.Reason
+				if detail == "" {
+					detail = "no readiness response"
+				}
+				fix := "Check [engine].url and the server from the host. If it requires a key, verify [engine].key_env names a variable set in the terminal that starts ezbx."
+				if cfg.LinuxHost {
+					fix += " The server must also listen on an address reachable from Docker's bridge."
+				}
+				r.add(gg, "engine ready", Fail, detail, fix)
 			}
 			s, detail, fix := upstreamMatches(status.Upstream, engines, refused)
 			r.add(gg, "forwards to the running engine", s, detail, fix)
@@ -307,8 +338,7 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 
 	// The box container, if there is one yet.
 	const gb = "Box"
-	var box containerInfo
-	if err := cfg.inspect(ctx, "container", boxName, &box); err != nil {
+	if boxErr != nil {
 		r.add(gb, boxName, Skip, "no box container yet", "")
 	} else {
 		r.add(gb, "locked down", lockStatus(box, false), lockDetail(box, false), "Recreate it with --cap-drop ALL --security-opt no-new-privileges and a non-root user.")
@@ -595,7 +625,30 @@ func writableStatus(ctx context.Context, cfg HostConfig, boxName string) (Status
 	if cfg.LinuxHost {
 		return Fail, detail, "Choose a workspace writable by user 1000 or grant this user access to the workspace on the host."
 	}
-	return Fail, detail, "Docker probably created the folder itself. Fix it with: ezbx admin shell" + flag + " -- chown 1000:1000 /workspace"
+	if owner == "0:0" {
+		return Fail, detail, "If Docker created this folder, fix it with: ezbx admin shell" + flag + " -- chown 1000:1000 /workspace"
+	}
+	return Fail, detail, "Check write access and Docker Desktop file sharing for the host folder set by workspace in ezbx.toml."
+}
+
+// checkLocalImage also works before the first start, when there is no
+// container to compare with the image required by ezbx.toml.
+func checkLocalImage(ctx context.Context, r *Report, cfg HostConfig, kind string) {
+	want, ok := cfg.Images[kind]
+	if !ok {
+		return
+	}
+	name := kind + " image is available"
+	fix := "Run ezbx build --box " + cfg.Box + " to build the pinned image. The first build may need internet access."
+	out, err := cfg.Docker(ctx, "image", "inspect", "--format", `{{index .Config.Labels "ezbx.inputs"}}`, want.Tag)
+	switch {
+	case err != nil:
+		r.add("Images", name, Fail, want.Tag+" could not be inspected: "+shortErr(err), fix)
+	case strings.TrimSpace(string(out)) != want.Inputs:
+		r.add("Images", name, Fail, want.Tag+" does not match the current build inputs", fix)
+	default:
+		r.add("Images", name, Pass, want.Tag, "")
+	}
 }
 
 // imageStatus checks that a container runs the image the box needs now: the
@@ -611,7 +664,8 @@ func imageStatus(ctx context.Context, cfg HostConfig, kind string, c containerIn
 		}
 		return Skip, note, ""
 	}
-	const fix = "Run ezbx build, then ezbx down and ezbx up. The workspace, the agent's home and snapshots are kept."
+	flag := " --box " + cfg.Box
+	fix := "Run ezbx build" + flag + ", then ezbx down" + flag + " and ezbx up" + flag + ". The workspace, the agent's home and snapshots are kept."
 	if c.Config.Image != want.Tag {
 		return Warn, fmt.Sprintf("runs %s, but the current files and ezbx.toml make %s", joinOr([]string{c.Config.Image}, "an unnamed image"), want.Tag), fix
 	}

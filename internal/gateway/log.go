@@ -3,6 +3,7 @@ package gateway
 import (
 	"encoding/json"
 	"io"
+	"net/netip"
 	"sync"
 )
 
@@ -36,15 +37,16 @@ type entry struct {
 }
 
 type logger struct {
-	mu  sync.Mutex
-	enc *json.Encoder
+	mu    sync.Mutex
+	enc   *json.Encoder
+	event func(string, any)
 }
 
-func newLogger(w io.Writer) *logger {
+func newLogger(w io.Writer, event func(string, any)) *logger {
 	if w == nil {
 		return &logger{}
 	}
-	return &logger{enc: json.NewEncoder(w)}
+	return &logger{enc: json.NewEncoder(w), event: event}
 }
 
 func (l *logger) write(e entry) {
@@ -52,6 +54,52 @@ func (l *logger) write(e entry) {
 		return
 	}
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	_ = l.enc.Encode(e)
+	l.mu.Unlock()
+	if l.event != nil {
+		l.recordActivity(e)
+	}
+}
+
+// Publish only the fields in the event contract. The diagnostic log can
+// contain request-controlled paths and model IDs.
+func (l *logger) recordActivity(e entry) {
+	switch {
+	case e.Route == "model":
+		endpoint := e.Path
+		switch endpoint {
+		case "/v1/models", "/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1/messages/count_tokens", "/v1/embeddings":
+		default:
+			endpoint = "other"
+		}
+		l.event("gateway.request", struct {
+			RequestID string `json:"requestId"`
+			Endpoint  string `json:"endpoint"`
+			Status    int    `json:"status"`
+			Duration  int64  `json:"durationMs"`
+			TokensIn  int    `json:"tokensIn,omitempty"`
+			TokensOut int    `json:"tokensOut,omitempty"`
+			End       string `json:"end,omitempty"`
+			Closed    string `json:"closed,omitempty"`
+			Reason    string `json:"reason,omitempty"`
+		}{
+			RequestID: e.ID, Endpoint: endpoint, Status: e.Status, Duration: e.Ms,
+			TokensIn: e.TokensIn, TokensOut: e.TokensOut, End: e.End, Closed: e.Closed, Reason: e.Reason,
+		})
+	case e.Route == "proxy" && e.Blocked:
+		host, err := normalizeHost(hostOnly(e.Host))
+		if err != nil {
+			return
+		}
+		if ip, err := netip.ParseAddr(host); err == nil {
+			host = ip.WithZone("").String()
+		}
+		l.event("gateway.blocked_host", struct {
+			RequestID string `json:"requestId"`
+			Host      string `json:"host"`
+			Status    int    `json:"status"`
+			Reason    string `json:"reason"`
+			Doctor    bool   `json:"doctor,omitempty"`
+		}{RequestID: e.ID, Host: host, Status: e.Status, Reason: e.Reason, Doctor: e.Doctor})
+	}
 }

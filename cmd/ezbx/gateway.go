@@ -13,13 +13,17 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/OranjSvensk/ezbx/internal/adapter"
 	"github.com/OranjSvensk/ezbx/internal/box"
+	"github.com/OranjSvensk/ezbx/internal/config"
 	"github.com/OranjSvensk/ezbx/internal/detect"
+	"github.com/OranjSvensk/ezbx/internal/events"
 	"github.com/OranjSvensk/ezbx/internal/gateway"
 	"github.com/OranjSvensk/ezbx/providers"
 )
@@ -59,6 +63,7 @@ func runGateway(args []string, stdout, stderr io.Writer) int {
 	keyEnv := fs.String("key-env", "", "NAME of an environment variable holding the engine's key")
 	keyFile := fs.String("key-file", "", "file holding the engine's key (what ezbx up uses); read at start")
 	logFile := fs.String("log", "-", "where to write the JSON log; - means standard output")
+	eventBox := fs.String("event-box", "", "record gateway events for this box beside the log file")
 	proxyAddr := fs.String("proxy", "", "address for the egress proxy; empty means no proxy")
 	network := fs.String("network", gateway.ModeOff, "network mode: airgap (the model route closed too), off, allow or on")
 	var allow addresses
@@ -67,6 +72,10 @@ func runGateway(args []string, stdout, stderr io.Writer) int {
 	adminAddr := fs.String("admin", "", "loopback address for the admin API, such as "+defaultAdminAddr+"; empty means no admin API")
 	tokenFile := fs.String("admin-token-file", defaultAdminTokenFile, "file holding the admin token")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *eventBox != "" && (!config.BoxName(*eventBox) || *logFile == "-") {
+		fmt.Fprintln(stderr, "--event-box needs a valid box name and a --log file")
 		return 2
 	}
 	allow, err := withAllowFile(allow, *allowFile)
@@ -124,7 +133,19 @@ func runGateway(args []string, stdout, stderr io.Writer) int {
 		logOut = f
 	}
 
-	gw, err := gateway.New(gateway.Config{Upstream: *upstream, EngineID: *engine, Key: key, Log: logOut, UpstreamHost: *upstreamHost, DefaultModel: *defaultModel, Airgap: airgap})
+	var record func(string, any)
+	if *eventBox != "" {
+		journal := events.OpenGateway(filepath.Dir(*logFile), *eventBox)
+		var warn sync.Once
+		record = func(kind string, data any) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if _, err := journal.Append(ctx, kind, data, 0); err != nil {
+				warn.Do(func() { fmt.Fprintln(stderr, "gateway: couldn't record a gateway event:", err) })
+			}
+		}
+	}
+	gw, err := gateway.New(gateway.Config{Upstream: *upstream, EngineID: *engine, Key: key, Log: logOut, Event: record, UpstreamHost: *upstreamHost, DefaultModel: *defaultModel, Airgap: airgap})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2

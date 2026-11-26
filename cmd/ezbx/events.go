@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/OranjSvensk/ezbx/internal/box"
 	"github.com/OranjSvensk/ezbx/internal/events"
 )
 
@@ -40,8 +41,9 @@ func streamEvents(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	fs := flag.NewFlagSet("events", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonl := fs.Bool("jsonl", false, "write one JSON line per event")
+	gateway := fs.Bool("gateway", false, "follow model requests and blocked hosts instead of lifecycle events")
 	cfg := fs.String("config", "", "config file")
-	box := fs.String("box", "", "box name")
+	boxFlag := fs.String("box", "", "box name")
 	var since *time.Time
 	fs.Func("since", "replay from an RFC3339 timestamp, inclusive", func(value string) error {
 		ts, err := time.Parse(time.RFC3339Nano, value)
@@ -55,21 +57,32 @@ func streamEvents(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return 2
 	}
 	if !*jsonl || len(words) != 0 || len(rest) != 0 {
-		return report(stderr, usageError("Usage: ezbx events --jsonl [--box NAME] [--config FILE] [--since RFC3339]"))
+		return report(stderr, usageError("Usage: ezbx events --jsonl [--gateway] [--box NAME] [--config FILE] [--since RFC3339]"))
 	}
 	// With an explicit name, the journal remains addressable even after
 	// destroy --remove-config removes the entire selected config file.
-	if *box != "" && *cfg != "" {
+	if *boxFlag != "" && *cfg != "" && !*gateway {
 		if _, err := os.Stat(*cfg); errors.Is(err, os.ErrNotExist) {
 			*cfg = ""
 		}
 	}
-	t, err := resolveBox(*cfg, *box)
+	t, err := resolveBox(*cfg, *boxFlag)
 	if err != nil {
 		return report(stderr, err)
 	}
 	encoder := json.NewEncoder(stdout)
-	err = events.Open(t.dirs.State, t.name).Follow(ctx, since, func(record events.Record) error {
+	journal := events.Open(t.dirs.State, t.name)
+	if *gateway {
+		if _, err := t.needBox(); err != nil {
+			return report(stderr, err)
+		}
+		if !t.cfg.LogOn() {
+			return report(stderr, errors.New("gateway events are disabled by [gateway] log = false in ezbx.toml"))
+		}
+		plan := box.Plan{StateDir: t.dirs.Box(t.name)}
+		journal = events.OpenGateway(plan.LogDir(), t.name)
+	}
+	err = journal.Follow(ctx, since, func(record events.Record) error {
 		return encoder.Encode(record)
 	})
 	if errors.Is(err, context.Canceled) {

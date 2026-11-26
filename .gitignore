@@ -20,12 +20,14 @@ harness-config/
 .githooks/private-terms.txt
 
 # ---------- Agent files (kept private, not published) ----------
+thoughts/
 agents/
 AGENTS.md
 agents.md
 CLAUDE.md
 GEMINI.md
 .claude/
+.gemini/
 HANDOFF*.md
 handoffs/
 

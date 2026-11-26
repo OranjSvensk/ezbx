@@ -32,7 +32,7 @@ const (
 
 // features are the contract features this ezbx has. A caller checks for the
 // ones it needs (ezbx version --json).
-var features = []string{"events-jsonl", "lifecycle-v1", "net-four-modes", "readonly-masks", "status-v1"}
+var features = []string{"events-jsonl", "gateway-events-jsonl", "lifecycle-v1", "net-four-modes", "readonly-masks", "status-v1"}
 
 // envelope is the one object a --json command prints.
 type envelope struct {

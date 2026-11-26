@@ -54,6 +54,9 @@ func runDoctorChecks(args []string, stdout, stderr io.Writer, skipEngine bool) i
 		LinuxHost:  runtime.GOOS == "linux",
 		LocalAddrs: localAddrs,
 	}
+	if t.cfg != nil {
+		cfg.EngineURL = t.cfg.Engine.URL
+	}
 	if !skipEngine {
 		cfg.Detect, err = doctorDetect(t.cfg)
 		if err != nil {

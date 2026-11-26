@@ -24,6 +24,8 @@ The pilot is verified in CI on Ubuntu 24.04 `amd64` with Docker Engine 28.0.4, P
 
 The pilot covers the local Docker context with user namespace remapping and rootless mode disabled. The [isolation results](isolation-test.md#native-linux-pilot) describe what CI verifies.
 
+The upcoming `v0.6.1` pilot workflow runs the fake-engine fixture separately for Pi and OpenCode on Ubuntu 24.04 `amd64`. The OpenCode job checks that the installed harness can answer through the gateway using its generated configuration. Run the same fixture with `python3 scripts/test-runtime-events.py --harness opencode` on the pilot setup. A fresh build can fetch pinned Docker and harness inputs.
+
 ---
 
 ## 2. Install ezbx
@@ -201,6 +203,8 @@ If you change `default_model`, restart the box with `ezbx down` and `ezbx up` to
 
 Run `ezbx events --jsonl --box NAME` in another terminal to watch lifecycle events, exec results, network mode changes, and snapshots. Add `--since` with an RFC3339 timestamp to catch up on recent activity. The [runtime contract](runtime-contract.md) covers replay and the removal receipt.
 
+In `v0.6.1`, add `--gateway` to watch model request outcomes and blocked hosts when gateway logging is enabled. See [gateway activity](runtime-contract.md#gateway-activity) for the event fields and replay limit.
+
 ### Several boxes
 
 One `ezbx.toml` can hold several boxes, each with its own workspace, harnesses, network mode, containers and snapshots; they share the model server. Add one with `ezbx init --box NAME` (or, without questions, `ezbx create --box NAME --workspace FOLDER`), then give `--box NAME` to every command: `ezbx build --box NAME`, `ezbx up --box NAME`, `ezbx shell --box NAME`. Two boxes can't share a workspace folder. Programs that drive ezbx use the commands in [runtime-contract.md](runtime-contract.md).
@@ -232,6 +236,7 @@ Use `--config FILE` or `EZBX_CONFIG` to point at a custom config file, and see [
 
 ### Common issues
 
+- **A box fails on its first start:** Run `ezbx doctor --box NAME` to check Docker, the configured model server, and whether the required images are present. If you used a custom config file, pass the same `--config FILE`. Build missing images with `ezbx build --box NAME` before trying `ezbx up --box NAME` again.
 - **"Nothing answered at ..." during `up`, or no server listed by `init`:** Make sure your model server is running with a model loaded. If it runs on an unusual port, pass `--url http://127.0.0.1:PORT` to `init` (or set `url` under `[engine]` in `ezbx.toml`).
 - **"The [engine] section changed":** the config was written by ezbx 0.2 or earlier, which named an engine. Replace the `[engine]` section as the message shows, or run `ezbx init` again with `--url`.
 - **Model replies stop mid-thought:** Add a `[models."<model-id>"]` section to `ezbx.toml` with `reasoning = true` and `max_tokens = 8192`, then run `ezbx down` and `ezbx up` (or `ezbx engine use`).

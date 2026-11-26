@@ -36,12 +36,13 @@ const (
 
 // Config holds the gateway's settings.
 type Config struct {
-	Airgap   bool      // start with the model route closed; Upstream may be empty
-	Upstream string    // engine address, for example http://127.0.0.1:8080
-	EngineID string    // engine id shown in X-Ezbx-Engine
-	Key      string    // key added to engine requests; empty means none
-	MaxBody  int64     // largest request body accepted; 0 means 32 MiB
-	Log      io.Writer // JSON lines go here; nil turns logging off
+	Airgap   bool              // start with the model route closed; Upstream may be empty
+	Upstream string            // engine address, for example http://127.0.0.1:8080
+	EngineID string            // engine id shown in X-Ezbx-Engine
+	Key      string            // key added to engine requests; empty means none
+	MaxBody  int64             // largest request body accepted; 0 means 32 MiB
+	Log      io.Writer         // JSON lines go here; nil turns logging off
+	Event    func(string, any) // optional summary of a logged request
 
 	// DefaultModel replaces the model "default" in requests; "" leaves it.
 	DefaultModel string
@@ -136,7 +137,7 @@ func New(cfg Config) (*Gateway, error) {
 		hostSet: cfg.UpstreamHost,
 		maxBody: cfg.MaxBody,
 		idle:    cfg.IdleTimeout,
-		log:     newLogger(cfg.Log),
+		log:     newLogger(cfg.Log, cfg.Event),
 		airgap:  cfg.Airgap,
 	}
 	if g.maxBody <= 0 {

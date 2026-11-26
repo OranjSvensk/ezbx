@@ -170,7 +170,7 @@ func (p Plan) GatewayArgs() []string {
 	a = append(a, "--allow-file", approvedInside)
 	a = append(a, "--admin", adminAddr, "--admin-token-file", tokenInside)
 	if p.LogOn {
-		a = append(a, "--log", logDirInside+"/gateway.log")
+		a = append(a, "--log", logDirInside+"/gateway.log", "--event-box", p.Box)
 	}
 	return a
 }

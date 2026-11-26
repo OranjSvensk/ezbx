@@ -1,5 +1,6 @@
 """Run the Docker runtime acceptance test with ezbx's fake engine."""
 
+import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipaddress import IPv4Address
 import json
@@ -80,12 +81,18 @@ class EventStream:
             self.lines.put(line)
         self.lines.put(None)
 
-    def expect(self, event, box):
-        line = self.lines.get(timeout=15)
-        check(line is not None, "stream closed before the expected event")
-        record = json.loads(line)
-        check(record["event"] == event and record["box"] == box, f"unexpected event: {record}")
-        return record
+    def expect(self, event, box, match=None):
+        deadline = time.monotonic() + 15
+        while True:
+            line = self.lines.get(timeout=max(0, deadline - time.monotonic()))
+            check(line is not None, "stream closed before the expected event")
+            record = json.loads(line)
+            matches = record["event"] == event and record["box"] == box
+            if match is None:
+                check(matches, f"unexpected event: {record}")
+                return record
+            if matches and match(record["data"]):
+                return record
 
     def close(self):
         if self.process.poll() is None:
@@ -99,8 +106,8 @@ class EventStream:
 def exercise_airgap_start(cli, folder, name, address):
     config = folder / "airgap.toml"
 
-    def offline(command, *args):
-        return cli(command, "--config", config, "--box", name, *args)
+    def offline(command, *args, expected=0):
+        return cli(command, "--config", config, "--box", name, *args, expected=expected)
 
     def model_reply():
         probe = ("fetch('http://gateway:8000/v1/models').then(async res => "
@@ -112,10 +119,16 @@ def exercise_airgap_start(cli, folder, name, address):
     offline("create", "--workspace", test_workspace(folder / "offline"), "--harness", "pi",
             "--tools", "none", "--memory", "2g", "--network", "airgap")
     try:
+        settings = config.read_text(encoding="utf-8")
+        check("log = true" in settings, "expected default gateway logging")
+        config.write_text(settings.replace("log = true", "log = false", 1), encoding="utf-8")
+        offline("events", "--jsonl", "--gateway", expected=1)
         state = json.loads(offline("start", "--doctor", "--json"))["data"]
         check(state["state"] == "running" and state["networkMode"] == "airgap",
               "engine-free start did not report a running airgap box")
         check(model_reply() == [403, "network_airgap"], "airgap model route did not refuse the request")
+        check(not (folder / "home" / "state" / name / "logs" / "gateway-events.json").exists(),
+              "gateway wrote events with logging disabled")
         offline("net", "off")
         check(model_reply() == [503, "engine_unconfigured"], "model route without an engine was not unavailable")
         offline("stop", "--json")
@@ -152,14 +165,15 @@ def exercise_airgap_start(cli, folder, name, address):
         offline("destroy", "--yes", "--remove-config", "--json")
 
 
-def exercise(folder):
+def exercise(folder, harness):
     linux = sys.platform == "linux"
     env = {**os.environ, "EZBX_HOME": str(folder / "home"), "EZBX_CONFIG": ""}
     suffix = ".exe" if sys.platform == "win32" else ""
     ezbx, fake = folder / ("ezbx" + suffix), folder / ("fakeengine" + suffix)
     run(["go", "build", "-o", ezbx, "./cmd/ezbx"])
     run(["go", "build", "-o", fake, "./tools/fakeengine"])
-    check("events-jsonl" in json.loads(run([ezbx, "version", "--json"], env))["features"], "missing feature")
+    features = json.loads(run([ezbx, "version", "--json"], env))["features"]
+    check({"events-jsonl", "gateway-events-jsonl"} <= set(features), "missing event features")
     address = engine_address()
     with socket.socket() as listener:
         listener.bind((address, 0))
@@ -175,6 +189,7 @@ def exercise(folder):
     name = f"vt-{uuid4().hex[:8]}"
     other = f"{name}-other"
     stream = None
+    activity = None
     built = set()
     needs_cleanup = False
 
@@ -195,7 +210,7 @@ def exercise(folder):
         else:
             raise RuntimeError("fake engine didn't listen")
         since = datetime.now(timezone.utc).isoformat()
-        create = ["--tools", "none", "--harness", "pi", "--network", "off", "--memory", "2g"]
+        create = ["--tools", "none", "--harness", harness, "--network", "off", "--memory", "2g"]
         reference = folder / "reference"
         reference.mkdir()
         (reference / "visible.txt").write_text("reference\n", encoding="utf-8")
@@ -211,9 +226,10 @@ def exercise(folder):
         cli("events", "--jsonl", expected=2)
         stream = EventStream([ezbx, "events", "--jsonl", "--box", name, "--since", since], env)
         created = stream.expect("box.created", name)
+        activity = EventStream([ezbx, "events", "--jsonl", "--gateway", "--box", name, "--since", since], env)
 
         before = image_tags()
-        print("Building the pinned Pi and gateway images", flush=True)
+        print(f"Building the pinned {harness} and gateway images", flush=True)
         try:
             cli("build", "--box", name, capture=False)
         finally:
@@ -260,7 +276,11 @@ def exercise(folder):
         cli("doctor", "--box", name, capture=False)
         probe = """
 const fs = require('node:fs');
-const settings = JSON.parse(fs.readFileSync(process.env.HOME + '/.pi/agent/settings.json'));
+const home = process.env.HOME;
+const read = file => JSON.parse(fs.readFileSync(home + file));
+const model = process.argv[1] === 'pi'
+  ? read('/.pi/agent/settings.json').defaultModel
+  : read('/.config/opencode/opencode.json').model.replace('ezbx/', '');
 if (fs.readFileSync('/readonly/reference/visible.txt', 'utf8').trim() !== 'reference' ||
     fs.readFileSync('/readonly/reference/.env', 'utf8') !== '') {
   throw new Error('unexpected read-only mount contents');
@@ -271,20 +291,44 @@ fs.writeFileSync('/workspace/created.txt', 'workspace is writable');
   const modelList = await (await fetch(url + 'models')).json();
   const reply = await fetch(url + 'chat/completions', {
     method: 'POST', headers: {'content-type': 'application/json'},
-    body: JSON.stringify({model: settings.defaultModel, messages: [{role: 'user', content: 'Hi'}]})
+    body: JSON.stringify({model, messages: [{role: 'user', content: 'Hi'}]})
   });
-  console.log(JSON.stringify({model: settings.defaultModel, ids: modelList.data.map(x => x.id),
-    status: reply.status, reply: (await reply.json()).choices[0].message.content}));
+  console.log(JSON.stringify({model, ids: modelList.data.map(x => x.id),
+    requestId: reply.headers.get('x-ezbx-request-id'), status: reply.status,
+    reply: (await reply.json()).choices[0].message.content}));
 })().catch(e => { console.error(e); process.exitCode = 1; });
 """
-        command = result("exec", "--", "node", "-e", probe)
+        command = result("exec", "--", "node", "-e", probe, harness)
         value = json.loads(command["data"]["stdout"])
+        request_id = value.pop("requestId")
         check(value == {"model": "default", "ids": ["fake-model", "default"], "status": 200,
                         "reply": "Hello from the fake engine."}, f"unexpected model result: {value}")
         first = stream.expect("exec.started", name)["data"]
         last = stream.expect("exec.exited", name)["data"]
-        check(first == {"execId": last["execId"], "program": "node", "argCount": 2} and
+        check(first == {"execId": last["execId"], "program": "node", "argCount": 3} and
               last["exitCode"] == 0 and not last["timedOut"], "incorrect exec metadata")
+        request = activity.expect("gateway.request", name, lambda data: data["requestId"] == request_id)
+        check(request["data"]["endpoint"] == "/v1/chat/completions" and request["data"]["status"] == 200 and
+              request["data"]["tokensIn"] == 1 and request["data"]["tokensOut"] == 1,
+              "incorrect gateway request metadata")
+
+        refused = result("exec", "--", "node", "-e",
+                         "require('node:http').get({host:'gateway',port:3128,path:'http://example.com/'},"
+                         "r=>{console.log(r.statusCode);r.resume()})")
+        check(refused["data"]["stdout"].strip() == "403", "proxy did not refuse the request")
+        stream.expect("exec.started", name)
+        stream.expect("exec.exited", name)
+        blocked = activity.expect("gateway.blocked_host", name, lambda data: data["host"] == "example.com"
+                                  and not data.get("doctor"))
+        check(blocked["data"]["status"] == 403 and blocked["data"]["reason"] == "network_off",
+              "incorrect blocked host metadata")
+
+        if harness == "opencode":
+            reply = result("exec", "--timeout", "90s", "--", "opencode", "run", "say hi")
+            check(reply["data"]["exitCode"] == 0 and "Hello from the fake engine." in reply["data"]["stdout"],
+                  f"OpenCode did not answer through the gateway: {reply['data']}")
+            stream.expect("exec.started", name)
+            stream.expect("exec.exited", name)
         timed = result("exec", "--timeout", "200ms", "--", "sleep", "3", expected=1)
         check(timed["error"]["code"] == "timeout", "exec did not time out")
         first = stream.expect("exec.started", name)["data"]
@@ -304,7 +348,8 @@ fs.writeFileSync('/workspace/created.txt', 'workspace is writable');
         cli("snapshot", "--box", name, "-m", "a note excluded from events")
         snap = stream.expect("snapshot.created", name)["data"]
         check(set(snap) == {"snapshotId", "kind"} and snap["kind"] == "manual", "incorrect snapshot metadata")
-        exercise_airgap_start(cli, folder, f"{name}-offline", address)
+        if harness == "pi":
+            exercise_airgap_start(cli, folder, f"{name}-offline", address)
         check(result("stop")["data"]["state"] == "stopped", "box didn't stop")
         stream.expect("box.stopped", name)
 
@@ -314,15 +359,32 @@ fs.writeFileSync('/workspace/created.txt', 'workspace is writable');
         finally:
             replay.close()
 
+        gateway_replay = EventStream(
+            [ezbx, "events", "--jsonl", "--gateway", "--box", name, "--since", request["ts"]], env
+        )
+        try:
+            check(gateway_replay.expect("gateway.request", name)["id"] == request["id"],
+                  "gateway replay changed event ID")
+        finally:
+            gateway_replay.close()
+
         check(result("destroy", "--yes", "--remove-config")["ok"], "destroy failed")
         needs_cleanup = False
         destroyed = stream.expect("box.destroyed", name)
         replay = cli("events", "--jsonl", "--box", name, "--since", since, expected=1)
         check([json.loads(line) for line in replay.splitlines()] == [destroyed], "destroy left prior history in replay")
+        check(not (folder / "home" / "state" / name / "logs" / "gateway-events.json").exists(),
+              "destroy left gateway history on disk")
         check(json.loads(cli("status", "--box", other, "--json"))["data"]["state"] == "stopped", "second box changed")
-        print("Passed runtime events, replay, destroy, alias, timeout, and engine-free airgap startup", flush=True)
+        print(f"Passed {harness} runtime lifecycle, gateway events, replay, alias routing, and isolation", flush=True)
+        if harness == "pi":
+            print("Passed engine-free airgap startup with gateway logging disabled", flush=True)
+        else:
+            print("Passed OpenCode completion through the fake engine", flush=True)
     finally:
         try:
+            if activity is not None:
+                activity.close()
             if stream is not None:
                 stream.close()
             if needs_cleanup:
@@ -338,5 +400,8 @@ fs.writeFileSync('/workspace/created.txt', 'workspace is writable');
 if __name__ == "__main__":
     if sys.platform not in ("win32", "linux"):
         raise SystemExit("Use Docker Desktop on Windows or native Docker Engine on Linux.")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--harness", choices=("pi", "opencode"), default="pi")
+    args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="ezbx-runtime-") as scratch:
-        exercise(Path(scratch))
+        exercise(Path(scratch), args.harness)

@@ -62,6 +62,7 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 
 Before `1.0.0`, the focus is the ezbx runtime, platform support, and reliability for the seven established harnesses. New built-in harnesses and support for registering custom harnesses are planned for after `1.0.0`.
 
+- `v0.6.1` targets first-run and recovery diagnostics, [gateway activity events](docs/runtime-contract.md#gateway-activity), and OpenCode coverage in the native Ubuntu pilot.
 - The native Linux pilot runs end to end in CI. Expand Linux coverage and verify macOS separately.
 - Cloud API keys through the gateway, kept out of the box like local keys.
 - Winget (the package is waiting for review).

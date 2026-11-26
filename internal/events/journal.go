@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	maxRecords = 1024
-	destroyTTL = 24 * time.Hour
+	maxRecords        = 1024
+	maxGatewayRecords = 256
+	destroyTTL        = 24 * time.Hour
 )
 
 type Record struct {
@@ -32,6 +33,7 @@ type entry struct {
 }
 
 type history struct {
+	Generation   string    `json:"generation,omitempty"`
 	Last         uint64    `json:"last"`
 	Dropped      uint64    `json:"dropped"`
 	DroppedUntil time.Time `json:"droppedUntil"`
@@ -42,13 +44,20 @@ type history struct {
 // Journal is private host state. Its directory is separate from the box's
 // state directory so destroy can replace the history with a removal receipt.
 type Journal struct {
-	file string
-	box  string
-	now  func() time.Time
+	file    string
+	box     string
+	now     func() time.Time
+	gateway bool
 }
 
 func Open(state, box string) Journal {
 	return Journal{file: filepath.Join(state, ".events", box+".json"), box: box, now: time.Now}
+}
+
+// OpenGateway keeps request traffic separate from lifecycle events. Only the
+// gateway writes this file. The host follows atomically published snapshots.
+func OpenGateway(logDir, box string) Journal {
+	return Journal{file: filepath.Join(logDir, "gateway-events.json"), box: box, now: time.Now, gateway: true}
 }
 
 func NewID() string {
@@ -85,14 +94,8 @@ func (j Journal) transaction(ctx context.Context, update func(*history) bool) er
 		case <-time.After(20 * time.Millisecond):
 		}
 	}
-	var h history
-	raw, err := os.ReadFile(j.file)
-	switch {
-	case err == nil:
-		if err := json.Unmarshal(raw, &h); err != nil {
-			return fmt.Errorf("reading event journal: %w", err)
-		}
-	case !errors.Is(err, os.ErrNotExist):
+	h, err := j.read()
+	if err != nil {
 		return err
 	}
 	dirty := h.expireReceipt(j.now())
@@ -100,6 +103,21 @@ func (j Journal) transaction(ctx context.Context, update func(*history) bool) er
 		return j.save(h)
 	}
 	return nil
+}
+
+func (j Journal) read() (history, error) {
+	var h history
+	raw, err := os.ReadFile(j.file)
+	if errors.Is(err, os.ErrNotExist) {
+		return h, nil
+	}
+	if err != nil {
+		return h, err
+	}
+	if err := json.Unmarshal(raw, &h); err != nil {
+		return h, fmt.Errorf("reading event journal: %w", err)
+	}
+	return h, nil
 }
 
 func (j Journal) save(h history) error {
@@ -172,7 +190,14 @@ func (j Journal) Append(ctx context.Context, event string, data any, after uint6
 			Sequence: sequence,
 			Record:   Record{ID: NewID(), TS: ts, Type: event, Box: j.box, Data: raw},
 		})
-		if excess := len(h.Entries) - maxRecords; excess > 0 {
+		limit := maxRecords
+		if j.gateway {
+			limit = maxGatewayRecords
+			if h.Generation == "" {
+				h.Generation = NewID()
+			}
+		}
+		if excess := len(h.Entries) - limit; excess > 0 {
 			h.drop(excess)
 		}
 		return true
@@ -186,17 +211,19 @@ var ErrHistoryLost = errors.New("event history is no longer available; check ezb
 // The cursor is the last sequence already delivered or intentionally skipped.
 func (j Journal) Follow(ctx context.Context, since *time.Time, emit func(Record) error) error {
 	var cursor uint64
+	var generation string
 	first := true
 	ticker := time.NewTicker(150 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		var h history
-		if err := j.transaction(ctx, func(state *history) bool {
-			h = *state
-			return false
-		}); err != nil {
+		h, err := j.snapshot(ctx)
+		if err != nil {
 			return err
 		}
+		if generation != "" && h.Generation != generation {
+			return ErrHistoryLost
+		}
+		generation = h.Generation
 		if first {
 			first = false
 			if since == nil {
@@ -245,4 +272,19 @@ func (j Journal) Follow(ctx context.Context, since *time.Time, emit func(Record)
 		case <-ticker.C:
 		}
 	}
+}
+
+func (j Journal) snapshot(ctx context.Context) (history, error) {
+	if err := ctx.Err(); err != nil {
+		return history{}, err
+	}
+	if j.gateway {
+		return j.read()
+	}
+	var h history
+	err := j.transaction(ctx, func(state *history) bool {
+		h = *state
+		return false
+	})
+	return h, err
 }

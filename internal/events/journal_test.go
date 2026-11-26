@@ -3,10 +3,43 @@ package events
 import (
 	"context"
 	"errors"
+	"os"
 	"sync"
 	"testing"
 	"time"
 )
+
+func TestGatewayRetentionAndRemoval(t *testing.T) {
+	dir := t.TempDir()
+	lifecycle := Open(dir, "t")
+	gateway := OpenGateway(dir, "t")
+	now := time.Now().UTC()
+	gateway.now = func() time.Time { return now }
+	appendEvent(t, lifecycle, "box.started", 0)
+	before := now
+	for i := 0; i <= maxGatewayRecords; i++ {
+		appendEvent(t, gateway, "gateway.request", 0)
+		now = now.Add(time.Millisecond)
+	}
+	if got := readHistory(t, lifecycle); len(got.Entries) != 1 || got.Dropped != 0 {
+		t.Fatalf("gateway traffic changed lifecycle history: %+v", got)
+	}
+	if got := readHistory(t, gateway); len(got.Entries) != maxGatewayRecords || got.Dropped != 1 {
+		t.Fatalf("unexpected gateway retention: %d entries, dropped %d", len(got.Entries), got.Dropped)
+	}
+	emit := func(e Record) error { t.Fatalf("unexpected event %+v", e); return nil }
+	if err := gateway.Follow(t.Context(), &before, emit); !errors.Is(err, ErrHistoryLost) {
+		t.Fatalf("gateway retention gap: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	latest := now.Add(-time.Millisecond)
+	if err := gateway.Follow(ctx, &latest, func(e Record) error {
+		return os.Remove(gateway.file)
+	}); !errors.Is(err, ErrHistoryLost) {
+		t.Fatalf("gateway removal gap: %v", err)
+	}
+}
 
 func appendEvent(t *testing.T, j Journal, name string, after uint64) uint64 {
 	t.Helper()

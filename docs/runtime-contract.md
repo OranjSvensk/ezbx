@@ -125,6 +125,20 @@ One compact JSON line per event on stdout until interrupted. Diagnostics go to s
 
 From the repository root on Windows with Go, Python, and Docker Desktop, run `python scripts/test-runtime-events.py` for the fake-engine acceptance checks. The test builds the pinned Pi and gateway images, which may fetch build inputs, and uses temporary workspaces and a loopback fake engine.
 
+### Gateway activity
+
+Starting with `v0.6.1`, use `ezbx events --jsonl --gateway --box NAME` to watch model request outcomes and blocked proxy hosts. Check for `gateway-events-jsonl` in `ezbx version --json` and rebuild and recreate older boxes to enable the producer. The existing `events --jsonl` stream continues to carry lifecycle, exec, network-mode, and snapshot events.
+
+| Event | Data |
+|---|---|
+| `gateway.request` | `requestId`, `endpoint`, `status`, `durationMs`, and when present `tokensIn`, `tokensOut`, `end`, `closed`, or `reason`. The endpoint is a known model API path or `other`. Status may be 499 if the client disconnected. |
+| `gateway.blocked_host` | `requestId`, `host`, `status`, `reason`, and `doctor: true` when the probe marker was present. Hostnames and IP addresses are normalized. Ports and IPv6 scope identifiers are omitted. DNS and connection failures are outside this event type. |
+
+- The gateway records summary events when requests finish, including refused model requests. The event data excludes prompts, replies, keys, model names, arbitrary request paths and query strings.
+- `--since` replays up to 256 retained gateway records per box, then follows new ones. This retention is independent of the 1,024 lifecycle records. Each stream has its own reconnect timestamp. Reuse the last timestamp from that stream and deduplicate by event ID. A retention gap is reported on stderr with exit status 1.
+- Stopping the box preserves the gateway history. Destroy removes it and leaves a receipt on the lifecycle stream. A reader that has seen a gateway journal exits with a gap error if the journal is removed or replaced by a new one.
+- With `[gateway] log = false`, the command reports that gateway events are disabled. Recreate the box after changing logging to apply the setting to the gateway. Existing gateway history stays on disk until destroy or retention replaces it. The gateway reports a journal write error in its diagnostics and continues serving requests.
+
 ---
 
 ## 3. Four network modes
