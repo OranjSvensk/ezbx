@@ -9,7 +9,7 @@
 
 ezbx is a one-command setup for running AI coding and agent tools inside a sandboxed container, while the model itself keeps running on your own machine.
 
-> **Status: early release (`v0.5.1`), usable on Windows.** Setup, the box, the gateway, the network switch, snapshots and the admin tools all work, and all seven harnesses (Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw) are verified end to end on Windows 11 with Docker Desktop and a local model server. One `ezbx.toml` can hold several boxes. Other programs can drive ezbx through a JSON contract and follow box activity with live events and recent replay ([docs/runtime-contract.md](docs/runtime-contract.md)). Released Linux and macOS archives are experimental. Test results, including the development branch's Linux pilot, are in [docs/isolation-test.md](docs/isolation-test.md).
+> **Status: early release (`v0.6.0`).** All seven harnesses (Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw) are verified end to end on Windows 11 with Docker Desktop and a local model server. The native Linux pilot covers Ubuntu 24.04 `amd64` with local Docker Engine, Pi, and a fake model server. Other programs can drive ezbx through a JSON contract and follow box activity with live events and recent replay. See the [runtime contract](docs/runtime-contract.md) and [isolation results](docs/isolation-test.md).
 
 ```text
 # Scoop (Windows):
@@ -17,7 +17,7 @@ scoop bucket add ezbx https://github.com/OranjSvensk/scoop-bucket
 scoop install ezbx
 
 # Or install with Go 1.27+ (or download a binary from Releases):
-go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.5.1
+go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.6.0
 ezbx --version
 ezbx init                 # asks the questions, shows the plan, builds and starts the box
 ezbx shell pi             # opens Pi in the box (or opencode, omp, codex, claude, hermes, openclaw)
@@ -55,7 +55,7 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 | Platform | State |
 |---|---|
 | Windows 11 + Docker Desktop (Engine 28+) | Verified: every command, all seven harnesses, the isolation tests |
-| Ubuntu 24.04 `amd64` + local Docker Engine | Development pilot with Pi and a fake model server ([setup and limits](docs/getting-started.md#native-linux-pilot)) |
+| Ubuntu 24.04 `amd64` + local Docker Engine | CI pilot with Pi and a fake model server ([setup and limits](docs/getting-started.md#native-linux-pilot)) |
 | Other Linux setups, macOS | Experimental builds ([threat model](docs/threat-model.md)) |
 
 ## What's next
@@ -68,7 +68,7 @@ Before `1.0.0`, the focus is the ezbx runtime, platform support, and reliability
 
 ## Releases
 
-`v0.1.0`/`v0.1.1` (setup, the gateway and network switch, snapshots, the harnesses), `v0.2.0` (`allow` mode, more model servers, `reset` with backup), `v0.3.0`/`v0.3.1` (read-only folders with secret masking, model servers by API kind, starter profiles), `v0.4.0` (several boxes, `airgap`, the runtime contract), `v0.5.0` (runtime events, replay, and harness selection of the `default` alias), `v0.5.1` (engine-free airgap startup). The milestones are in [docs/design.md](docs/design.md), section 12. See [Releases](https://github.com/OranjSvensk/ezbx/releases) for notes and downloads.
+`v0.1.0`/`v0.1.1` (setup, the gateway and network switch, snapshots, the harnesses), `v0.2.0` (`allow` mode, more model servers, `reset` with backup), `v0.3.0`/`v0.3.1` (read-only folders with secret masking, model servers by API kind, starter profiles), `v0.4.0` (several boxes, `airgap`, the runtime contract), `v0.5.0` (runtime events, replay, and harness selection of the `default` alias), `v0.5.1` (engine-free airgap startup), `v0.6.0` (native Linux pilot). The milestones are in [docs/design.md](docs/design.md), section 12. See [Releases](https://github.com/OranjSvensk/ezbx/releases) for notes and downloads.
 
 ## Safety note
 

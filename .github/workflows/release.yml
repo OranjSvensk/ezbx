@@ -83,7 +83,8 @@ jobs:
           cat <<EOF > "${notes_file}"
           Early release ${tag}.
 
-          - **Verified platform:** Windows 11 with Docker Desktop (Engine 28+) and a local OpenAI- or Anthropic-compatible model server, across all seven harnesses (\`pi\`, \`opencode\`, \`omp\`, \`codex\`, \`claude\`, \`hermes\`, \`openclaw\`). Linux and macOS archives are included as untested/experimental builds.
+          - **Windows:** Verified on Windows 11 with Docker Desktop (Engine 28+) and a local OpenAI- or Anthropic-compatible model server across all seven harnesses (\`pi\`, \`opencode\`, \`omp\`, \`codex\`, \`claude\`, \`hermes\`, \`openclaw\`).
+          - **Native Linux pilot:** Verified in CI on Ubuntu 24.04 amd64 with local Docker Engine 28.0.4, Pi, and a keyed fake model server. See the [pilot setup and scope](https://github.com/${GITHUB_REPOSITORY}/blob/${tag}/docs/getting-started.md#native-linux-pilot). Other Linux setups and macOS builds are experimental.
           - **Getting started:** Download an archive below (verify against \`checksums.txt\`) or install with \`go install github.com/OranjSvensk/ezbx/cmd/ezbx@${tag}\`, then see [docs/getting-started.md](https://github.com/${GITHUB_REPOSITORY}/blob/${tag}/docs/getting-started.md).
 
           EOF

@@ -1,6 +1,6 @@
 # ezbx design (draft 0.1)
 
-Status: `v0.5.1` early release with engine-free airgap startup, live runtime events, and recent replay (section 12). Verified on Windows 11 with Docker Desktop and a local model server across all seven harnesses: `pi`, `opencode`, `omp`, `codex`, `claude`, `hermes`, `openclaw`. Built: read-only folders with secret masking ([readonly.md](readonly.md)), starter profiles ([profiles.md](profiles.md)), model server detection by API kind (`openai`, `lmstudio`, `anthropic`; decision 22), the gateway (model route, OpenAI Responses and Anthropic Messages translation, egress proxy, admin API), config rendering, `ezbx doctor`, `ezbx up`/`down`, `ezbx shell`, `ezbx snapshot`/`review`/`rewind`, `ezbx admin shell`, `ezbx reset`/`destroy`, `ezbx net`, `ezbx engine use`, `ezbx init`, and `ezbx build` with `ezbx.lock` and tool packs ([build.md](build.md)).
+Status: `v0.6.0` early release with a native Linux pilot (section 12). Windows 11 with Docker Desktop and a local model server is verified across all seven harnesses. The Linux CI pilot covers Ubuntu 24.04 `amd64`, local Docker Engine, Pi, and the fake engine. See [isolation-test.md](isolation-test.md) for the test scope.
 
 ## 1. Goal
 
@@ -155,7 +155,7 @@ The full threat model is in [threat-model.md](threat-model.md): what is protecte
 3. **0.3 (done, `v0.3.1`):** read-only folders with secret masking and the full threat model, model servers by API kind (decision 22: `openai`, `lmstudio`, `anthropic`), starter profiles (`offline`, `open`, `python-ml`, `research`, `web-dev` in [profiles.md](profiles.md)).
 4. **0.4 (done, `v0.4.0`):** the runtime contract's phase 1 for programs that drive ezbx ([runtime-contract.md](runtime-contract.md): `version --json`, `status`, `create`, `start`, `exec`, `stop`, `destroy --json`), several boxes in one `ezbx.toml` (decision 23), the `airgap` mode (decision 24), token counts in the gateway's log (decision 25), the `default` model alias (decision 26), `ezbx harness add|remove|list`, and `destroy` limited to its box (decision 27).
 5. **0.5 (done, `v0.5.0`):** `ezbx events --jsonl` with bounded replay and a destroy receipt (decision 28), harness selection of the `default` alias, and repeatable Windows Docker acceptance testing with the fake engine.
-6. **0.6 (in development):** native Linux pilot with a repeatable Ubuntu `amd64` Docker test. Verify gateway credentials and logs, workspace permissions, read-only masks, model routing, and isolation.
+6. **0.6 (`v0.6.0`):** native Linux pilot with a repeatable Ubuntu `amd64` Docker test covering gateway credentials, workspace permissions, read-only masks, model routing, isolation, and the runtime contract.
 7. **Later:** broader Linux and macOS coverage, cloud API keys (decision 8), tray or GUI front end, other container runtimes, a tool-calling self-test for models.
 
 **Before `1.0.0`**, keep the seven established harnesses and prioritize improvements to the ezbx runtime, platform support, and reliability. Maintain and verify the existing integrations as the runtime changes. Individual release scope is decided separately.

@@ -3,6 +3,7 @@ name: Linux runtime pilot
 on:
   push:
     branches:
+      - main
       - probatio/linux-pilot
   workflow_dispatch:
 
