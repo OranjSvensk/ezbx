@@ -3,7 +3,7 @@ name: Linux runtime pilot
 on:
   push:
     branches:
-      - codex/linux-pilot
+      - probatio/linux-pilot
   workflow_dispatch:
 
 permissions:
