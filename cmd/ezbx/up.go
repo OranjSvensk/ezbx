@@ -91,6 +91,7 @@ func startBox(cfgFlag, name string, doctorToo bool, stdout, stderr io.Writer) (b
 	if err := r.Up(ctx, plan); err != nil {
 		return plan, err
 	}
+	recordEvent(target{dirs: dirs, name: plan.Box}, "box.started", map[string]any{"networkMode": plan.Network}, 0, stderr)
 	if !doctorToo {
 		return plan, nil
 	}
@@ -119,7 +120,7 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return report(stderr, err)
 	}
-	if err := stopBox(t, stdout); err != nil {
+	if err := stopBox(t, stdout, stderr); err != nil {
 		return report(stderr, err)
 	}
 	fmt.Fprintf(stdout, "Kept: the workspace, the state folder (token, log, approved hosts) and the volume %s.\n", box.NamesFor(t.name).Home)
@@ -127,11 +128,17 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 }
 
 // stopBox removes a box's containers and networks, and its engine key file.
-func stopBox(t target, stdout io.Writer) error {
+func stopBox(t target, stdout, stderr io.Writer) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	r := &box.Runner{Docker: dockerIn, Out: stdout}
-	return r.Down(ctx, t.name, t.dirs.Box(t.name))
+	if err := r.Down(ctx, t.name, t.dirs.Box(t.name)); err != nil {
+		return err
+	}
+	if t.box() != nil {
+		recordEvent(t, "box.stopped", map[string]any{}, 0, stderr)
+	}
+	return nil
 }
 
 // makePlan turns the config into a plan: it checks the workspace, finds the

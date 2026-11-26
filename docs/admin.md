@@ -32,6 +32,7 @@ Decided before the code was written (design decisions 16 and 17).
 - **Backup and restore of the home** use a throwaway container from the box image with no network: `tar --numeric-owner -C /home/agent -cf - .` from a read-only mount, and `tar --numeric-owner -xpf -` into the new volume, so owners and modes come back exactly. The stream goes straight to and from the file, never through memory.
 - **What is "running"** for `reset` and `destroy`: anything in the box besides its own idle process (as for `rewind`), or an open admin shell.
 - **Destroy's state folder** is removed only after checking that it lies inside the state root and doesn't hold or sit inside the workspace.
+- **Event receipt**: after a successful destroy, the host event journal keeps only a `box.destroyed` record for up to 24 hours of replay. See the [runtime contract](runtime-contract.md).
 
 ## Limits
 

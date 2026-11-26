@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"path"
 	"regexp"
@@ -208,23 +207,21 @@ func runExec(args []string, stdout, stderr io.Writer) int {
 		ctx, stop = context.WithTimeout(ctx, o.timeout+killGrace+30*time.Second)
 		defer stop()
 	}
-	start := time.Now()
 	if !*asJSON {
-		code, err := runDocker(ctx, argv, os.Stdin, stdout, stderr)
+		code, took, err := execWithEvents(ctx, t, o, argv, stdout, stderr, stderr)
 		if err != nil {
 			return report(stderr, err)
 		}
-		if timedOut(o, code, time.Since(start)) {
+		if timedOut(o, code, took) {
 			fmt.Fprintf(stderr, "ezbx exec: the command was stopped after %s (--timeout).\n", o.timeout)
 		}
 		return code
 	}
 	out, errOut := &capped{max: maxCaptured}, &capped{max: maxCaptured}
-	code, err := runDocker(ctx, argv, os.Stdin, out, errOut)
+	code, took, err := execWithEvents(ctx, t, o, argv, out, errOut, stderr)
 	if err != nil {
 		return fail(t.name, err)
 	}
-	took := time.Since(start)
 	res := execResult{
 		ExitCode: code, DurationMs: took.Milliseconds(),
 		Stdout: out.buf.String(), Stderr: errOut.buf.String(),

@@ -82,17 +82,22 @@ func sizeBytes(s string) int64 {
 
 // takeAuto takes the snapshot ezbx shell takes before every session, then
 // drops automatic snapshots beyond the number kept.
-func takeAuto(sb snapBox, stdout io.Writer) error {
+func takeAuto(t target, sb snapBox, stdout io.Writer) error {
 	snap, st, err := sb.store.Take(sb.root, snapshot.Auto, "", sb.rules)
 	if err != nil {
 		return err
 	}
+	recordSnapshot(t, snap, stdout)
 	fmt.Fprintf(stdout, "snapshot %s: %d files, %s new%s (undo with ezbx rewind)\n",
 		snap.ID, st.Files, snapshot.Bytes(st.NewBytes), skippedText(snap))
 	if _, _, err := sb.store.Prune(sb.keep); err != nil {
 		fmt.Fprintf(stdout, "note: removing old automatic snapshots failed: %v\n", err)
 	}
 	return nil
+}
+
+func recordSnapshot(t target, snap snapshot.Snapshot, stderr io.Writer) {
+	recordEvent(t, "snapshot.created", map[string]any{"snapshotId": snap.ID, "kind": snap.Kind}, 0, stderr)
 }
 
 func skippedText(s snapshot.Snapshot) string {
@@ -132,6 +137,7 @@ func runSnapshot(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			return report(stderr, err)
 		}
+		recordSnapshot(t, snap, stderr)
 		fmt.Fprintf(stdout, "snapshot %s: %d files (%s), %s new. Kept until you remove it.\n",
 			snap.ID, st.Files, snapshot.Bytes(snap.Size()), snapshot.Bytes(st.NewBytes))
 		printSkipped(stdout, snap)
@@ -298,6 +304,7 @@ func runRewind(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return report(stderr, err)
 	}
+	recordSnapshot(t, res.Safety, stderr)
 	fmt.Fprintf(stdout, "Rewound to %s: %d put back, %d removed. To undo this rewind: ezbx rewind %s\n",
 		target.ID, len(res.Changes.Changed)+len(res.Changes.Deleted), len(res.Changes.Added), res.Safety.ID)
 	if len(res.Problems) > 0 {

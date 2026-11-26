@@ -139,7 +139,7 @@ func beforeSession(t target, noSnap bool, without string, stderr io.Writer) erro
 	}
 	sb, err := openSnapshots(t)
 	if err == nil {
-		err = takeAuto(sb, stderr)
+		err = takeAuto(t, sb, stderr)
 	}
 	if err != nil {
 		return fmt.Errorf("the snapshot before the session failed, so the session wasn't started: %w\nTo start without one: %s", err, without)

@@ -155,6 +155,8 @@ Commands:
                   reaches the model and nothing else. Explains each fix.
   status          Whether a box is missing, stopped, running or unhealthy,
                   with its network mode and image. --json for programs.
+  events          Watch runtime events with --jsonl. --since replays recent
+                  events before following new ones.
   version         Print the ezbx version (same as --version or -v). --json
                   adds the contract version and features, for programs that
                   run ezbx (docs/runtime-contract.md).
@@ -174,6 +176,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if len(args) >= 1 && args[0] == "status" {
 		return runStatus(args[1:], stdout, stderr)
+	}
+	if len(args) >= 1 && args[0] == "events" {
+		return runEvents(args[1:], stdout, stderr)
 	}
 	if len(args) >= 1 && args[0] == "exec" {
 		return runExec(args[1:], stdout, stderr)

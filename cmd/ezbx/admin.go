@@ -410,6 +410,9 @@ func runDestroy(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(out, "removed file", f)
 		}
 	}
+	if failed == 0 {
+		recordEvent(t, "box.destroyed", map[string]any{}, 0, stderr)
+	}
 	if *asJSON {
 		var err error
 		if failed > 0 {

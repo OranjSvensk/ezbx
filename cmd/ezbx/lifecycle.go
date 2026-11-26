@@ -161,6 +161,7 @@ func runCreate(args []string, stdout, stderr io.Writer) int {
 		return fail(fmt.Errorf("creating the workspace: %w", err))
 	}
 	a := res.Answers
+	recordEvent(target{dirs: dirs, name: a.Box}, "box.created", map[string]any{"networkMode": a.Network}, 0, stderr)
 	if *asJSON {
 		return writeResult(stdout, a.Box, map[string]any{
 			"configFile": cfgFile, "workspace": a.Workspace, "network": a.Network, "allow": nonNil(a.Allow),
@@ -256,7 +257,7 @@ func runStop(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(*boxFlag, err)
 	}
-	if err := stopBox(t, out); err != nil {
+	if err := stopBox(t, out, stderr); err != nil {
 		return fail(t.name, err)
 	}
 	if !*asJSON {

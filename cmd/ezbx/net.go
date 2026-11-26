@@ -51,7 +51,7 @@ func runNet(args []string, stdout, stderr io.Writer) int {
 	case len(words) == 0:
 		return report(stderr, showNet(ctx, r, t, stdout))
 	case len(words) == 1 && config.NetworkMode(words[0]):
-		return report(stderr, setMode(ctx, r, t, words[0], stdout))
+		return report(stderr, setMode(ctx, r, t, words[0], stdout, stderr))
 	case len(words) >= 2 && words[0] == "allow":
 		return report(stderr, allowHosts(ctx, r, t, approved, words[1:], stdout))
 	case len(words) >= 2 && words[0] == "remove":
@@ -127,7 +127,7 @@ func showNet(ctx context.Context, r *box.Runner, t target, w io.Writer) error {
 	return nil
 }
 
-func setMode(ctx context.Context, r *box.Runner, t target, mode string, w io.Writer) error {
+func setMode(ctx context.Context, r *box.Runner, t target, mode string, w, stderr io.Writer) error {
 	s, err := r.GatewayStatus(ctx, t.name)
 	if err != nil {
 		return err
@@ -135,6 +135,9 @@ func setMode(ctx context.Context, r *box.Runner, t target, mode string, w io.Wri
 	got, _, closed, err := r.SetNetwork(ctx, t.name, mode, s.Network.Allow)
 	if err != nil {
 		return err
+	}
+	if got != s.Network.Mode {
+		recordEvent(t, "net.changed", map[string]any{"previousMode": s.Network.Mode, "networkMode": got}, 0, stderr)
 	}
 	fmt.Fprintf(w, "Box %q: network %s (was %s).", t.name, got, s.Network.Mode)
 	if closed > 0 {

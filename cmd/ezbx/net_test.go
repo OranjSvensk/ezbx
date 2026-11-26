@@ -60,7 +60,7 @@ func TestNetModeKeepsTheList(t *testing.T) {
 	g := &fakeGateway{up: true, mode: "allow", allow: []string{"github.com", "registry.npmjs.org"}}
 	tg, _ := netTarget(t)
 	var out strings.Builder
-	if err := setMode(context.Background(), &box.Runner{Docker: g.docker}, tg, "on", &out); err != nil {
+	if err := setMode(context.Background(), &box.Runner{Docker: g.docker}, tg, "on", &out, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if g.mode != "on" || strings.Join(g.allow, ",") != "github.com,registry.npmjs.org" {
@@ -140,7 +140,7 @@ func TestNetWarnsAboutReadOnly(t *testing.T) {
 	g := &fakeGateway{up: true, mode: "off"}
 	tg, file := netTarget(t)
 	var out strings.Builder
-	if err := setMode(context.Background(), &box.Runner{Docker: g.docker}, tg, "on", &out); err != nil {
+	if err := setMode(context.Background(), &box.Runner{Docker: g.docker}, tg, "on", &out, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(out.String(), "read-only") {
@@ -154,14 +154,14 @@ func TestNetWarnsAboutReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if err := setMode(context.Background(), &box.Runner{Docker: g.docker}, tg, "on", &out); err != nil {
+	if err := setMode(context.Background(), &box.Runner{Docker: g.docker}, tg, "on", &out, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "warning: with the network on, the agent could send what it reads in the read-only folders to the public internet (/readonly/docs).") {
 		t.Errorf("on: %s", out.String())
 	}
 	out.Reset()
-	if err := setMode(context.Background(), &box.Runner{Docker: g.docker}, tg, "off", &out); err != nil || strings.Contains(out.String(), "warning") {
+	if err := setMode(context.Background(), &box.Runner{Docker: g.docker}, tg, "off", &out, io.Discard); err != nil || strings.Contains(out.String(), "warning") {
 		t.Errorf("off: %v %s", err, out.String())
 	}
 	g.mode = "allow"

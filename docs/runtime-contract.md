@@ -1,6 +1,6 @@
 # Runtime contract for external callers
 
-> **Status:** phase 1 is built for `ezbx` v0.4.0: `version --json`, `status`, `create`, `start`, `exec`, `stop`, `destroy --json`, several boxes in one `ezbx.toml`, and the four network modes. `events --jsonl` (section 2, last part) is still planned.
+> **Status:** v0.4.0 shipped phase 1 with lifecycle commands, status, several boxes and four network modes. The current development build adds `events --jsonl` (section 2).
 
 This document defines the stable CLI and JSON contract between `ezbx` (the sandbox runtime) and external desktop or orchestration programs that drive it. `ezbx` owns container isolation, gateway routing, network enforcement, and snapshots; the caller owns Git worktrees, per-agent branch governance, prompt assembly, and human approvals.
 
@@ -28,8 +28,9 @@ Every command takes `--box NAME`. With one box in `ezbx.toml` it may be left out
 | `ezbx exec` | Run one command in the running box, without a terminal | `ezbx shell`, non-interactive |
 | `ezbx status` | Whether the box is missing, stopped, running or unhealthy | |
 | `ezbx stop` | Remove the box's containers and networks; keep its home volume, snapshots and workspace | `ezbx down` |
-| `ezbx destroy --yes` | Remove everything `ezbx` made for this box; never the workspace | |
+| `ezbx destroy --yes` | Remove the box and leave a short-lived removal receipt; keep the workspace | |
 | `ezbx net MODE` | Change the network mode of a running box (section 3) | |
+| `ezbx events --jsonl` | Follow runtime events with optional replay | |
 
 ### Command details
 
@@ -52,6 +53,7 @@ Every command takes `--box NAME`. With one box in `ezbx.toml` it may be left out
 - **`ezbx destroy --box NAME --yes [--remove-config] [--images] [--json]`**
   - Removes the box's containers, networks, home volume and state folder (snapshots and backups too), and the box's images that no other box in `ezbx.toml` needs and no other container uses. `--images` also removes every other `ezbx` image no container uses, and the build record. Never the workspace.
   - `--remove-config` also takes the box's section out of `ezbx.toml` (the whole file only when it was the only box).
+  - A successful removal clears the box's event history and leaves a short-lived `box.destroyed` receipt in the host event journal.
   - With `--json` the list of what is removed goes to stderr, and `data` is `{"removed": [...], "kept": [...]}`.
 
 ### The JSON result
@@ -95,17 +97,32 @@ On failure `ok` is `false`, the exit code is non-zero (2 for `invalid_args`, els
 
 A caller may also define `contract_mismatch` for itself (section 4); `ezbx` never prints it.
 
-### Planned: `ezbx events --jsonl [--box NAME] [--since RFC3339]`
+### `ezbx events --jsonl [--box NAME] [--config FILE] [--since RFC3339]`
 
-One compact JSON line per event, flushed at once, until interrupted:
+One compact JSON line per event on stdout until interrupted. Diagnostics go to stderr. Omit `--since` for live events only. Pass a timestamp to replay retained records at or after it, then follow new records from the same journal without a replay-to-live gap.
 
 ```json
-{"ts":"2026-11-24T19:00:00Z","event":"box.started","box":"agent-ada","data":{"networkMode":"off"}}
-{"ts":"2026-11-24T19:00:08Z","event":"net.blocked","box":"agent-ada","data":{"host":"example.com","port":443}}
-{"ts":"2026-11-24T19:00:11Z","event":"exec.exited","box":"agent-ada","data":{"execId":"ex_01","exitCode":0,"durationMs":9012}}
+{"id":"0a5fcf7996274c668c51b135025ca549","ts":"2026-11-24T19:00:00Z","event":"box.started","box":"agent-ada","data":{"networkMode":"off"}}
+{"id":"1b5fcf7996274c668c51b135025ca549","ts":"2026-11-24T19:00:08Z","event":"net.changed","box":"agent-ada","data":{"previousMode":"off","networkMode":"airgap"}}
 ```
 
-Planned event types: `box.created`, `box.started`, `box.stopped`, `box.destroyed`, `exec.started`, `exec.exited`, `net.changed`, `net.blocked`, `gateway.request`, `snapshot.created`. `exec.started` will carry the program's name and how many arguments it had, never the arguments, which can hold a prompt.
+| Event | When ezbx records it | Data |
+|---|---|---|
+| `box.created` | `create` or `init` adds a box | `networkMode` |
+| `box.started` | `start` or `up` has brought the box up, before any doctor checks | `networkMode` |
+| `box.stopped` | `stop` or `down` completes for a configured box | Empty |
+| `box.destroyed` | `destroy` completes a removal | Empty |
+| `exec.started` | After preflight, just before ezbx invokes Docker exec | `execId`, `program` (basename or `(unnamed)`), `argCount` |
+| `exec.exited` | The exec attempt returns | `execId`, `durationMs`, `timedOut`, and either `exitCode` or `errorCode` |
+| `net.changed` | `net MODE` changes the running gateway mode | `previousMode`, `networkMode` |
+| `snapshot.created` | A manual, automatic, or rewind safety snapshot is saved | `snapshotId`, `kind` |
+
+- Records appear in journal order for one box. Timestamps are UTC and can repeat. To reconnect, pass the last timestamp seen and deduplicate by `id`. Both exec records share an `execId`. Arguments, command output, request content, and snapshot notes stay out of the journal.
+- The host journal keeps up to 1,024 records per box, including while it is stopped. Reading it works independently of Docker and gateway logging. After destroy, use the explicit box name to look up its receipt, even if the config was removed. The receipt is eligible for replay for up to 24 hours and is removed when the journal is next accessed after expiry. A new box with the same name produces new records and IDs.
+- If the requested history has been pruned or destroyed, or a live reader falls behind retention, the command reports the gap on stderr and exits 1. An available removal receipt is sent first when the gap crosses a destroy. Refresh state with `status` before resuming.
+- The stream records ezbx CLI actions. Use `status` to check current state, including Docker restarts and manual container changes. A process interruption can leave an exec start without an exit. Journal write failures go to stderr and the command keeps the result of the operation it already performed.
+
+From the repository root on Windows with Go, Python, and Docker Desktop, run `python scripts/test-runtime-events.py` for the fake-engine acceptance checks. The test builds the pinned Pi and gateway images, which may fetch build inputs, and uses temporary workspaces and a loopback fake engine.
 
 ---
 
@@ -142,7 +159,7 @@ ezbx version --json
 }
 ```
 
-`events-jsonl` joins the features when `events --jsonl` is built.
+Callers that need the event stream check for `events-jsonl` in `features`.
 
 Pinning rules for callers:
 

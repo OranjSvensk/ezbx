@@ -187,6 +187,10 @@ On current `main`, set `default_model` under `[engine]` in `ezbx.toml` to a mode
 
 If you change `default_model`, restart the box with `ezbx down` and `ezbx up` to refresh the harnesses' model information. When you switch to a different server address, choose a `default_model` listed by that server before starting the box again.
 
+### Watching box activity
+
+In development builds with the `events-jsonl` feature, run `ezbx events --jsonl --box NAME` in another terminal to watch lifecycle events, exec results, network mode changes, and snapshots. Add `--since` with an RFC3339 timestamp to catch up on recent activity. The [runtime contract](runtime-contract.md) covers replay and the removal receipt.
+
 ### Several boxes
 
 One `ezbx.toml` can hold several boxes, each with its own workspace, harnesses, network mode, containers and snapshots; they share the model server. Add one with `ezbx init --box NAME` (or, without questions, `ezbx create --box NAME --workspace FOLDER`), then give `--box NAME` to every command: `ezbx build --box NAME`, `ezbx up --box NAME`, `ezbx shell --box NAME`. Two boxes can't share a workspace folder. Programs that drive ezbx use the commands in [runtime-contract.md](runtime-contract.md).

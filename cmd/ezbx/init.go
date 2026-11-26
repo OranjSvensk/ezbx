@@ -160,8 +160,10 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		Result: res, ConfigFile: cfgFile, StateDir: dirs.Box(res.Answers.Box),
 		Images: imagesPresent(ctx, gw, bx), Tools: bx.Tools.Chosen, Harnesses: facts.Harnesses, NoStart: *noStart,
 	}
+	newBox := true
 	if existing != nil {
-		old, _ := setup.FromConfigBox(existing, res.Answers.Box)
+		old, found := setup.FromConfigBox(existing, res.Answers.Box)
+		newBox = !found
 		pl.Old = &old
 	}
 	pl.BoxUp = boxExists(ctx, res.Answers.Box)
@@ -206,6 +208,9 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	}
 	if err := os.MkdirAll(res.Answers.Workspace, 0o700); err != nil {
 		return report(stderr, fmt.Errorf("creating the workspace: %w", err))
+	}
+	if newBox && pl.Changed() {
+		recordEvent(target{dirs: dirs, name: res.Answers.Box}, "box.created", map[string]any{"networkMode": res.Answers.Network}, 0, stderr)
 	}
 	if !start {
 		fmt.Fprintf(stdout, "\nThe box was not started: %s.\n", why)

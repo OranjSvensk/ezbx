@@ -47,7 +47,7 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 | Undo | `ezbx snapshot` / `review` / `rewind`; `ezbx shell` takes a snapshot first ([docs/snapshots.md](docs/snapshots.md)) |
 | For the human | `ezbx admin shell` (a separate root container), `ezbx reset` (with a backup), `ezbx destroy` (never the workspace), `ezbx doctor` ([docs/admin.md](docs/admin.md)) |
 | Several boxes (new in 0.4) | `[box.<name>]` sections in one `ezbx.toml`, sharing the model server; `--box NAME` |
-| For other programs (new in 0.4) | `ezbx version --json`, `create`, `start`, `exec`, `status`, `stop`, `destroy --json` ([docs/runtime-contract.md](docs/runtime-contract.md)) |
+| For other programs (new in 0.4) | `ezbx version --json`, `create`, `start`, `exec`, `status`, `stop`, `destroy --json`. Current development builds add `ezbx events --jsonl` for live events and recent replay. ([docs/runtime-contract.md](docs/runtime-contract.md)) |
 | Logging | The gateway logs every request without its content ([docs/gateway.md](docs/gateway.md)); new in 0.4: token counts |
 
 ### Where it runs
@@ -61,7 +61,6 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 
 Before `1.0.0`, the focus is the ezbx runtime, platform support, and reliability for the seven established harnesses. New built-in harnesses and support for registering custom harnesses are planned for after `1.0.0`.
 
-- `ezbx events --jsonl`, the runtime contract's second phase (a live stream of box, network and gateway events).
 - Linux and macOS: tested support, and a Linux end-to-end job in CI.
 - Cloud API keys through the gateway, kept out of the box like local keys.
 - Winget (the package is waiting for review).
