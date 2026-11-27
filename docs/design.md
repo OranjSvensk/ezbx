@@ -157,7 +157,7 @@ The full threat model is in [threat-model.md](threat-model.md): what is protecte
 5. **0.5 (done, `v0.5.0`):** `ezbx events --jsonl` with bounded replay and a destroy receipt (decision 28), harness selection of the `default` alias, and repeatable Windows Docker acceptance testing with the fake engine.
 6. **0.6 (`v0.6.0`):** native Linux pilot with a repeatable Ubuntu `amd64` Docker test covering gateway credentials, workspace permissions, read-only masks, model routing, isolation, and the runtime contract.
 7. **0.6.1:** first-run and recovery diagnostics, gateway activity events, and an OpenCode job in the Ubuntu pilot.
-8. **0.6.2 (planned):** recovery guidance when the box container is stopped or missing, a gateway event consumer test, and an Ubuntu 26.04 `amd64` pilot alongside 24.04.
+8. **0.6.2 (planned):** recovery guidance when the box container is stopped or missing, a gateway event consumer test, and fake-engine acceptance tests for all seven harnesses on Ubuntu 24.04 and 26.04 `amd64`.
 9. **0.7.0 (planned):** expand testing to macOS.
 10. **Later:** cloud API keys (decision 8), tray or GUI front end, other container runtimes, a tool-calling self-test for models.
 

@@ -62,7 +62,7 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 
 Before `1.0.0`, the focus is the ezbx runtime, platform support, and reliability for the seven established harnesses. New built-in harnesses and support for registering custom harnesses are planned for after `1.0.0`.
 
-- **v0.6.2** improves recovery from an incomplete box, fixes intermittent gateway event reader exits on Windows, and adds Ubuntu 26.04 `amd64` to the Pi and OpenCode CI pilot. The Pi fixture checks event reconnect and retention recovery from a caller's perspective.
+- **v0.6.2** improves recovery from an incomplete box, fixes intermittent gateway event reader exits on Windows, and tests all seven harnesses with a fake model server on Ubuntu 24.04 and 26.04 `amd64`. The Pi fixture checks event reconnect and retention recovery from a caller's perspective.
 - **v0.7.0** is planned to expand testing to macOS.
 - Cloud API keys through the gateway, kept out of the box like local keys.
 - Winget (the package is waiting for review).

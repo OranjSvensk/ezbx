@@ -18,6 +18,17 @@ from uuid import uuid4
 
 
 ROOT = Path(__file__).resolve().parents[1]
+FAKE_REPLY = "Hello from the fake engine."
+CHAT_COMPLETIONS = "/v1/chat/completions"
+HARNESS_SMOKES = {
+    "pi": (["pi", "-p"], CHAT_COMPLETIONS),
+    "opencode": (["opencode", "run"], CHAT_COMPLETIONS),
+    "omp": (["omp", "-p"], CHAT_COMPLETIONS),
+    "codex": (["codex", "exec", "--skip-git-repo-check"], "/v1/responses"),
+    "claude": (["claude", "-p"], "/v1/messages"),
+    "hermes": (["hermes", "chat", "-q"], CHAT_COMPLETIONS),
+    "openclaw": (["openclaw", "agent", "exec"], CHAT_COMPLETIONS),
+}
 
 
 def run(args, env=None, expected=0, capture=True):
@@ -352,9 +363,9 @@ def exercise(folder, harness):
 const fs = require('node:fs');
 const home = process.env.HOME;
 const read = file => JSON.parse(fs.readFileSync(home + file));
-const model = process.argv[1] === 'pi'
-  ? read('/.pi/agent/settings.json').defaultModel
-  : read('/.config/opencode/opencode.json').model.replace('ezbx/', '');
+let model = 'default';
+if (process.argv[1] === 'pi') model = read('/.pi/agent/settings.json').defaultModel;
+if (process.argv[1] === 'opencode') model = read('/.config/opencode/opencode.json').model.replace('ezbx/', '');
 if (fs.readFileSync('/readonly/reference/visible.txt', 'utf8').trim() !== 'reference' ||
     fs.readFileSync('/readonly/reference/.env', 'utf8') !== '') {
   throw new Error('unexpected read-only mount contents');
@@ -376,13 +387,13 @@ fs.writeFileSync('/workspace/created.txt', 'workspace is writable');
         value = json.loads(command["data"]["stdout"])
         request_id = value.pop("requestId")
         check(value == {"model": "default", "ids": ["fake-model", "default"], "status": 200,
-                        "reply": "Hello from the fake engine."}, f"unexpected model result: {value}")
+                        "reply": FAKE_REPLY}, f"unexpected model result: {value}")
         first = stream.expect("exec.started", name)["data"]
         last = stream.expect("exec.exited", name)["data"]
         check(first == {"execId": last["execId"], "program": "node", "argCount": 3} and
               last["exitCode"] == 0 and not last["timedOut"], "incorrect exec metadata")
         request = activity.expect("gateway.request", name, lambda data: data["requestId"] == request_id)
-        check(request["data"]["endpoint"] == "/v1/chat/completions" and request["data"]["status"] == 200 and
+        check(request["data"]["endpoint"] == CHAT_COMPLETIONS and request["data"]["status"] == 200 and
               request["data"]["tokensIn"] == 1 and request["data"]["tokensOut"] == 1,
               "incorrect gateway request metadata")
 
@@ -397,15 +408,18 @@ fs.writeFileSync('/workspace/created.txt', 'workspace is writable');
         check(blocked["data"]["status"] == 403 and blocked["data"]["reason"] == "network_off",
               "incorrect blocked host metadata")
 
+        command, endpoint = HARNESS_SMOKES[harness]
+        reply = result("exec", "--timeout", "90s", "--", *command, "say hi")["data"]
+        check(reply["exitCode"] == 0 and FAKE_REPLY in reply["stdout"],
+              f"{harness} did not answer through the gateway: {reply}")
+        stream.expect("exec.started", name)
+        stream.expect("exec.exited", name)
+        activity.expect("gateway.request", name, lambda data: data["endpoint"] == endpoint and data["status"] == 200)
+        print(f"Passed {harness} completion through the fake engine via {endpoint}", flush=True)
+
         if harness == "pi":
             request = exercise_gateway_consumer(ezbx, env, name, result, stream, activity, request, blocked)
             print("Passed gateway consumer reconnect, deduplication, and retention recovery", flush=True)
-        else:
-            reply = result("exec", "--timeout", "90s", "--", "opencode", "run", "say hi")
-            check(reply["data"]["exitCode"] == 0 and "Hello from the fake engine." in reply["data"]["stdout"],
-                  f"OpenCode did not answer through the gateway: {reply['data']}")
-            stream.expect("exec.started", name)
-            stream.expect("exec.exited", name)
         timed = result("exec", "--timeout", "200ms", "--", "sleep", "3", expected=1)
         check(timed["error"]["code"] == "timeout", "exec did not time out")
         first = stream.expect("exec.started", name)["data"]
@@ -457,8 +471,6 @@ fs.writeFileSync('/workspace/created.txt', 'workspace is writable');
         if harness == "pi":
             print("Passed engine-free airgap startup with gateway logging disabled", flush=True)
             print("Passed doctor recovery of a stopped airgap box", flush=True)
-        else:
-            print("Passed OpenCode completion through the fake engine", flush=True)
     finally:
         try:
             if activity is not None:
@@ -479,7 +491,7 @@ if __name__ == "__main__":
     if sys.platform not in ("win32", "linux"):
         raise SystemExit("Use Docker Desktop on Windows or native Docker Engine on Linux.")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--harness", choices=("pi", "opencode"), default="pi")
+    parser.add_argument("--harness", choices=HARNESS_SMOKES, default="pi")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="ezbx-runtime-") as scratch:
         exercise(Path(scratch), args.harness)
