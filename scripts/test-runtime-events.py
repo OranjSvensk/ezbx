@@ -85,7 +85,11 @@ class EventStream:
         deadline = time.monotonic() + 15
         while True:
             line = self.lines.get(timeout=max(0, deadline - time.monotonic()))
-            check(line is not None, "stream closed before the expected event")
+            if line is None:
+                code = self.process.wait(timeout=5)
+                raise AssertionError(
+                    f"event stream exited {code} before {event}: {self.process.stderr.read().strip()}"
+                )
             record = json.loads(line)
             matches = record["event"] == event and record["box"] == box
             if match is None:
@@ -101,6 +105,66 @@ class EventStream:
         self.reader.join(timeout=10)
         self.process.stdout.close()
         self.process.stderr.close()
+
+
+def exercise_gateway_consumer(ezbx, env, name, result, stream, activity, request, blocked):
+    command = [ezbx, "events", "--jsonl", "--gateway", "--box", name, "--since"]
+    seen = {request["id"]}
+    reconnect = EventStream([*command, request["ts"]], env)
+    try:
+        replayed = [
+            reconnect.expect("gateway.request", name, lambda data: data["requestId"] == request["data"]["requestId"]),
+            reconnect.expect("gateway.blocked_host", name, lambda data: data["requestId"] == blocked["data"]["requestId"]),
+        ]
+        check(replayed == [request, blocked], "gateway replay did not include the reconnect boundary")
+        check([event for event in replayed if event["id"] not in seen] == [blocked],
+              "consumer did not deduplicate the reconnect boundary by ID")
+    finally:
+        reconnect.close()
+
+    def send_requests(count):
+        probe = """
+(async () => {
+  const ids = [];
+  for (let i = 0; i < Number(process.argv[1]); i++) {
+    const response = await fetch('http://gateway:8000/v1/models');
+    if (!response.ok) throw new Error('model list returned ' + response.status);
+    await response.json();
+    ids.push(response.headers.get('x-ezbx-request-id'));
+  }
+  console.log(JSON.stringify(ids));
+})().catch(error => { console.error(error); process.exitCode = 1; });
+"""
+        reply = result("exec", "--", "node", "-e", probe, str(count))
+        check(reply["data"]["exitCode"] == 0, "model requests failed: " + reply["data"]["stderr"])
+        stream.expect("exec.started", name)
+        stream.expect("exec.exited", name)
+        ids = set(json.loads(reply["data"]["stdout"]))
+        check(len(ids) == count and None not in ids, "model responses need distinct request IDs")
+        return ids
+
+    # Exceed the journal's 256-record limit without making the live reader fall behind.
+    for _ in range(4):
+        ids = send_requests(65)
+        while ids:
+            latest = activity.expect("gateway.request", name, lambda data: data["requestId"] in ids)
+            ids.remove(latest["data"]["requestId"])
+
+    gap = subprocess.run(
+        [*command, request["ts"]], cwd=ROOT, env=env, capture_output=True, text=True,
+        encoding="utf-8", timeout=15,
+    )
+    check(gap.returncode == 1 and not gap.stdout and "event history is no longer available" in gap.stderr,
+          f"expected an explicit gateway retention gap, got {gap.returncode}: {gap.stdout}{gap.stderr}")
+    check(result("status")["data"]["state"] == "running", "consumer could not refresh box state after the gap")
+
+    reconnect = EventStream([*command, latest["ts"]], env)
+    try:
+        reconnect.expect("gateway.request", name, lambda data: data["requestId"] == latest["data"]["requestId"])
+        new_ids = send_requests(1)
+        return reconnect.expect("gateway.request", name, lambda data: data["requestId"] in new_ids)
+    finally:
+        reconnect.close()
 
 
 def exercise_airgap_start(cli, folder, name, address):
@@ -157,6 +221,15 @@ def exercise_airgap_start(cli, folder, name, address):
             try:
                 offline("up")
                 check(model_reply() == [403, "network_airgap"], "airgap up opened the model route")
+                box = f"ezbx-{name}-box"
+                run(["docker", "stop", box])
+                report = json.loads(offline("doctor", "--json", expected=1))
+                checks = {item["name"]: item for item in report["checks"]}
+                check(checks[box]["status"] == "fail" and checks[box]["detail"] == "stopped" and
+                      checks["inside checks"]["status"] == "skip", "doctor did not diagnose the stopped box")
+                offline("down")
+                offline("up")
+                check(model_reply() == [403, "network_airgap"], "recreated airgap box did not recover")
                 check(requests.empty(), "airgap up or its doctor contacted the configured model server")
             finally:
                 server.shutdown()
@@ -172,8 +245,9 @@ def exercise(folder, harness):
     ezbx, fake = folder / ("ezbx" + suffix), folder / ("fakeengine" + suffix)
     run(["go", "build", "-o", ezbx, "./cmd/ezbx"])
     run(["go", "build", "-o", fake, "./tools/fakeengine"])
-    features = json.loads(run([ezbx, "version", "--json"], env))["features"]
-    check({"events-jsonl", "gateway-events-jsonl"} <= set(features), "missing event features")
+    version = json.loads(run([ezbx, "version", "--json"], env))
+    check(version["ok"] and version["contractVersion"] == 1, "unsupported runtime contract")
+    check({"events-jsonl", "gateway-events-jsonl"} <= set(version["features"]), "missing event features")
     address = engine_address()
     with socket.socket() as listener:
         listener.bind((address, 0))
@@ -323,7 +397,10 @@ fs.writeFileSync('/workspace/created.txt', 'workspace is writable');
         check(blocked["data"]["status"] == 403 and blocked["data"]["reason"] == "network_off",
               "incorrect blocked host metadata")
 
-        if harness == "opencode":
+        if harness == "pi":
+            request = exercise_gateway_consumer(ezbx, env, name, result, stream, activity, request, blocked)
+            print("Passed gateway consumer reconnect, deduplication, and retention recovery", flush=True)
+        else:
             reply = result("exec", "--timeout", "90s", "--", "opencode", "run", "say hi")
             check(reply["data"]["exitCode"] == 0 and "Hello from the fake engine." in reply["data"]["stdout"],
                   f"OpenCode did not answer through the gateway: {reply['data']}")
@@ -379,6 +456,7 @@ fs.writeFileSync('/workspace/created.txt', 'workspace is writable');
         print(f"Passed {harness} runtime lifecycle, gateway events, replay, alias routing, and isolation", flush=True)
         if harness == "pi":
             print("Passed engine-free airgap startup with gateway logging disabled", flush=True)
+            print("Passed doctor recovery of a stopped airgap box", flush=True)
         else:
             print("Passed OpenCode completion through the fake engine", flush=True)
     finally:

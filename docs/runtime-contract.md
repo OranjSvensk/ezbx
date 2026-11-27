@@ -136,6 +136,7 @@ Starting with `v0.6.1`, use `ezbx events --jsonl --gateway --box NAME` to watch 
 
 - The gateway records summary events when requests finish, including refused model requests. The event data excludes prompts, replies, keys, model names, arbitrary request paths and query strings.
 - `--since` replays up to 256 retained gateway records per box, then follows new ones. This retention is independent of the 1,024 lifecycle records. Each stream has its own reconnect timestamp. Reuse the last timestamp from that stream and deduplicate by event ID. A retention gap is reported on stderr with exit status 1.
+- After a retention gap, refresh the current box state with `ezbx status --json --box NAME`. Reconnect without `--since` to follow new gateway events if you have no retained timestamp to resume from.
 - Stopping the box preserves the gateway history. Destroy removes it and leaves a receipt on the lifecycle stream. A reader that has seen a gateway journal exits with a gap error if the journal is removed or replaced by a new one.
 - With `[gateway] log = false`, the command reports that gateway events are disabled. Recreate the box after changing logging to apply the setting to the gateway. Existing gateway history stays on disk until destroy or retention replaces it. The gateway reports a journal write error in its diagnostics and continues serving requests.
 

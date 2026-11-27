@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"syscall"
 	"time"
 )
 
@@ -107,7 +109,7 @@ func (j Journal) transaction(ctx context.Context, update func(*history) bool) er
 
 func (j Journal) read() (history, error) {
 	var h history
-	raw, err := os.ReadFile(j.file)
+	raw, err := j.readBytes()
 	if errors.Is(err, os.ErrNotExist) {
 		return h, nil
 	}
@@ -118,6 +120,20 @@ func (j Journal) read() (history, error) {
 		return h, fmt.Errorf("reading event journal: %w", err)
 	}
 	return h, nil
+}
+
+func (j Journal) readBytes() ([]byte, error) {
+	if !j.gateway || runtime.GOOS != "windows" {
+		return os.ReadFile(j.file)
+	}
+	// On Windows, Root opens files with FILE_SHARE_DELETE so a reader
+	// doesn't prevent Docker Desktop from replacing the journal.
+	root, err := os.OpenRoot(filepath.Dir(j.file))
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.ReadFile(filepath.Base(j.file))
 }
 
 func (j Journal) save(h history) error {
@@ -279,7 +295,20 @@ func (j Journal) snapshot(ctx context.Context) (history, error) {
 		return history{}, err
 	}
 	if j.gateway {
-		return j.read()
+		// Docker Desktop may briefly hold the journal exclusively during
+		// replacement. Retain the cursor and retry only that Windows error.
+		const sharingViolation = syscall.Errno(32)
+		for retries := 0; ; retries++ {
+			h, err := j.read()
+			if runtime.GOOS != "windows" || !errors.Is(err, sharingViolation) || retries == 25 {
+				return h, err
+			}
+			select {
+			case <-ctx.Done():
+				return history{}, ctx.Err()
+			case <-time.After(20 * time.Millisecond):
+			}
+		}
 	}
 	var h history
 	err := j.transaction(ctx, func(state *history) bool {

@@ -300,7 +300,9 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 		} `json:"network"`
 	}{}
 	mode := ""
-	if adminPort == "" {
+	if !gw.State.Running {
+		r.add(gg, "admin API", Skip, "the gateway is stopped", "")
+	} else if adminPort == "" {
 		r.add(gg, "admin API", Warn, "not running", "Start the gateway with --admin 127.0.0.1:8099 and a token file.")
 	} else if out, err := cfg.Docker(ctx, "exec", gwName, "/ezbx", "gateway", "admin", "--addr", args["--admin"], "status"); err != nil || json.Unmarshal(out, &status) != nil {
 		r.add(gg, "admin API", Fail, "no answer through docker exec", "See docker logs "+gwName+". The token file must be mounted at /run/ezbx/admin-token.")
@@ -339,7 +341,7 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 	// The box container, if there is one yet.
 	const gb = "Box"
 	if boxErr != nil {
-		r.add(gb, boxName, Skip, "no box container yet", "")
+		r.add(gb, boxName, Fail, "missing", start)
 	} else {
 		r.add(gb, "locked down", lockStatus(box, false), lockDetail(box, false), "Recreate it with --cap-drop ALL --security-opt no-new-privileges and a non-root user.")
 		st, detail, fix := imageStatus(ctx, cfg, "box", box)
@@ -362,8 +364,11 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 			r.add(gb, "no Docker socket", Fail, "mounted at "+strings.Join(sock, ", "), "Never mount the Docker socket into the box: it gives full control of this computer.")
 		}
 		if box.State.Running {
+			r.add(gb, boxName, Pass, "running", "")
 			st, detail, fix := writableStatus(ctx, cfg, boxName)
 			r.add(gb, "agent can write the workspace", st, detail, fix)
+		} else {
+			r.add(gb, boxName, Fail, "stopped", start)
 		}
 		readOnlyChecks(ctx, &r, cfg, boxName, box)
 	}
@@ -371,6 +376,10 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 	// From inside, seeing what the box sees.
 	if !insideOK {
 		r.add("From inside the box", "inside checks", Skip, "the inside network is missing", "")
+		return r
+	}
+	if !gw.State.Running || boxErr != nil || !box.State.Running {
+		r.add("From inside the box", "inside checks", Skip, "the gateway and box must both be running", "")
 		return r
 	}
 	ic := InsideConfig{Gateway: "gateway:" + portOf(args["--listen"], "8000"), Mode: mode, Engine: status.Engine, SkipModel: cfg.SkipEngine && mode != "airgap"}
@@ -413,7 +422,7 @@ func Run(ctx context.Context, cfg HostConfig) Report {
 	}
 	ic.Timeout = time.Second
 	spec, _ := json.Marshal(ic)
-	out, err = cfg.Docker(ctx, "run", "--rm", "--label", "ezbx.managed=true", "--network", insideNet,
+	out, err = cfg.Docker(ctx, "run", "--rm", "--pull=never", "--label", "ezbx.managed=true", "--network", insideNet,
 		"--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", "65532:65532",
 		"--entrypoint", "/ezbx", gw.Config.Image, "doctor", "inside", "--config", string(spec))
 	var inner Report

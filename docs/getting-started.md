@@ -237,6 +237,7 @@ Use `--config FILE` or `EZBX_CONFIG` to point at a custom config file, and see [
 ### Common issues
 
 - **A box fails on its first start:** Run `ezbx doctor --box NAME` to check Docker, the configured model server, and whether the required images are present. If you used a custom config file, pass the same `--config FILE`. Build missing images with `ezbx build --box NAME` before trying `ezbx up --box NAME` again.
+- **The gateway exists but the box container is stopped or missing:** Run `ezbx down --box NAME`, then `ezbx up --box NAME` to recreate the containers. This keeps the workspace, agent home, and snapshots. Pass the same `--config FILE` to both commands if you selected a custom config.
 - **"Nothing answered at ..." during `up`, or no server listed by `init`:** Make sure your model server is running with a model loaded. If it runs on an unusual port, pass `--url http://127.0.0.1:PORT` to `init` (or set `url` under `[engine]` in `ezbx.toml`).
 - **"The [engine] section changed":** the config was written by ezbx 0.2 or earlier, which named an engine. Replace the `[engine]` section as the message shows, or run `ezbx init` again with `--url`.
 - **Model replies stop mid-thought:** Add a `[models."<model-id>"]` section to `ezbx.toml` with `reasoning = true` and `max_tokens = 8192`, then run `ezbx down` and `ezbx up` (or `ezbx engine use`).

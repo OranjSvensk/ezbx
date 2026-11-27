@@ -238,7 +238,7 @@ func TestAGoodSetupPasses(t *testing.T) {
 		}
 	}
 	joined := strings.Join(run, " ")
-	for _, want := range []string{"--network ezbx-t-inside", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--user 65532:65532", "--entrypoint /ezbx ezbx-gateway:dev doctor inside"} {
+	for _, want := range []string{"--pull=never", "--network ezbx-t-inside", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--user 65532:65532", "--entrypoint /ezbx ezbx-gateway:dev doctor inside"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("check container is missing %q: %s", want, joined)
 		}
@@ -358,13 +358,8 @@ func TestDockerNotRunningStopsEarly(t *testing.T) {
 	}
 }
 
-func TestMissingPiecesAreReported(t *testing.T) {
+func TestMissingGatewayIsReported(t *testing.T) {
 	f := goodDocker()
-	delete(f.ctrs, "ezbx-t-box")
-	if c := find(t, runWith(f), "ezbx-t-box"); c.Status != Skip {
-		t.Errorf("no box yet should be a skip: %+v", c)
-	}
-	f = goodDocker()
 	delete(f.ctrs, "ezbx-t-gateway")
 	r := runWith(f)
 	if c := find(t, r, "ezbx-t-gateway"); c.Status != Fail {
@@ -562,5 +557,31 @@ func TestFirstRunRecovery(t *testing.T) {
 	if c := find(t, r, "an engine is running"); !strings.Contains(c.Detail, cfg.EngineURL) ||
 		!strings.Contains(c.Fix, "Docker's bridge") {
 		t.Errorf("unreachable engine: %+v", c)
+	}
+}
+
+func TestDoctorRecoversAnIncompleteBox(t *testing.T) {
+	for _, state := range []string{"missing", "stopped"} {
+		t.Run(state, func(t *testing.T) {
+			f := goodDocker()
+			if state == "missing" {
+				delete(f.ctrs, "ezbx-t-box")
+			} else {
+				f.ctrs["ezbx-t-box"]["State"] = map[string]any{"Running": false}
+			}
+			r := runWith(f)
+			if c := find(t, r, "ezbx-t-box"); c.Status != Fail || c.Detail != state ||
+				c.Fix != "Run ezbx down --box t, then ezbx up --box t to recreate the box." {
+				t.Errorf("box recovery: %+v", c)
+			}
+			if c := find(t, r, "inside checks"); c.Status != Skip {
+				t.Errorf("inside checks: %+v", c)
+			}
+			for _, args := range f.ran {
+				if args[0] == "run" {
+					t.Errorf("started an inside probe for an incomplete box: %v", args)
+				}
+			}
+		})
 	}
 }
