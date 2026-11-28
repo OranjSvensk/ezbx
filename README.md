@@ -9,7 +9,7 @@
 
 ezbx is a one-command setup for running AI coding and agent tools inside a sandboxed container, while the model itself keeps running on your own machine.
 
-> **Status: early release (`v0.6.1`).** All seven harnesses (Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw) are verified end to end on Windows 11 with Docker Desktop and a local model server. The native Linux pilot covers Ubuntu 24.04 `amd64` with local Docker Engine, Pi, OpenCode, and a fake model server. Other programs can drive ezbx through a JSON contract and follow box activity with live events and recent replay. See the [runtime contract](docs/runtime-contract.md) and [isolation results](docs/isolation-test.md).
+> **Status: early release (`v0.6.2`).** All seven harnesses (Pi, OpenCode, oh-my-pi, Codex CLI, Claude Code, Hermes Agent and OpenClaw) are verified end to end on Windows 11 with Docker Desktop and a local model server. The native Linux pilot verifies text completions for all seven on Ubuntu 24.04 and 26.04 `amd64` with local Docker Engine and a fake model server. Other programs can drive ezbx through a JSON contract and follow box activity with live events and recent replay. See the [runtime contract](docs/runtime-contract.md) and [isolation results](docs/isolation-test.md).
 
 ```text
 # Scoop (Windows):
@@ -17,7 +17,7 @@ scoop bucket add ezbx https://github.com/OranjSvensk/scoop-bucket
 scoop install ezbx
 
 # Or install with Go 1.27+ (or download a binary from Releases):
-go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.6.1
+go install github.com/OranjSvensk/ezbx/cmd/ezbx@v0.6.2
 ezbx --version
 ezbx init                 # asks the questions, shows the plan, builds and starts the box
 ezbx shell pi             # opens Pi in the box (or opencode, omp, codex, claude, hermes, openclaw)
@@ -55,21 +55,20 @@ New here? Read the step-by-step guide in [docs/getting-started.md](docs/getting-
 | Platform | State |
 |---|---|
 | Windows 11 + Docker Desktop (Engine 28+) | Verified: every command, all seven harnesses, the isolation tests |
-| Ubuntu 24.04 `amd64` + local Docker Engine | CI pilot with Pi, OpenCode, and a fake model server ([setup and limits](docs/getting-started.md#native-linux-pilot)) |
+| Ubuntu 24.04 and 26.04 `amd64` + local Docker Engine | CI pilot with text completions for all seven harnesses and a fake model server ([setup and limits](docs/getting-started.md#native-linux-pilot)) |
 | Other Linux setups, macOS | Experimental builds ([threat model](docs/threat-model.md)) |
 
 ## What's next
 
 Before `1.0.0`, the focus is the ezbx runtime, platform support, and reliability for the seven established harnesses. New built-in harnesses and support for registering custom harnesses are planned for after `1.0.0`.
 
-- **v0.6.2** improves recovery from an incomplete box, fixes intermittent gateway event reader exits on Windows, and tests all seven harnesses with a fake model server on Ubuntu 24.04 and 26.04 `amd64`. The Pi fixture checks event reconnect and retention recovery from a caller's perspective.
 - **v0.7.0** is planned to expand testing to macOS.
 - Cloud API keys through the gateway, kept out of the box like local keys.
 - Winget (the package is waiting for review).
 
 ## Releases
 
-`v0.1.0`/`v0.1.1` (setup, the gateway and network switch, snapshots, the harnesses), `v0.2.0` (`allow` mode, more model servers, `reset` with backup), `v0.3.0`/`v0.3.1` (read-only folders with secret masking, model servers by API kind, starter profiles), `v0.4.0` (several boxes, `airgap`, the runtime contract), `v0.5.0` (runtime events, replay, and harness selection of the `default` alias), `v0.5.1` (engine-free airgap startup), `v0.6.0` (native Linux pilot), `v0.6.1` (first-run recovery, gateway events, and OpenCode in the Ubuntu pilot). The milestones are in [docs/design.md](docs/design.md), section 12. See [Releases](https://github.com/OranjSvensk/ezbx/releases) for notes and downloads.
+`v0.1.0`/`v0.1.1` (setup, the gateway and network switch, snapshots, the harnesses), `v0.2.0` (`allow` mode, more model servers, `reset` with backup), `v0.3.0`/`v0.3.1` (read-only folders with secret masking, model servers by API kind, starter profiles), `v0.4.0` (several boxes, `airgap`, the runtime contract), `v0.5.0` (runtime events, replay, and harness selection of the `default` alias), `v0.5.1` (engine-free airgap startup), `v0.6.0` (native Linux pilot), `v0.6.1` (first-run recovery, gateway events, and OpenCode in the Ubuntu pilot), and `v0.6.2` (box recovery, reliable gateway event reads on Windows, and all seven harnesses in the Ubuntu pilot). The milestones are in [docs/design.md](docs/design.md), section 12. See [Releases](https://github.com/OranjSvensk/ezbx/releases) for notes and downloads.
 
 ## Safety note
 
@@ -77,7 +76,9 @@ A container is a strong boundary but not a perfect one. It shares a kernel with 
 
 ## Contributing and security
 
-Contributions will open once the design settles. To report a security problem, see [SECURITY.md](SECURITY.md).
+I’m starting a new job, so I’ll have less time for ezbx for a while. The project is still under active development. I’ll publish contribution guidelines and set up a pull request review process in the near future.
+
+To report a security problem, see [SECURITY.md](SECURITY.md).
 
 ## License
 

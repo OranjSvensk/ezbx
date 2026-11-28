@@ -169,7 +169,7 @@ ezbx version --json
 ```json
 {
   "ok": true,
-  "version": "0.6.1",
+  "version": "0.6.2",
   "contractVersion": 1,
   "features": ["events-jsonl", "gateway-events-jsonl", "lifecycle-v1", "net-four-modes", "readonly-masks", "status-v1"],
   "platform": "windows/amd64"

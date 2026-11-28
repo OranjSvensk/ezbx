@@ -312,7 +312,9 @@ The [Ubuntu 24.04 amd64 CI run](https://github.com/OranjSvensk/ezbx/actions/runs
 
 The [v0.6.1 pilot run](https://github.com/OranjSvensk/ezbx/actions/runs/45892591230) passed the fixture with Pi and OpenCode in separate jobs. Both checked gateway activity events and replay. The OpenCode job also ran a completion through the keyed fake engine using the generated harness configuration.
 
-Both jobs used temporary workspaces writable by the container agent. See [native Linux setup](getting-started.md#native-linux-pilot) for the verified setup and its limits.
+The [v0.6.2 pilot run](https://github.com/OranjSvensk/ezbx/actions/runs/45967108613) passed all fourteen jobs, one per harness on Ubuntu 24.04 and 26.04 `amd64`. Each harness returned the fake engine's text reply on its expected gateway API route. The Pi jobs also tested recovery from a stopped airgap box and consumer reconnect, deduplication, and recovery after a gateway replay gap.
+
+The jobs used temporary workspaces writable by the container agent. See [native Linux setup](getting-started.md#native-linux-pilot) for the verified setup and its limits.
 
 ## Limits of this result
 

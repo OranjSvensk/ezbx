@@ -31,9 +31,9 @@ HARNESS_SMOKES = {
 }
 
 
-def run(args, env=None, expected=0, capture=True):
+def run(args, env=None, expected=0, capture=True, cwd=None):
     result = subprocess.run(
-        args, cwd=ROOT, env=env, capture_output=capture, text=True,
+        args, cwd=cwd, env=env, capture_output=capture, text=True,
         encoding="utf-8", timeout=600,
     )
     if result.returncode != expected:
@@ -80,7 +80,7 @@ def test_workspace(path):
 class EventStream:
     def __init__(self, args, env):
         self.process = subprocess.Popen(
-            args, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            args, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8",
         )
         self.lines = queue.Queue()
@@ -162,7 +162,7 @@ def exercise_gateway_consumer(ezbx, env, name, result, stream, activity, request
             ids.remove(latest["data"]["requestId"])
 
     gap = subprocess.run(
-        [*command, request["ts"]], cwd=ROOT, env=env, capture_output=True, text=True,
+        [*command, request["ts"]], env=env, capture_output=True, text=True,
         encoding="utf-8", timeout=15,
     )
     check(gap.returncode == 1 and not gap.stdout and "event history is no longer available" in gap.stderr,
@@ -249,13 +249,15 @@ def exercise_airgap_start(cli, folder, name, address):
         offline("destroy", "--yes", "--remove-config", "--json")
 
 
-def exercise(folder, harness):
+def exercise(folder, harness, ezbx=None):
     linux = sys.platform == "linux"
     env = {**os.environ, "EZBX_HOME": str(folder / "home"), "EZBX_CONFIG": ""}
     suffix = ".exe" if sys.platform == "win32" else ""
-    ezbx, fake = folder / ("ezbx" + suffix), folder / ("fakeengine" + suffix)
-    run(["go", "build", "-o", ezbx, "./cmd/ezbx"])
-    run(["go", "build", "-o", fake, "./tools/fakeengine"])
+    if ezbx is None:
+        ezbx = folder / ("ezbx" + suffix)
+        run(["go", "build", "-o", ezbx, "./cmd/ezbx"], cwd=ROOT)
+    fake = folder / ("fakeengine" + suffix)
+    run(["go", "build", "-o", fake, "./tools/fakeengine"], cwd=ROOT)
     version = json.loads(run([ezbx, "version", "--json"], env))
     check(version["ok"] and version["contractVersion"] == 1, "unsupported runtime contract")
     check({"events-jsonl", "gateway-events-jsonl"} <= set(version["features"]), "missing event features")
@@ -270,7 +272,7 @@ def exercise(folder, harness):
         env[key_env] = uuid4().hex
         engine_args += ["--key-env", key_env, "--key-on-models"]
         key_args += ["--key-env", key_env]
-    engine = subprocess.Popen(engine_args, cwd=ROOT, env=env)
+    engine = subprocess.Popen(engine_args, env=env)
     name = f"vt-{uuid4().hex[:8]}"
     other = f"{name}-other"
     stream = None
@@ -343,7 +345,7 @@ def exercise(folder, harness):
                 ["logs", "--tail", "30", gateway],
             ):
                 try:
-                    subprocess.run(["docker", *args], cwd=ROOT, check=False, timeout=10)
+                    subprocess.run(["docker", *args], check=False, timeout=10)
                 except (OSError, subprocess.TimeoutExpired) as error:
                     print(f"Could not collect gateway diagnostics: {error}", file=sys.stderr)
             raise
@@ -492,6 +494,9 @@ if __name__ == "__main__":
         raise SystemExit("Use Docker Desktop on Windows or native Docker Engine on Linux.")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--harness", choices=HARNESS_SMOKES, default="pi")
+    parser.add_argument("--ezbx", type=Path, help="test an existing ezbx executable instead of building one")
     args = parser.parse_args()
+    if args.ezbx is not None and not args.ezbx.is_file():
+        parser.error("--ezbx must point to an existing executable")
     with tempfile.TemporaryDirectory(prefix="ezbx-runtime-") as scratch:
-        exercise(Path(scratch), args.harness)
+        exercise(Path(scratch), args.harness, args.ezbx.resolve() if args.ezbx else None)

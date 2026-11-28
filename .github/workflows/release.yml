@@ -71,8 +71,17 @@ jobs:
             fi
           done
 
-          ./stage-linux-amd64/ezbx --version
           (cd dist && sha256sum ezbx-* > checksums.txt)
+      - name: Verify the Linux amd64 release archive
+        run: |
+          set -eu
+          (cd dist && sha256sum --check checksums.txt)
+          unpacked="$(mktemp -d)"
+          tar -xzf "dist/ezbx-${GITHUB_REF_NAME}-linux-amd64.tar.gz" -C "${unpacked}"
+          cd "${unpacked}"
+          ./ezbx version --json | jq -e --arg version "${GITHUB_REF_NAME#v}" \
+            '.ok and .version == $version and .contractVersion == 1 and .platform == "linux/amd64"'
+          python3 "${GITHUB_WORKSPACE}/scripts/test-runtime-events.py" --ezbx ./ezbx --harness pi
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -83,10 +92,10 @@ jobs:
           cat <<EOF > "${notes_file}"
           Early release ${tag}.
 
-          - **Recovery:** The doctor checks for missing or stale images before startup and gives more specific model-server and workspace-permission guidance.
-          - **Gateway activity:** \`ezbx events --jsonl --gateway\` follows model request outcomes and blocked hosts when gateway logging is enabled. It retains up to 256 records per box separately from lifecycle events.
-          - **Windows:** Docker Desktop (Engine 28+) is the verified platform for all seven harnesses. The v0.6.1 acceptance run covered Pi and OpenCode with the fake model server.
-          - **Native Linux pilot:** Verified in CI on Ubuntu 24.04 amd64 with local Docker Engine, Pi, OpenCode, and a keyed fake model server. See the [pilot setup and scope](https://github.com/${GITHUB_REPOSITORY}/blob/${tag}/docs/getting-started.md#native-linux-pilot). Other Linux setups and macOS builds are experimental.
+          - **Recovery:** The doctor diagnoses a stopped or missing box container and gives commands to recreate it while preserving the workspace, agent home, and snapshots.
+          - **Gateway activity:** Fixed intermittent file-sharing errors in the Windows event reader. The Pi fixture tests reconnect, deduplication, and recovery after a replay gap.
+          - **Windows:** Pi and OpenCode passed the fake-engine acceptance runs on Docker Desktop.
+          - **Native Linux pilot:** All seven harnesses returned text completions through the gateway on Ubuntu 24.04 and 26.04 amd64 with local Docker Engine and a keyed fake model server. The published Linux amd64 archive also passed the Pi acceptance test before publication. See the [pilot setup and scope](https://github.com/${GITHUB_REPOSITORY}/blob/${tag}/docs/getting-started.md#native-linux-pilot).
           - **Getting started:** Download an archive below (verify against \`checksums.txt\`) or install with \`go install github.com/OranjSvensk/ezbx/cmd/ezbx@${tag}\`, then see [docs/getting-started.md](https://github.com/${GITHUB_REPOSITORY}/blob/${tag}/docs/getting-started.md).
 
           EOF
